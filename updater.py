@@ -15,7 +15,7 @@ from loguru import logger
 # ⚠️ 중요: 본인의 깃허브 저장소 주소에 맞게 아래 주소를 변경하십시오.
 # ----------------------------------------------------
 # 예: https://raw.githubusercontent.com/[깃허브ID]/[저장소이름]/main/
-RAW_BASE_URL = "https://raw.githubusercontent.com/wngud/kis-auto-trading-strategy/main/"
+RAW_BASE_URL = "https://raw.githubusercontent.com/johnjalboss/kis-auto-trading-strategy/main/"
 VERSION_FILE = "version.json"
 
 def check_and_update() -> bool:
@@ -87,6 +87,24 @@ def check_and_update() -> bool:
             with open(VERSION_FILE, "w", encoding="utf-8") as f:
                 json.dump(remote_data, f, indent=2, ensure_ascii=False)
             logger.info("🎉 v{} 전략 자동 패치 업데이트 완벽 성공! (총 {}개 파일 동기화 완료)", remote_version, updated_count)
+            
+            # 텔레그램 알림 전송 (업데이트 성공 메시지)
+            try:
+                from notifier import get_notifier
+                msg = (
+                    f"🎉 <b>AI 스윙 봇 전략 자동 업데이트 성공</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"이전 버전: v{local_version}\n"
+                    f"최신 버전: <b>v{remote_version}</b>\n"
+                    f"패치 파일: 총 {updated_count}개 알고리즘 파일 동기화 완료\n"
+                    f"상세 내용: 장초반 변동성 돌파 방어막 및 고급 다이내믹 탈출 엔진 연동 패치\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🤖 봇이 새로운 알고리즘으로 즉시 Hot-Reload되어 가동을 재개합니다."
+                )
+                get_notifier().send(msg)
+            except Exception as tg_e:
+                logger.debug("업데이트 완료 텔레그램 전송 실패: {}", tg_e)
+                
             return True
         except Exception as e:
             logger.error("❌ 버전 정보 파일 기록 실패: {}", e)

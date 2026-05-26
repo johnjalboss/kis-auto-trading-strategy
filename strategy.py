@@ -302,6 +302,40 @@ class StrategyEngine:
             return EntrySignal("HOLD", 0, "Insufficient daily data for Swing", 0)
 
         current_price = float(df_daily['Close'].iloc[-1])
+        
+        # ============================================================
+        # 🚨 장초반 변동성 관리: MORNING SPIKE & FADE / GAP & CRAP GUARDS
+        # ============================================================
+        phase = get_market_phase()
+        if phase == MarketPhase.OPENING:
+            try:
+                open_today = float(df_daily['Open'].iloc[-1])
+                high_today = float(df_daily['High'].iloc[-1])
+                low_today = float(df_daily['Low'].iloc[-1])
+                
+                # 1. MORNING GAP & CRAP GUARD: 시가 대비 하락세인 경우 진입 금지 (음봉)
+                if current_price < open_today:
+                    logger.warning("MORNING_GAP_AND_CRAP_GUARD: {} 시가 미만 감지 (시가: ${:.2f}, 현재가: ${:.2f})", 
+                                   symbol, open_today, current_price)
+                    return EntrySignal("HOLD", 0, f"MORNING_GAP_AND_CRAP_GUARD: Trading below daily open (${open_today:.2f})", current_price)
+                
+                # 2. MORNING FADE GUARD: 장초반 급상승 후 40% 이상 흘러내린 경우 진입 금지 (Bull Trap)
+                daily_range = high_today - open_today
+                if daily_range > 0:
+                    fade_ratio = (high_today - current_price) / daily_range
+                    if fade_ratio > 0.40:
+                        logger.warning("MORNING_FADE_GUARD: {} 고점 대비 {:.1f}% 되돌림 감지 (시가: ${:.2f}, 고가: ${:.2f}, 현재가: ${:.2f})", 
+                                       symbol, fade_ratio * 100, open_today, high_today, current_price)
+                        return EntrySignal("HOLD", 0, f"MORNING_FADE_GUARD: Retraced {fade_ratio:.0%} of morning gain", current_price)
+                
+                # 3. VOLATILITY SHAKEOUT GUARD: 시가 대비 -2% 이상 급락세 차단
+                if current_price < open_today * 0.98:
+                    logger.warning("VOLATILITY_SHAKEOUT_GUARD: {} 시가 대비 -2% 초과 급락 (시가: ${:.2f}, 현재가: ${:.2f})",
+                                   symbol, open_today, current_price)
+                    return EntrySignal("HOLD", 0, f"VOLATILITY_SHAKEOUT_GUARD: Panic drop below open", current_price)
+            except Exception as e:
+                logger.debug("Morning volatility guard evaluation failed for {}: {}", symbol, e)
+        # ============================================================
         sma20 = df_daily['Close'].rolling(20).mean().iloc[-1]
         sma50 = df_daily['Close'].rolling(50).mean().iloc[-1]
         structural_uptrend = sma20 > sma50
@@ -675,61 +709,71 @@ class StrategyEngine:
         except Exception:
             _hold_hours = 999  # entry_time     
 
-        # 
-        # [  1]      (-10%     )
-        #   , 0  
-        # 
+        # =================================================================
+        # 🛡️ 1단계: 최우선 비상 서킷 브레이커 (Emergency Hard Stop Net)
+        # =================================================================
         if pnl_pct <= -0.10:
             return ExitSignal("SELL_ALL",
-                f"EMERGENCY_STOP: P&L {pnl_pct:+.1%}   ",
+                f"EMERGENCY_STOP: Extreme drawdown {pnl_pct:+.1%} ( {_hold_hours:.1f}h)",
                 price, pnl_pct)
 
-        # 
-        # [  2]   (-4%   ATR)
-        #        .    ATR 
-        # 
-        sl_pct = -config.STOP_LOSS_PCT  # config  (-4%)
+        # =================================================================
+        # 🛡️ 2단계: 최첨단 다이내믹 탈출 엔진 (Advanced Adaptive Exit Engine)
+        # =================================================================
         try:
-            #   ATR    
-            df_daily = self.fetch_data(symbol, period="1mo")
-            if df_daily is not None and len(df_daily) >= 14:
-                import pandas as pd
-                tr = pd.concat([df_daily['High']-df_daily['Low'],
-                                (df_daily['High']-df_daily['Close'].shift()).abs(),
-                                (df_daily['Low']-df_daily['Close'].shift()).abs()], axis=1).max(axis=1)
-                atr = float(tr.rolling(14).mean().iloc[-1])
-                atr_pct = atr / pos.entry_price
-                # ATR 1.5  , ( -3% ~  -8%)   
-                dynamic_sl_pct = -max(0.03, min(0.08, atr_pct * 1.5))
-                #   ATR    ()   ( )
-                sl_pct = min(sl_pct, dynamic_sl_pct)
-        except Exception as e:
-            logger.debug(f"ATR stop calculation failed for {symbol}: {e}")
+            # indicators: IndicatorSummary (RSI, ATR, MACD 등 포함)
+            atr_val = indicators.atr if indicators else 0.0
+            
+            # 보유 분 단위 계산
+            _hold_minutes = _hold_hours * 60
+            
+            # 장초반 극심한 변동성 시간대 여부 (9:30 ~ 9:45 EST)
+            is_early_opening_noise = False
+            try:
+                et = pytz.timezone('US/Eastern')
+                now_et = datetime.now(et)
+                if get_market_phase() == MarketPhase.OPENING and now_et.time() < time(9, 45):
+                    is_early_opening_noise = True
+            except Exception:
+                pass
 
-        if pnl_pct <= sl_pct:
-            return ExitSignal("SELL_ALL",
-                f"HARD_STOP: {pnl_pct:+.1%} <= {sl_pct:+.1%} ( {_hold_hours:.0f}h)",
-                price, pnl_pct)
+            # 휩소 방지 장치 (Shakeout Protection Mode):
+            # 진입 후 15분 미만이거나 장초반 15분 노이즈 구간인 경우
+            # 미세한 트레일링 스톱 및 기술 지표 기반 탈출을 유예하여 '숨쉴 공간(Breathing Room)' 확보.
+            is_shakeout_protection_active = (_hold_minutes < 15) or is_early_opening_noise
 
-        # 
-        # [  3]  (+6%)
-        # 
-        tp_pct = config.TAKE_PROFIT_PCT  # default 0.06
-        if pnl_pct >= tp_pct:
-            return ExitSignal("SELL_ALL",
-                f"TAKE_PROFIT: {pnl_pct:+.1%} >= {tp_pct:+.1%} ( {_hold_hours:.0f}h)",
-                price, pnl_pct)
+            if is_shakeout_protection_active:
+                logger.debug("SHAKEOUT_PROTECTION_ACTIVE for {}: Hold minutes={:.1f}, Early opening={}. Trailing/Reversal exits suspended.",
+                             symbol, _hold_minutes, is_early_opening_noise)
 
-        # 
-        # [  4]   (+3%    -1.5%)
-        #         
-        # 
-        if pos.high_since_entry > pos.entry_price * (1 + config.TRAILING_TRIGGER_PCT):
-            trailing_stop_price = pos.high_since_entry * (1 - config.TRAILING_STOP_PCT)
-            if price <= trailing_stop_price:
-                return ExitSignal("SELL_ALL",
-                    f"TRAILING_STOP: ${price:.2f} <= ${trailing_stop_price:.2f} ( {_hold_hours:.0f}h)",
-                    price, pnl_pct)
+            # (1) ATR 기반 가변 손절 및 레짐 기반 손절 검사 (최우선 손절 라인)
+            stop_sig = self._check_stop_loss(pos, price, atr_val, cfg)
+            if stop_sig:
+                logger.warning("🎯 HARD STOP / ATR STOP TRIGGERED: {} -> {}", symbol, stop_sig.reason)
+                return stop_sig
+
+            # (2) 익절 검사 (일반 익절 + 수익 3% 돌파 시 고점 대비 -1.5% 트레일링 락)
+            tp_sig = self._check_take_profit(pos, price, pnl_pct, cfg)
+            if tp_sig:
+                logger.warning("🎯 TAKE PROFIT / TRAIL LOCK TRIGGERED: {} -> {}", symbol, tp_sig.reason)
+                return tp_sig
+
+            # 휩소 방지가 작동 중이지 않을 때만 민감한 트레일링 스톱 및 역추세 지표 감시
+            if not is_shakeout_protection_active:
+                # (3) 고성능 샹들리에 트레일링 스톱 검사 (수익 구간 비례 지수식 조임)
+                trail_sig = self._check_trailing_stop(pos, price, atr_val, cfg)
+                if trail_sig:
+                    logger.warning("🎯 ADVANCED TRAILING STOP TRIGGERED: {} -> {}", symbol, trail_sig.reason)
+                    return trail_sig
+
+                # (4) 역추세 반전 지표 감시 (MACD 데드크로스, Bollinger/StochRSI 극단 과매수 청산)
+                reversal_sig = self._check_reversal_signals(pos, indicators, price)
+                if reversal_sig:
+                    logger.warning("🎯 REVERSAL EXIT TRIGGERED: {} -> {}", symbol, reversal_sig.reason)
+                    return reversal_sig
+
+        except Exception as exit_e:
+            logger.error("Advanced Adaptive Exit Engine error for {}: {}", symbol, exit_e)
 
         # 
         # [ ETF] ETF decay  5 (32.5h )  
