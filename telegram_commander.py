@@ -31,13 +31,16 @@ _POLL_INTERVAL = 5       # 초 (Telegram getUpdates long-polling)
 _TIMEOUT       = 30      # long-polling 대기 초
 
 
-def _send(text: str) -> None:
+def _send(text: str, reply_markup: dict = None) -> None:
     if not _TOKEN or not _CHAT_ID:
         return
     try:
+        payload = {"chat_id": _CHAT_ID, "text": text, "parse_mode": "HTML"}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         requests.post(
             f"https://api.telegram.org/bot{_TOKEN}/sendMessage",
-            json={"chat_id": _CHAT_ID, "text": text, "parse_mode": "HTML"},
+            json=payload,
             timeout=10,
         )
     except Exception as e:
@@ -63,7 +66,7 @@ def _get_updates(offset: int) -> list:
     try:
         resp = requests.get(
             f"https://api.telegram.org/bot{_TOKEN}/getUpdates",
-            params={"offset": offset, "timeout": _TIMEOUT, "allowed_updates": ["message"]},
+            params={"offset": offset, "timeout": _TIMEOUT, "allowed_updates": ["message", "callback_query"]},
             timeout=_TIMEOUT + 5,
         )
         if resp.ok:
@@ -217,21 +220,30 @@ def _handle_chart_all():
     return None
 
 
-def _handle_help() -> str:
+def _handle_help() -> tuple:
     paused = "🔴 일시정지 중" if os.path.exists("/tmp/kis_trading_paused") else "✅ 정상 가동"
-    return (
-        f"📋 <b>지원 명령어</b> [{paused}]\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "/status   — 봇 상태 요약\n"
-        "/포지션   — 현재 보유 포지션\n"
-        "/수익     — 오늘 실현 손익\n"
-        "/차트     — 90일 수익 차트 (금액/퍼센트 병기)\n"
-        "/차트30   — 30일 수익 차트\n"
-        "/차트전체 — 전체 기간 수익 차트\n"
-        "/일시정지 — 신규 매수 즉시 차단\n"
-        "/재개     — 매수 재개\n"
-        "/도움말   — 이 메시지"
+    text = (
+        f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "아래의 버튼을 터치하여 실시간 상태 조회, 보유 포지션 확인, 수익 차트 팝업, 매수 제어를 실행할 수 있습니다."
     )
+    markup = {
+        "inline_keyboard": [
+            [
+                {"text": "📊 봇 상태 요약", "callback_data": "/status"},
+                {"text": "📈 보유 포지션", "callback_data": "/포지션"}
+            ],
+            [
+                {"text": "💰 오늘 실현손익", "callback_data": "/수익"},
+                {"text": "📊 90일 수익차트", "callback_data": "/차트"}
+            ],
+            [
+                {"text": "⏸️ 매수 일시정지", "callback_data": "/일시정지"},
+                {"text": "▶️ 매수 재개", "callback_data": "/재개"}
+            ]
+        ]
+    }
+    return text, markup
 
 
 _COMMANDS = {
@@ -269,21 +281,53 @@ def _polling_loop() -> None:
             updates = _get_updates(offset)
             for upd in updates:
                 offset = upd["update_id"] + 1
+                
+                # 1. 일반 텍스트 메시지 수신 처리
                 msg = upd.get("message", {})
-                # 자신의 채팅방에서 온 메시지만 처리
-                if str(msg.get("chat", {}).get("id", "")) != str(_CHAT_ID):
-                    continue
-                text = (msg.get("text") or "").strip().lower().split()[0] if msg.get("text") else ""
-                # 원문도 확인 (한글 명령어)
-                raw = (msg.get("text") or "").strip().split()[0]
-                handler = _COMMANDS.get(raw) or _COMMANDS.get(text)
-                if handler:
-                    try:
-                        reply = handler()
-                        if reply:
-                            _send(reply)
-                    except Exception as e:
-                        _send(f"⚠️ 명령 처리 오류: {e}")
+                if msg and str(msg.get("chat", {}).get("id", "")) == str(_CHAT_ID):
+                    text = (msg.get("text") or "").strip().lower().split()[0] if msg.get("text") else ""
+                    raw = (msg.get("text") or "").strip().split()[0] if msg.get("text") else ""
+                    handler = _COMMANDS.get(raw) or _COMMANDS.get(text)
+                    if handler:
+                        try:
+                            reply = handler()
+                            if reply:
+                                if isinstance(reply, tuple):
+                                    _send(reply[0], reply_markup=reply[1])
+                                else:
+                                    _send(reply)
+                        except Exception as e:
+                            _send(f"⚠️ 명령 처리 오류: {e}")
+
+                # 2. 인라인 버튼 클릭 신호(Callback Query) 수신 처리
+                cb = upd.get("callback_query", {})
+                if cb:
+                    cb_data = cb.get("data", "")
+                    cb_id = cb.get("id", "")
+                    chat_id = cb.get("message", {}).get("chat", {}).get("id", "")
+                    if str(chat_id) == str(_CHAT_ID) and cb_data:
+                        # 클릭 로딩 모래시계 시각적 정지
+                        try:
+                            requests.post(
+                                f"https://api.telegram.org/bot{_TOKEN}/answerCallbackQuery",
+                                json={"callback_query_id": cb_id},
+                                timeout=5,
+                            )
+                        except Exception:
+                            pass
+
+                        # 버튼 내부 데이터에 대응되는 핸들러 실행
+                        handler = _COMMANDS.get(cb_data)
+                        if handler:
+                            try:
+                                reply = handler()
+                                if reply:
+                                    if isinstance(reply, tuple):
+                                        _send(reply[0], reply_markup=reply[1])
+                                    else:
+                                        _send(reply)
+                            except Exception as e:
+                                _send(f"⚠️ 명령 처리 오류: {e}")
         except Exception as e:
             logger.debug("TelegramCommander polling error: {}", e)
             time.sleep(_POLL_INTERVAL * 2)
