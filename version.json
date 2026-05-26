@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "files": [
+    "strategy.py",
+    "orchestrator.py",
+    "screener.py",
+    "indicators.py",
+    "requirements.txt"
+  ]
+}

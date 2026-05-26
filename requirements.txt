@@ -1,0 +1,30 @@
+# KIS Auto-Trading Bot - Dependencies
+# =====================================
+
+# Core
+requests>=2.31.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Data & Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+pytz>=2023.3
+matplotlib>=3.7.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Data (legacy compat - shimmed by data_proxy.py)
+yfinance>=0.2.30
+
+# Optional: Dashboard (not needed for headless oracle)
+# streamlit>=1.30.0
+# plotly>=5.18.0
+# openpyxl>=3.1.0
+
+# Packaging & Deployment
+paramiko>=3.0.0
