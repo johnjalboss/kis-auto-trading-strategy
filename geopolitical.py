@@ -194,13 +194,13 @@ class GeopoliticalMonitor:
         
         # Recommendation
         if level == "EXTREME":
-            rec = "🚨 EXTREME RISK: Maximum defense, reduce all positions"
+            rec = "[CRITICAL] EXTREME RISK: Maximum defense, reduce all positions"
         elif level == "HIGH":
-            rec = "⚠️ HIGH RISK: Reduce exposure, hedge with gold"
+            rec = "[WARNING] HIGH RISK: Reduce exposure, hedge with gold"
         elif level == "ELEVATED":
-            rec = "📊 ELEVATED: Monitor closely, consider hedges"
+            rec = "[CAUTION] ELEVATED: Monitor closely, consider hedges"
         else:
-            rec = "✅ LOW: Normal trading, no major geopolitical concerns"
+            rec = "[OK] LOW: Normal trading, no major geopolitical concerns"
         
         return GeopoliticalAnalysis(
             overall_risk_level=level,

@@ -132,13 +132,13 @@ class YenCarryMonitor:
             
             # Recommendation
             if carry_status == "CRISIS":
-                rec = "🚨 CRISIS: Yen carry unwinding! Reduce ALL risk immediately"
+                rec = "[CRITICAL] CRISIS: Yen carry unwinding! Reduce ALL risk immediately"
             elif carry_status == "UNWINDING":
-                rec = "⚠️ UNWINDING: Yen strengthening fast, reduce leverage"
+                rec = "[WARNING] UNWINDING: Yen strengthening fast, reduce leverage"
             elif carry_status == "UNSTABLE":
-                rec = "📊 WATCH: Yen gaining, monitor carry unwind risk"
+                rec = "[CAUTION] WATCH: Yen gaining, monitor carry unwind risk"
             else:
-                rec = "✅ Yen carry stable, no immediate risk"
+                rec = "[OK] Yen carry stable, no immediate risk"
             
             return YenCarrySignal(
                 usdjpy=usdjpy_approx,
