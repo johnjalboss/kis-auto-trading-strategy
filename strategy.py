@@ -223,18 +223,22 @@ class StrategyEngine:
     
     def check_entry(self, symbol: str, macro_score: float = 0, is_screened: bool = False) -> EntrySignal:
         """
-        PURE SWING TRADING ENTRY LOGIC
+        QUANT-HYBRID SWING ENTRY ENGINE (v1.0.7)
+        Dual-Setup Model:
+        - Setup A: Technical Breakout or Structural Pullback (Chart-driven)
+        - Setup B: Quant Liquidity & Accumulation (Flow-driven, front-running smart money)
         """
         if symbol in self._positions:
             return EntrySignal("HOLD", 0, "Already in position", 0)
         
+        # 1. Macro & Volatility Extreme Risk-Off Guards
         if macro_score < -20:
             return EntrySignal("HOLD", 0, f"Macro too risky: {macro_score:.0f}", 0)
         
         try:
             vix_snap = get_vix_snapshot()
             if vix_snap.regime == "EXTREME":
-                return EntrySignal("HOLD", 0, f"VIX extreme ({vix_snap.vix:.1f})  market crash mode", 0)
+                return EntrySignal("HOLD", 0, f"VIX extreme ({vix_snap.vix:.1f}) market crash mode", 0)
         except Exception:
             pass
 
@@ -242,46 +246,43 @@ class StrategyEngine:
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         current_regime = getattr(self, '_last_regime', '')
 
-        # CHOPPY/TRANSITION :   ( ) ,
-        #               .
-
         if current_regime in _bear_regimes:
             _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
             if symbol not in _allowed_in_bear:
-                return EntrySignal("HOLD", 0, f"BEAR_REGIME_BLOCK: {current_regime}  only inverse/defensive allowed", 0)
+                return EntrySignal("HOLD", 0, f"BEAR_REGIME_BLOCK: {current_regime} only inverse/defensive allowed", 0)
 
-        #  EARNINGS GUARD
+        # 2. Earnings Risk Guard
         try:
             from earnings_calendar import get_earnings_calendar
             ec = get_earnings_calendar()
             e_info = ec.check(symbol)
             if e_info.recommendation == "AVOID":
-                return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: {symbol}  {e_info.days_until}    ", 0)
+                return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: Avoid entry within {e_info.days_until} days of earnings", 0)
         except Exception:
             pass
 
-        #  ECON GUARD
+        # 3. High Impact Economic Events Guard
         try:
             from economic_calendar import get_economic_calendar
             econ_cal = get_economic_calendar()
             today_events = econ_cal.get_todays_events() if hasattr(econ_cal, 'get_todays_events') else []
             high_impact = [e for e in today_events if getattr(e, 'impact', '') == 'HIGH']
             if high_impact:
-                return EntrySignal("HOLD", 0, f"ECON_EVENT_GUARD:      ", 0)
+                return EntrySignal("HOLD", 0, "ECON_EVENT_GUARD: High-impact economic event scheduled today", 0)
         except Exception:
             pass
 
-        #  INSIDER GUARD
+        # 4. Insider Dump Guard
         try:
             from insider_tracker import get_insider_tracker
             insider = get_insider_tracker()
             ins_result = insider.analyze(symbol)
             if ins_result.insider_net_value < -5_000_000 and ins_result.insider_sentiment == "SELLING":
-                return EntrySignal("HOLD", 0, f"INSIDER_GUARD:      ", 0)
+                return EntrySignal("HOLD", 0, "INSIDER_GUARD: Massive insider dumping detected", 0)
         except Exception:
             pass
 
-        #  BREADTH GUARD
+        # 5. Market Breadth Guard
         try:
             import kis_data as _kd
             _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
@@ -291,82 +292,125 @@ class StrategyEngine:
                 _spy_current = float(_spy_close.iloc[-1])
                 if _spy_current < _spy_sma20 * 0.995:
                     if symbol not in getattr(config, 'INVERSE_ETFS', set()):
-                        return EntrySignal("HOLD", 0, f"BREADTH_GUARD: SPY ${_spy_current:.1f} < SMA20 ${_spy_sma20:.1f}", 0)
+                        return EntrySignal("HOLD", 0, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f})", 0)
         except Exception:
             pass
 
+        # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
         if df_daily is None or len(df_daily) < 50:
             return EntrySignal("HOLD", 0, "Insufficient daily data for Swing", 0)
 
         current_price = float(df_daily['Close'].iloc[-1])
         
-        # ============================================================
-        #    : MORNING SPIKE & FADE / GAP & CRAP GUARDS
-        # ============================================================
+        # 7. Intraday Morning Volatility Guards (Bull Trap / Fade Guards)
         phase = get_market_phase()
         if phase == MarketPhase.OPENING:
             try:
                 open_today = float(df_daily['Open'].iloc[-1])
                 high_today = float(df_daily['High'].iloc[-1])
-                low_today = float(df_daily['Low'].iloc[-1])
                 
-                # 1. MORNING GAP & CRAP GUARD:       ()
+                # Gap & Crap Guard
                 if current_price < open_today:
-                    logger.warning("MORNING_GAP_AND_CRAP_GUARD: {}    (: ${:.2f}, : ${:.2f})", 
-                                   symbol, open_today, current_price)
-                    return EntrySignal("HOLD", 0, f"MORNING_GAP_AND_CRAP_GUARD: Trading below daily open (${open_today:.2f})", current_price)
+                    return EntrySignal("HOLD", 0, f"MORNING_GAP_AND_CRAP_GUARD: Price below daily open (${open_today:.2f})", current_price)
                 
-                # 2. MORNING FADE GUARD:    40%      (Bull Trap)
+                # Morning Fade Guard
                 daily_range = high_today - open_today
                 if daily_range > 0:
                     fade_ratio = (high_today - current_price) / daily_range
                     if fade_ratio > 0.40:
-                        logger.warning("MORNING_FADE_GUARD: {}   {:.1f}%   (: ${:.2f}, : ${:.2f}, : ${:.2f})", 
-                                       symbol, fade_ratio * 100, open_today, high_today, current_price)
                         return EntrySignal("HOLD", 0, f"MORNING_FADE_GUARD: Retraced {fade_ratio:.0%} of morning gain", current_price)
                 
-                # 3. VOLATILITY SHAKEOUT GUARD:   -2%   
+                # Shakeout Guard
                 if current_price < open_today * 0.98:
-                    logger.warning("VOLATILITY_SHAKEOUT_GUARD: {}   -2%   (: ${:.2f}, : ${:.2f})",
-                                   symbol, open_today, current_price)
-                    return EntrySignal("HOLD", 0, f"VOLATILITY_SHAKEOUT_GUARD: Panic drop below open", current_price)
+                    return EntrySignal("HOLD", 0, "VOLATILITY_SHAKEOUT_GUARD: Panic drop below open", current_price)
             except Exception as e:
-                logger.debug("Morning volatility guard evaluation failed for {}: {}", symbol, e)
-        # ============================================================
+                logger.debug("Morning volatility guard failed for {}: {}", symbol, e)
+
+        # 8. Compute Advanced Quant Indicators & Master Score
+        try:
+            indicators = analyze_all(df_daily)
+            if indicators is None:
+                return EntrySignal("HOLD", 0, "Failed to analyze technical indicators", current_price)
+        except Exception as e:
+            logger.error("Indicator calculation error for {}: {}", symbol, e)
+            return EntrySignal("HOLD", 0, "Failed to calculate indicators", current_price)
+
+        # 9. Get Master Composite Signals
+        comp_signal = None
+        try:
+            from composite_signal import get_composite_engine
+            comp_engine = get_composite_engine()
+            comp_signal = comp_engine.get_signal(symbol)
+        except Exception as e:
+            logger.debug("Composite signal fetch skipped for {}: {}", symbol, e)
+
+        # Calculate exact 0-100 Quant Confidence Score using our advanced formula
+        confidence = self._calc_entry_confidence(
+            ind=indicators,
+            macro_score=macro_score,
+            cfg=self.get_phase_config(),
+            df=df_daily,
+            comp_signal=comp_signal,
+            symbol=symbol
+        )
+
+        # Evaluate basic indicators filters (e.g. overbought check)
+        cfg = self.get_phase_config()
+        filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)
+        
+        # 10. DUAL-SETUP DECISION ENGINE
+        # Setup A: Technical Chart Setup (52W High Breakout or Pullback in Uptrend)
         sma20 = df_daily['Close'].rolling(20).mean().iloc[-1]
         sma50 = df_daily['Close'].rolling(50).mean().iloc[-1]
         structural_uptrend = sma20 > sma50
-
-        from indicators import calculate_rsi, calculate_macd
-        rsi_val = float(calculate_rsi(df_daily).iloc[-1])
         
-        confidence = 60
-        reason = "SWING_BASE"
-
-        # VCP / Breakout Check
         _52w_high = float(df_daily['High'].tail(252).max()) if len(df_daily) >= 252 else float(df_daily['High'].max())
-        _pct_from_high = (current_price - _52w_high) / _52w_high
+        pct_from_high = (current_price - _52w_high) / _52w_high
         
-        is_breakout = _pct_from_high >= -0.02
-        is_pullback = structural_uptrend and (40 <= rsi_val <= 65) and (current_price > sma50)
+        is_breakout = pct_from_high >= -0.025
+        is_pullback = structural_uptrend and (38 <= indicators.rsi <= 65) and (current_price > sma50 * 0.985)
         
-        if is_breakout:
-            confidence += 25
-            reason = "SWING_BREAKOUT: 52W High Proximity"
-        elif is_pullback:
-            confidence += 15
-            reason = f"SWING_PULLBACK: RSI {rsi_val:.1f}, Trend UP"
-        else:
-            return EntrySignal("HOLD", 0, "No Swing Setup (Not a Breakout or Pullback)", current_price)
+        # Setup B: Quant Liquidity Accumulation (Driven by heavy Dark Pool / CTA / Institutional Flows)
+        # Allows entering a stock before technical breakout if flow conviction is extremely high.
+        is_quant_accumulation = False
+        if comp_signal and comp_signal.composite_score >= 70:
+            # Requires heavy buying, positive OBV trend, and not overbought
+            if indicators.obv_trend == "UP" and indicators.bollinger.percent_b < 0.75 and indicators.rsi < 68:
+                is_quant_accumulation = True
 
-        # Volume confirmation
+        # Resolve setup type and baseline score addition
+        setup_reason = ""
+        if is_breakout:
+            setup_reason = "SWING_BREAKOUT: 52W High Proximity"
+        elif is_pullback:
+            setup_reason = f"SWING_PULLBACK: RSI {indicators.rsi:.1f}, Trend UP"
+        elif is_quant_accumulation:
+            setup_reason = f"SWING_QUANT_ACCUMULATION: Score {comp_signal.composite_score:.0f} (Flow-driven)"
+        else:
+            return EntrySignal("HOLD", 0, "No Swing Setup (Not a Breakout, Pullback, or Quant Accumulation)", current_price)
+
+        # 11. Dynamic score requirements based on Regime
+        min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
+        
+        # Add buffer in choppy regimes to avoid whipsaws
+        if current_regime in _choppy_regimes:
+            min_required += 15
+            setup_reason = f"[CHOPPY SELECTIVE] {setup_reason}"
+            logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for {} to {}", symbol, min_required)
+
+        # Enforce technical filter checks for Setup A (Setup B bypasses some filters due to flow momentum)
+        if not is_quant_accumulation and not filter_res['passed']:
+            return EntrySignal("HOLD", confidence, f"Failed entry filters: {', '.join(filter_res['failed'])}", current_price)
+
+        # Volume verification bonus
         vol_recent = float(df_daily['Volume'].iloc[-1])
         vol_avg = float(df_daily['Volume'].iloc[:-1].mean())
-        if vol_avg > 0 and vol_recent > vol_avg * 1.5:
-            confidence += 10
-            
-        # PEAD Bonus
+        if vol_avg > 0 and vol_recent > vol_avg * 1.4:
+            confidence += 8
+            setup_reason += " | Vol Confirmation"
+
+        # PEAD Earnings Bonus
         try:
             from earnings_analyzer import get_earnings_analyzer
             _ea = get_earnings_analyzer()
@@ -374,26 +418,18 @@ class StrategyEngine:
             _beat = (_earn_result.get('beat_surprise', 0) or _earn_result.get('eps_surprise_pct', 0)) if isinstance(_earn_result, dict) else 0
             _days = _earn_result.get('days_since_earnings', 99) if isinstance(_earn_result, dict) else 99
             if _beat > 5 and _days <= 30:
-                confidence += 15
-                reason += f" | PEAD (+{_beat:.0f}%)"
+                confidence += 10
+                setup_reason += f" | PEAD (+{_beat:.0f}%)"
         except Exception:
             pass
 
         confidence = min(100, max(0, confidence))
-        cfg = self.get_phase_config()
-        min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
-        
-        # (CHOPPY)  :      +15 ,
-        #            !
-        if current_regime in _choppy_regimes:
-            min_required += 15
-            reason = f"[CHOPPY SELECTIVE] {reason}"
-            logger.info("CHOPPY SELECTIVE MODE: {}     {:.0f}   ( : {})", symbol, min_required, confidence)
 
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
 
-        return EntrySignal("BUY", confidence, reason, current_price)
+        logger.info(" ENTRY SIGNAL TRIGGERED [v1.0.7]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
+        return EntrySignal("BUY", confidence, setup_reason, current_price, indicators)
 
 
     def _check_entry_filters(self, ind: IndicatorSummary, cfg: PhaseConfig,
@@ -709,11 +745,11 @@ class StrategyEngine:
         # =================================================================
 
         # =================================================================
-        # 보유기간 계산: 실제 미국 거래시간 기준 (ET 09:30~16:00, 주말 제외)
+        #  :     (ET 09:30~16:00,  )
         # [BUG FIX v1.0.6]
-        # 기존: 진입당일=물리적시간, 이후=영업일×6.5h (진입시각 무시하는 오류)
-        # 수정: 진입일 남은 거래시간 + 중간영업일 6.5h + 마지막날 경과 거래시간
-        # 예시: 월 15:00 진입 → 화 10:00 체크 = 1h(월마감까지) + 0.5h(화 개장후) = 1.5h
+        # : =, =6.5h (  )
+        # :    +  6.5h +   
+        # :  15:00    10:00  = 1h() + 0.5h( ) = 1.5h
         # =================================================================
         try:
             from datetime import timedelta
@@ -725,7 +761,7 @@ class StrategyEngine:
             _now_raw = datetime.now()
             _entry_raw = pos.entry_time
 
-            # timezone 정규화
+            # timezone 
             if _entry_raw.tzinfo is not None and _now_raw.tzinfo is None:
                 _entry_raw = _entry_raw.replace(tzinfo=None)
             elif _entry_raw.tzinfo is None and _now_raw.tzinfo is not None:
@@ -734,16 +770,16 @@ class StrategyEngine:
             is_same_day = (_now_raw.date() == _entry_raw.date())
 
             if is_same_day:
-                # 같은 날이면 물리적 경과시간 그대로 사용 (shakeout 보호용)
+                #       (shakeout )
                 _hold_hours = (_now_raw - _entry_raw).total_seconds() / 3600
                 _hold_minutes = _hold_hours * 60
             else:
-                # --- 정밀 거래시간 기반 보유시간 계산 ---
+                # ---      ---
                 _hold_hours = 0.0
 
-                # 1) 진입 당일: 진입시각부터 당일 마감(16:00)까지의 거래시간
+                # 1)  :   (16:00) 
                 _entry_date = _entry_raw.date()
-                if _entry_date.weekday() < 5:  # 영업일만
+                if _entry_date.weekday() < 5:  # 
                     _entry_time_of_day = _entry_raw.time()
                     _start_t = max(_entry_time_of_day, _market_open_time)
                     _end_t = _market_close_time
@@ -754,7 +790,7 @@ class StrategyEngine:
                         _dt_e = datetime.combine(_dummy, _end_t)
                         _hold_hours += (_dt_e - _dt_s).total_seconds() / 3600.0
 
-                # 2) 중간 완전 영업일: (진입날+1일) ~ (오늘-1일) 각 6.5h
+                # 2)   : (+1) ~ (-1)  6.5h
                 _curr_date = _entry_raw.date() + timedelta(days=1)
                 _today_date = _now_raw.date()
                 while _curr_date < _today_date:
@@ -762,8 +798,8 @@ class StrategyEngine:
                         _hold_hours += 6.5
                     _curr_date += timedelta(days=1)
 
-                # 3) 마지막 날(오늘): 개장(09:30)부터 현재시각까지의 거래시간
-                if _today_date.weekday() < 5:  # 영업일만
+                # 3)  (): (09:30)  
+                if _today_date.weekday() < 5:  # 
                     _now_time_of_day = _now_raw.time()
                     if _now_time_of_day > _market_open_time:
                         from datetime import date as _date_cls2
