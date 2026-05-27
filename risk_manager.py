@@ -5,6 +5,8 @@ Manages trading risk with daily limits, consecutive loss detection,
 and position concentration controls.
 """
 
+import os
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, date, timedelta
 from typing import Dict, Optional, List
@@ -128,12 +130,49 @@ class RiskManager:
             self._trading_halted = False
             self._cooldown_until = None
             
-            # ★ 주간 드로다운 확인 (월요일에 리셋)
+            # ★ [QUANT RISK v1.0.9] 주간 드로다운 및 누적 P&L 복원 메커니즘
+            # 단순 0.0 초기화가 아닌, trades.db 데이터베이스에서 
+            # 이번 주 월요일 00:00:00 EST 이후 완료된 거래 손익의 실질 합계액을 쿼리하여 복원
             if self._week_start_date is None or today.weekday() == 0:  # Monday
-                self._weekly_pnl = 0.0
                 self._week_start_date = today
                 self._weekly_halted = False
-                logger.info("Weekly stats reset")
+                
+                # 이번 주 월요일(EST) 계산
+                et = pytz.timezone('US/Eastern')
+                now_et = datetime.now(et)
+                monday_et = now_et - timedelta(days=now_et.weekday())
+                monday_start_str = monday_et.strftime("%Y-%m-%d 00:00:00")
+                
+                self._weekly_pnl = 0.0
+                
+                # trades.db에서 이번 주 실거래 P&L 누적값 복원 시도
+                db_path = "trades.db"
+                if os.path.exists(db_path):
+                    conn = None
+                    try:
+                        conn = sqlite3.connect(db_path)
+                        cur = conn.cursor()
+                        # 이번 주 월요일 00:00 이후 완료된 매매 pnl 합계 조회
+                        cur.execute("""
+                            SELECT SUM(pnl) FROM trades 
+                            WHERE exit_time IS NOT NULL AND exit_time >= ?
+                        """, (monday_start_str,))
+                        res = cur.fetchone()
+                        if res and res[0] is not None:
+                            self._weekly_pnl = float(res[0])
+                            logger.info("[QUANT_RISK] Successfully recovered weekly P&L from DB: ${:+,.2f} since {}", 
+                                        self._weekly_pnl, monday_start_str)
+                    except Exception as q_err:
+                        logger.error("[QUANT_RISK] Failed to query weekly P&L: {}", q_err)
+                    finally:
+                        if conn:
+                            conn.close()
+                else:
+                    logger.debug("[QUANT_RISK] trades.db not found for weekly recovery, starting from 0.0")
+                
+                # 복원된 누적 주간 P&L에 따른 리스크 정지 선제 체크
+                self._check_weekly_stop()
+                logger.info("Weekly stats reset/recovered")
             
             logger.info("Risk Manager: Day started with ${:,.2f} (US date: {})", 
                        starting_balance, today)
@@ -247,7 +286,9 @@ class RiskManager:
         if self._daily_stats is None:
             return
         starting = self._daily_stats.starting_balance
-        if starting > 0 and abs(self._weekly_pnl) / starting > self.weekly_stop_pct:
+        # [BUG FIX v1.0.9] 오직 주간 P&L이 손실(self._weekly_pnl < 0)일 때만 주간 정지가 동작하도록 수정
+        # 이전: abs(self._weekly_pnl)로 인해 주간 10% 이상 수익이 났을 때도 계좌를 강제 정지하는 치명적인 논리 결함 존재.
+        if starting > 0 and self._weekly_pnl < 0 and abs(self._weekly_pnl) / starting > self.weekly_stop_pct:
             if self._weekly_pnl < 0:
                 self._weekly_halted = True
                 logger.warning("WEEKLY STOP: ${:,.0f} loss ({:.1%} of balance)",
