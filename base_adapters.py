@@ -54,7 +54,9 @@ BLACKLIST_PATTERNS = [
     'winrate_optimizer', 'trade_journal', 'portfolio_manager',
     'execution_tracker', 'risk_controller',
     # Day trading logic to be excluded from Swing engine
-    'intraday_momentum', 'premarket_gap'
+    'intraday_momentum', 'premarket_gap',
+    # Utilities with potential global import side-effects
+    'clean', 'get_logs', 'run_remote', 'sell'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters
