@@ -83,8 +83,8 @@ def _build_phase_configs():
         MarketPhase.MIDDAY: PhaseConfig(
             take_profit_pct=tp_base,
             stop_loss_atr=atr_mult,
-            trailing_atr=atr_mult * 1.3,  # 0.8 → 1.3: 이익 더 길게 유지
-            position_mult=0.8,            # 0.5 → 0.8: 장중 신호에도 충분한 비중
+            trailing_atr=atr_mult * 1.3,  # 0.8  1.3:    
+            position_mult=0.8,            # 0.5  0.8:    
             min_adx=25,
             min_entry_score=70,
             description="Conservative midday"
@@ -92,7 +92,7 @@ def _build_phase_configs():
         MarketPhase.CLOSING: PhaseConfig(
             take_profit_pct=tp_base * 1.2,
             stop_loss_atr=atr_mult,
-            trailing_atr=atr_mult * 1.1,  # 0.8 → 1.1: 마감 시간대에도 움직임 허용
+            trailing_atr=atr_mult * 1.1,  # 0.8  1.1:    
             position_mult=0.8,
             min_adx=20,
             min_entry_score=60,
@@ -242,8 +242,8 @@ class StrategyEngine:
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         current_regime = getattr(self, '_last_regime', '')
 
-        # CHOPPY/TRANSITION 레짐: 기존의 하드 블록(진입 차단)을 해제하고,
-        # 장 하단에서 초고점 신뢰도가 부여되는 디커플링 돌파 종목 선별 진입을 위해 소프트 허들 방식으로 변경합니다.
+        # CHOPPY/TRANSITION :   ( ) ,
+        #               .
 
         if current_regime in _bear_regimes:
             _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
@@ -302,7 +302,7 @@ class StrategyEngine:
         current_price = float(df_daily['Close'].iloc[-1])
         
         # ============================================================
-        # 🚨 장초반 변동성 관리: MORNING SPIKE & FADE / GAP & CRAP GUARDS
+        #    : MORNING SPIKE & FADE / GAP & CRAP GUARDS
         # ============================================================
         phase = get_market_phase()
         if phase == MarketPhase.OPENING:
@@ -311,24 +311,24 @@ class StrategyEngine:
                 high_today = float(df_daily['High'].iloc[-1])
                 low_today = float(df_daily['Low'].iloc[-1])
                 
-                # 1. MORNING GAP & CRAP GUARD: 시가 대비 하락세인 경우 진입 금지 (음봉)
+                # 1. MORNING GAP & CRAP GUARD:       ()
                 if current_price < open_today:
-                    logger.warning("MORNING_GAP_AND_CRAP_GUARD: {} 시가 미만 감지 (시가: ${:.2f}, 현재가: ${:.2f})", 
+                    logger.warning("MORNING_GAP_AND_CRAP_GUARD: {}    (: ${:.2f}, : ${:.2f})", 
                                    symbol, open_today, current_price)
                     return EntrySignal("HOLD", 0, f"MORNING_GAP_AND_CRAP_GUARD: Trading below daily open (${open_today:.2f})", current_price)
                 
-                # 2. MORNING FADE GUARD: 장초반 급상승 후 40% 이상 흘러내린 경우 진입 금지 (Bull Trap)
+                # 2. MORNING FADE GUARD:    40%      (Bull Trap)
                 daily_range = high_today - open_today
                 if daily_range > 0:
                     fade_ratio = (high_today - current_price) / daily_range
                     if fade_ratio > 0.40:
-                        logger.warning("MORNING_FADE_GUARD: {} 고점 대비 {:.1f}% 되돌림 감지 (시가: ${:.2f}, 고가: ${:.2f}, 현재가: ${:.2f})", 
+                        logger.warning("MORNING_FADE_GUARD: {}   {:.1f}%   (: ${:.2f}, : ${:.2f}, : ${:.2f})", 
                                        symbol, fade_ratio * 100, open_today, high_today, current_price)
                         return EntrySignal("HOLD", 0, f"MORNING_FADE_GUARD: Retraced {fade_ratio:.0%} of morning gain", current_price)
                 
-                # 3. VOLATILITY SHAKEOUT GUARD: 시가 대비 -2% 이상 급락세 차단
+                # 3. VOLATILITY SHAKEOUT GUARD:   -2%   
                 if current_price < open_today * 0.98:
-                    logger.warning("VOLATILITY_SHAKEOUT_GUARD: {} 시가 대비 -2% 초과 급락 (시가: ${:.2f}, 현재가: ${:.2f})",
+                    logger.warning("VOLATILITY_SHAKEOUT_GUARD: {}   -2%   (: ${:.2f}, : ${:.2f})",
                                    symbol, open_today, current_price)
                     return EntrySignal("HOLD", 0, f"VOLATILITY_SHAKEOUT_GUARD: Panic drop below open", current_price)
             except Exception as e:
@@ -383,12 +383,12 @@ class StrategyEngine:
         cfg = self.get_phase_config()
         min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
         
-        # 횡보장(CHOPPY) 국면 보정: 횡보장에서는 기준 진입 장벽 점수를 +15점 상향하여,
-        # 시장과 디커플링되어 극강의 독자 돌파 모멘텀을 분출하는 초우량 종목만 선별 진입 허용!
+        # (CHOPPY)  :      +15 ,
+        #            !
         if current_regime in _choppy_regimes:
             min_required += 15
             reason = f"[CHOPPY SELECTIVE] {reason}"
-            logger.info("CHOPPY SELECTIVE MODE: {} 진입 요구 최소 점수를 {:.0f}점으로 상향 적용 (현재 신뢰도: {})", symbol, min_required, confidence)
+            logger.info("CHOPPY SELECTIVE MODE: {}     {:.0f}   ( : {})", symbol, min_required, confidence)
 
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
@@ -708,14 +708,41 @@ class StrategyEngine:
         #     (  ): VWAP, , 
         # =================================================================
 
-        #    (    )
+        # 계산: 실시간 물리적 시간 및 거래일(Weekday) 기준 보유 시간 산출 (주말 왜곡 방지)
         try:
-            _hold_hours = (datetime.now() - pos.entry_time).total_seconds() / 3600
-        except Exception:
-            _hold_hours = 999  # entry_time     
+            from datetime import timedelta
+            now = datetime.now()
+            entry = pos.entry_time
+            
+            # timezone-aware 복구 가드
+            if entry.tzinfo is not None and now.tzinfo is None:
+                entry = entry.replace(tzinfo=None)
+            elif entry.tzinfo is None and now.tzinfo is not None:
+                now = now.replace(tzinfo=None)
+                
+            is_same_day = (now.date() == entry.date())
+            
+            if is_same_day:
+                _hold_hours = (now - entry).total_seconds() / 3600
+                _hold_minutes = _hold_hours * 60
+            else:
+                # 진입 익일 이후: 실제 영업일(월~금) 기준으로 1영업일당 6.5시간씩 가산 (주말 제외)
+                trading_days = 0
+                curr = entry.date()
+                while curr < now.date():
+                    curr += timedelta(days=1)
+                    if curr.weekday() < 5:
+                        trading_days += 1
+                _hold_hours = trading_days * 6.5
+                _hold_minutes = _hold_hours * 60
+        except Exception as e:
+            logger.error("Failed to calculate real hold hours: {}", e)
+            _hold_hours = 999
+            _hold_minutes = 9990
+            is_same_day = False
 
         # =================================================================
-        # 🛡️ 1단계: 최우선 비상 서킷 브레이커 (Emergency Hard Stop Net)
+        #  1:     (Emergency Hard Stop Net)
         # =================================================================
         if pnl_pct <= -0.10:
             return ExitSignal("SELL_ALL",
@@ -723,16 +750,13 @@ class StrategyEngine:
                 price, pnl_pct)
 
         # =================================================================
-        # 🛡️ 2단계: 최첨단 다이내믹 탈출 엔진 (Advanced Adaptive Exit Engine)
+        #  2:     (Advanced Adaptive Exit Engine)
         # =================================================================
         try:
-            # indicators: IndicatorSummary (RSI, ATR, MACD 등 포함)
+            # indicators: IndicatorSummary (RSI, ATR, MACD  )
             atr_val = indicators.atr if indicators else 0.0
             
-            # 보유 분 단위 계산
-            _hold_minutes = _hold_hours * 60
-            
-            # 장초반 극심한 변동성 시간대 여부 (9:30 ~ 9:45 EST)
+            #      (9:30 ~ 9:45 EST)
             is_early_opening_noise = False
             try:
                 et = pytz.timezone('US/Eastern')
@@ -742,39 +766,42 @@ class StrategyEngine:
             except Exception:
                 pass
 
-            # 휩소 방지 장치 (Shakeout Protection Mode):
-            # 진입 후 15분 미만이거나 장초반 15분 노이즈 구간인 경우
-            # 미세한 트레일링 스톱 및 기술 지표 기반 탈출을 유예하여 '숨쉴 공간(Breathing Room)' 확보.
-            is_shakeout_protection_active = (_hold_minutes < 15) or is_early_opening_noise
+            #    (Shakeout Protection Mode):
+            #   15   15   
+            #          ' (Breathing Room)' .
+            if is_same_day:
+                is_shakeout_protection_active = (_hold_minutes < 15) or is_early_opening_noise
+            else:
+                is_shakeout_protection_active = False
 
             if is_shakeout_protection_active:
                 logger.debug("SHAKEOUT_PROTECTION_ACTIVE for {}: Hold minutes={:.1f}, Early opening={}. Trailing/Reversal exits suspended.",
                              symbol, _hold_minutes, is_early_opening_noise)
 
-            # (1) ATR 기반 가변 손절 및 레짐 기반 손절 검사 (최우선 손절 라인)
+            # (1) ATR         (  )
             stop_sig = self._check_stop_loss(pos, price, atr_val, cfg)
             if stop_sig:
-                logger.warning("🎯 HARD STOP / ATR STOP TRIGGERED: {} -> {}", symbol, stop_sig.reason)
+                logger.warning(" HARD STOP / ATR STOP TRIGGERED: {} -> {}", symbol, stop_sig.reason)
                 return stop_sig
 
-            # (2) 익절 검사 (일반 익절 + 수익 3% 돌파 시 고점 대비 -1.5% 트레일링 락)
+            # (2)   (  +  3%     -1.5%  )
             tp_sig = self._check_take_profit(pos, price, pnl_pct, cfg)
             if tp_sig:
-                logger.warning("🎯 TAKE PROFIT / TRAIL LOCK TRIGGERED: {} -> {}", symbol, tp_sig.reason)
+                logger.warning(" TAKE PROFIT / TRAIL LOCK TRIGGERED: {} -> {}", symbol, tp_sig.reason)
                 return tp_sig
 
-            # 휩소 방지가 작동 중이지 않을 때만 민감한 트레일링 스톱 및 역추세 지표 감시
+            #             
             if not is_shakeout_protection_active:
-                # (3) 고성능 샹들리에 트레일링 스톱 검사 (수익 구간 비례 지수식 조임)
+                # (3)      (    )
                 trail_sig = self._check_trailing_stop(pos, price, atr_val, cfg)
                 if trail_sig:
-                    logger.warning("🎯 ADVANCED TRAILING STOP TRIGGERED: {} -> {}", symbol, trail_sig.reason)
+                    logger.warning(" ADVANCED TRAILING STOP TRIGGERED: {} -> {}", symbol, trail_sig.reason)
                     return trail_sig
 
-                # (4) 역추세 반전 지표 감시 (MACD 데드크로스, Bollinger/StochRSI 극단 과매수 청산)
+                # (4)     (MACD , Bollinger/StochRSI   )
                 reversal_sig = self._check_reversal_signals(pos, indicators, price)
                 if reversal_sig:
-                    logger.warning("🎯 REVERSAL EXIT TRIGGERED: {} -> {}", symbol, reversal_sig.reason)
+                    logger.warning(" REVERSAL EXIT TRIGGERED: {} -> {}", symbol, reversal_sig.reason)
                     return reversal_sig
 
         except Exception as exit_e:
