@@ -708,32 +708,70 @@ class StrategyEngine:
         #     (  ): VWAP, , 
         # =================================================================
 
-        # 계산: 실시간 물리적 시간 및 거래일(Weekday) 기준 보유 시간 산출 (주말 왜곡 방지)
+        # =================================================================
+        # 보유기간 계산: 실제 미국 거래시간 기준 (ET 09:30~16:00, 주말 제외)
+        # [BUG FIX v1.0.6]
+        # 기존: 진입당일=물리적시간, 이후=영업일×6.5h (진입시각 무시하는 오류)
+        # 수정: 진입일 남은 거래시간 + 중간영업일 6.5h + 마지막날 경과 거래시간
+        # 예시: 월 15:00 진입 → 화 10:00 체크 = 1h(월마감까지) + 0.5h(화 개장후) = 1.5h
+        # =================================================================
         try:
             from datetime import timedelta
-            now = datetime.now()
-            entry = pos.entry_time
-            
-            # timezone-aware 복구 가드
-            if entry.tzinfo is not None and now.tzinfo is None:
-                entry = entry.replace(tzinfo=None)
-            elif entry.tzinfo is None and now.tzinfo is not None:
-                now = now.replace(tzinfo=None)
-                
-            is_same_day = (now.date() == entry.date())
-            
+            import pytz as _pytz_hold
+            _et_tz = _pytz_hold.timezone('US/Eastern')
+            _market_open_time = time(9, 30)
+            _market_close_time = time(16, 0)
+
+            _now_raw = datetime.now()
+            _entry_raw = pos.entry_time
+
+            # timezone 정규화
+            if _entry_raw.tzinfo is not None and _now_raw.tzinfo is None:
+                _entry_raw = _entry_raw.replace(tzinfo=None)
+            elif _entry_raw.tzinfo is None and _now_raw.tzinfo is not None:
+                _now_raw = _now_raw.replace(tzinfo=None)
+
+            is_same_day = (_now_raw.date() == _entry_raw.date())
+
             if is_same_day:
-                _hold_hours = (now - entry).total_seconds() / 3600
+                # 같은 날이면 물리적 경과시간 그대로 사용 (shakeout 보호용)
+                _hold_hours = (_now_raw - _entry_raw).total_seconds() / 3600
                 _hold_minutes = _hold_hours * 60
             else:
-                # 진입 익일 이후: 실제 영업일(월~금) 기준으로 1영업일당 6.5시간씩 가산 (주말 제외)
-                trading_days = 0
-                curr = entry.date()
-                while curr < now.date():
-                    curr += timedelta(days=1)
-                    if curr.weekday() < 5:
-                        trading_days += 1
-                _hold_hours = trading_days * 6.5
+                # --- 정밀 거래시간 기반 보유시간 계산 ---
+                _hold_hours = 0.0
+
+                # 1) 진입 당일: 진입시각부터 당일 마감(16:00)까지의 거래시간
+                _entry_date = _entry_raw.date()
+                if _entry_date.weekday() < 5:  # 영업일만
+                    _entry_time_of_day = _entry_raw.time()
+                    _start_t = max(_entry_time_of_day, _market_open_time)
+                    _end_t = _market_close_time
+                    if _start_t < _end_t:
+                        from datetime import date as _date_cls
+                        _dummy = _date_cls(2000, 1, 1)
+                        _dt_s = datetime.combine(_dummy, _start_t)
+                        _dt_e = datetime.combine(_dummy, _end_t)
+                        _hold_hours += (_dt_e - _dt_s).total_seconds() / 3600.0
+
+                # 2) 중간 완전 영업일: (진입날+1일) ~ (오늘-1일) 각 6.5h
+                _curr_date = _entry_raw.date() + timedelta(days=1)
+                _today_date = _now_raw.date()
+                while _curr_date < _today_date:
+                    if _curr_date.weekday() < 5:
+                        _hold_hours += 6.5
+                    _curr_date += timedelta(days=1)
+
+                # 3) 마지막 날(오늘): 개장(09:30)부터 현재시각까지의 거래시간
+                if _today_date.weekday() < 5:  # 영업일만
+                    _now_time_of_day = _now_raw.time()
+                    if _now_time_of_day > _market_open_time:
+                        from datetime import date as _date_cls2
+                        _dummy2 = _date_cls2(2000, 1, 1)
+                        _dt_o = datetime.combine(_dummy2, _market_open_time)
+                        _dt_n = datetime.combine(_dummy2, min(_now_time_of_day, _market_close_time))
+                        _hold_hours += (_dt_n - _dt_o).total_seconds() / 3600.0
+
                 _hold_minutes = _hold_hours * 60
         except Exception as e:
             logger.error("Failed to calculate real hold hours: {}", e)

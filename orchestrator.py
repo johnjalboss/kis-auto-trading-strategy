@@ -191,11 +191,11 @@ class BotOrchestrator:
         api_positions = self.trader.get_positions()
         self.strategy.sync_positions(api_positions)
 
-        # 11. Telegram Commander (명령어 수신 백그라운드 스레드)
+        # 11. Telegram Commander (   )
         def _commander():
             from telegram_commander import start_commander
             start_commander()
-            logger.info("  -> telegram_commander.py: /status /포지션 /수익 명령 수신 대기 중")
+            logger.info("  -> telegram_commander.py: /status / /    ")
         self._safe_import("telegram_commander", _commander)
         
         logger.info("Phase 1 Complete. Modules: {}/{} loaded", 
@@ -538,70 +538,70 @@ class BotOrchestrator:
                     # ============================================================
                     try:
                         _SECTOR_MAP = {
-                            # 반도체 / 하드웨어
+                            #  / 
                             'semiconductors': [
                                 'NVDA','AMD','MU','LRCX','KLAC','ASML','QCOM','ARM','ON',
                                 'AVGO','TXN','AMAT','MRVL','INTC','SWKS','MPWR','SOXL','SOXS',
                             ],
-                            # 빅테크
+                            # 
                             'big_tech': [
                                 'AAPL','MSFT','AMZN','META','GOOGL','GOOG','ORCL','IBM','DELL','HPQ',
                             ],
-                            # AI / 클라우드 / 사이버보안
+                            # AI /  / 
                             'ai_growth': [
                                 'PLTR','DDOG','CRWD','ZS','NET','MDB','PANW','SNOW','AI',
                                 'NOW','WDAY','SNPS','CDNS','FTNT','CHKP','OKTA','TEAM','MNDY',
                                 'FSLY','TTD','BRZE','ASAN','GTLB','DOCN','APP','U',
                             ],
-                            # 핀테크 / 블록체인 / 금융
+                            #  /  / 
                             'fintech': [
                                 'AFRM','UPST','SOFI','HOOD','COIN','NU','PYPL','XYZ',
                                 'MARA','RIOT','CLSK','MSTR',
                             ],
-                            # 은행 / 전통금융 (별도 — 핀테크와 구분)
+                            #  /  (   )
                             'banks': [
                                 'JPM','GS','BAC','WFC','C','MS','COF','AXP',
                                 'BLK','SPGI','MCO','CME','ICE','V','MA',
                             ],
-                            # 에너지
+                            # 
                             'energy': [
                                 'XOM','CVX','FANG','BKR','COP','SLB','EOG','MPC','VLO','PSX',
                                 'OXY','CCJ','UEC','URA','NEM','FCX','ALB','VST',
                             ],
-                            # 바이오 / 헬스케어
+                            #  / 
                             'biotech': [
                                 'MRNA','GILD','AMGN','VRTX','ISRG','DXCM','PODD','REGN',
                                 'BMY','MRK','PFE','LLY','ABT','ABBV','TMO','DHR',
                                 'SYK','BSX','ZTS','ILMN','UNH','BIIB','HALO','INCY','ALNY','BMRN',
                             ],
-                            # 클린에너지 / 유틸리티
+                            #  / 
                             'clean_energy': [
                                 'FSLR','ENPH','NEE','DUK','SO','ED','AEP','XEL','WEC',
                             ],
-                            # EV / 자동차
+                            # EV / 
                             'ev_auto': [
                                 'TSLA','RIVN','LCID','F','GM','NIO',
                             ],
-                            # 여행 / 레저 / 항공
+                            #  /  / 
                             'travel': [
                                 'ABNB','UBER','RCL','CCL','DKNG','MAR','HLT','BKNG','EXPE',
                                 'DAL','UAL','AAL','LUV',
                             ],
-                            # 리츠 / 부동산
+                            #  / 
                             'reits': [
                                 'AMT','PLD','EQIX','VTR','PSA','O','SPG','CCI','DLR','SBAC','DOC',
                             ],
-                            # 방산 / 산업재
+                            #  / 
                             'defense_industrial': [
                                 'LMT','RTX','NOC','GD','TDG','LHX','TXT',
                                 'GE','CAT','BA','HON','MMM','DE','PCAR','CMI','ETN','EMR','WM','RSG',
                             ],
-                            # 소비재 / 리테일
+                            #  / 
                             'consumer': [
                                 'NKE','SBUX','MCD','DIS','LULU','CMG','DPZ','YUM',
                                 'HD','LOW','WMT','COST','AMZN',
                             ],
-                            # 미디어 / 광고 / 플랫폼
+                            #  /  / 
                             'media_ad': [
                                 'ROKU','PINS','DUOL','TTD','APP','CELH',
                             ],
@@ -664,8 +664,12 @@ class BotOrchestrator:
                                 ], axis=1).max(axis=1)
                                 _atr = float(_tr.rolling(14).mean().iloc[-1])
                                 
-                                #  :  2%   $15,  $25
-                                _risk_amount = max(15, min(25, total_equity * 0.02))
+                                # [BUG FIX v1.0.6] Risk amount = 2% of total equity
+                                # Previous: min(25, ...) hard-capped at $25 regardless of portfolio size.
+                                # This caused tiny position sizes even for $10K+ portfolios.
+                                # Fix: minimum $15 floor (fee protection), no upper cap (scales with equity).
+                                # Example: $10K => $200 risk | $50K => $1000 risk | $100K => $2000 risk
+                                _risk_amount = max(15, total_equity * 0.02)
                                 
                                 # Cut risk in half during bear markets to protect capital
                                 if self.state.current_regime in {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}:
@@ -836,11 +840,11 @@ class BotOrchestrator:
                           self._daily_trade_count, config.MAX_DAILY_TRADES, symbol)
             return
         
-        # ⛔ 텔레그램 /일시정지 명령 감지 — BUY만 차단, 매도는 항상 허용
+        #   /    BUY ,   
         import os as _os
         _pause_file = "/tmp/kis_trading_paused"
         if action == "BUY" and _os.path.exists(_pause_file):
-            logger.warning("PAUSED: 텔레그램 /일시정지 활성화 중 — {} 매수 차단", symbol)
+            logger.warning("PAUSED:  /    {}  ", symbol)
             return
 
         if self.state.global_risk_level == "RISK_OFF" and action == "BUY":
@@ -1091,11 +1095,11 @@ class BotOrchestrator:
             logger.info("  -> dynamic_scaling.py: tier={}", scaler.get_tier() if hasattr(scaler, 'get_tier') else 'N/A')
         self._safe_import("dynamic_scaling", _scale)
             
-        # 6. Auto Tuner + 학습 리포트 (매일 실행)
+        # 6. Auto Tuner +   ( )
         def _tuner():
             from auto_tuner_new import run_auto_tune
             threading.Thread(target=run_auto_tune, daemon=True, name="AutoTuner").start()
-            logger.info("  -> auto_tuner_new.py: AI 학습 리포트 스레드 시작")
+            logger.info("  -> auto_tuner_new.py: AI    ")
         self._safe_import("auto_tuner", _tuner)
         
         # 7. Execution Quality Summary
@@ -1124,7 +1128,7 @@ class BotOrchestrator:
             rpt = get_reporter()
             rpt.send_daily_summary()
             logger.info("  -> reporter.py pushed daily summary")
-            # 월요일이면 주간 리포트도 자동 발송 (중복 방지 내장)
+            #      (  )
             rpt.send_weekly_report()
         self._safe_import("reporter", _report)
         
@@ -1183,8 +1187,8 @@ class BotOrchestrator:
         
         try:
             while True:
-                # 🔄 DYNAMIC PARAMETER RELOAD
-                # Auto-Tuner가 .env를 수정하면 즉시 실시간으로 반영 (재시작 방지)
+                #  DYNAMIC PARAMETER RELOAD
+                # Auto-Tuner .env     ( )
                 try:
                     from dotenv import load_dotenv
                     import importlib
