@@ -242,10 +242,8 @@ class StrategyEngine:
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         current_regime = getattr(self, '_last_regime', '')
 
-        # CHOPPY/TRANSITION 레짐: 방향성이 없어 승률 저하 → 진입 차단
-        if current_regime in _choppy_regimes:
-            logger.debug("CHOPPY_REGIME_BLOCK: {} — {} 레짐에서 신규 진입 차단", symbol, current_regime)
-            return EntrySignal("HOLD", 0, f"CHOPPY_REGIME_BLOCK: {current_regime} — 방향성 없음", 0)
+        # CHOPPY/TRANSITION 레짐: 기존의 하드 블록(진입 차단)을 해제하고,
+        # 장 하단에서 초고점 신뢰도가 부여되는 디커플링 돌파 종목 선별 진입을 위해 소프트 허들 방식으로 변경합니다.
 
         if current_regime in _bear_regimes:
             _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
@@ -385,6 +383,13 @@ class StrategyEngine:
         cfg = self.get_phase_config()
         min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
         
+        # 횡보장(CHOPPY) 국면 보정: 횡보장에서는 기준 진입 장벽 점수를 +15점 상향하여,
+        # 시장과 디커플링되어 극강의 독자 돌파 모멘텀을 분출하는 초우량 종목만 선별 진입 허용!
+        if current_regime in _choppy_regimes:
+            min_required += 15
+            reason = f"[CHOPPY SELECTIVE] {reason}"
+            logger.info("CHOPPY SELECTIVE MODE: {} 진입 요구 최소 점수를 {:.0f}점으로 상향 적용 (현재 신뢰도: {})", symbol, min_required, confidence)
+
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
 
