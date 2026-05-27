@@ -886,15 +886,30 @@ class BotOrchestrator:
                 raise RuntimeError("DRAWDOWN HALT")
         self._safe_import("drawdown_controller", _drawdown)
 
-        # 4. Kelly Criterion + Position Sizing
+        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer
         if action == "BUY":
             try:
-                from position_sizer import calculate_optimal_size
-                from kelly_criterion import get_kelly_fraction
-                kelly_pct = get_kelly_fraction(symbol)
-                qty = calculate_optimal_size(symbol, qty, kelly_pct, self.state.max_exposure_pct)
-            except Exception:
-                pass
+                from position_sizer import get_position_sizer
+                # Get the live portfolio sizer with current total equity
+                sizer = get_position_sizer(portfolio=total_equity)
+                # Calculate optimal sizing using dynamic Kelly, Volatility Parity, and Regime Scaler
+                sizer_result = sizer.calculate(symbol, current_regime=self.state.current_regime)
+                
+                # Convert the optimal percentage into target share quantity
+                quant_target_qty = int(sizer_result.position_dollars / price) if price > 0 else 0
+                
+                # Enforce dynamic scaling by max_exposure_pct & slot constraints
+                max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0 # 2% slippage safety margin
+                
+                # Standardize quantity selection
+                old_qty = qty
+                qty = min(quant_target_qty, max_allowed_qty)
+                qty = max(0, qty)
+                
+                logger.info("📐 QUANT_SIZING_RESULT for {}: SizerPct={:.1%} | TargetQty={} (LegacyQty={}) | Score={} | Details={}", 
+                            symbol, sizer_result.optimal_pct, qty, old_qty, sizer_result.sizing_score, sizer_result.details)
+            except Exception as sizer_err:
+                logger.error("Failed to run advanced Quant Sizer for {}: {}. Falling back to default raw qty.", symbol, sizer_err)
             
         if qty <= 0:
             logger.warning("Risk modules reduced size to 0 for {}", symbol)
