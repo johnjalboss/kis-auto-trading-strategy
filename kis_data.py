@@ -329,6 +329,7 @@ def get_intraday_ohlcv(symbol: str, exchange: str = None,
         
         headers = auth.get_headers(tr_id="HHDFS76950200")
         params = {
+            "AUTH": "",
             "EXCD": excd,
             "SYMB": symbol.upper(),
             "NMIN": interval_mins,

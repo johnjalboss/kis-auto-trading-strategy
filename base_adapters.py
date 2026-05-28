@@ -56,7 +56,8 @@ BLACKLIST_PATTERNS = [
     # Day trading logic to be excluded from Swing engine
     'intraday_momentum', 'premarket_gap',
     # Utilities with potential global import side-effects
-    'clean', 'get_logs', 'run_remote', 'sell'
+    'clean', 'get_logs', 'run_remote', 'sell', 'analyze_', 'backfill_', 'reset_', 'try_',
+    'simple_audit', 'deep_audit', 'clean_stale'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters

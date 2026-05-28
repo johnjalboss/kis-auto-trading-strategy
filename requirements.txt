@@ -25,6 +25,3 @@ yfinance>=0.2.30
 # streamlit>=1.30.0
 # plotly>=5.18.0
 # openpyxl>=3.1.0
-
-# Packaging & Deployment
-paramiko>=3.0.0
