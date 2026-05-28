@@ -23,6 +23,7 @@ from loguru import logger
 
 from macro import MarketRegime
 import config
+import universe
 
 
 class ScreenMode(Enum):
@@ -67,41 +68,8 @@ class ScreenResult:
 # ==============================================
 
 # 확장된 후보 풀 — 실거래 137건 분석 및 나스닥/S&P 대표 250+ 종목 (2026-05)
-BASE_UNIVERSE = [
-    # 대형 기술주 / 메가캡 (가장 중요)
-    "AAPL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "AVGO", "GOOGL",
-    "CRM", "ORCL", "ADBE", "NFLX", "SHOP", "SNOW", "INTC", "TXN", "NXPI", "CSCO",
-    # 반도체 및 하드웨어 (스윙 주도주)
-    "MU", "LRCX", "KLAC", "ASML", "QCOM", "ARM", "ON", "WDC", "STX", "SMCI", "ANET",
-    "MRVL", "ADI", "MCHP", "SWKS", "QRVO", "MPWR", "TER", "AMAT", "HPQ", "HPE", "DELL",
-    # AI/Software/Cloud/Cybersecurity (모멘텀 강함)
-    "PLTR", "MSTR", "COIN", "IONQ", "RGTI", "RKLB", "SOFI", "HOOD",
-    "CELH", "DUOL", "DDOG", "CRWD", "ZS", "NET", "MDB", "PANW", "VRT", "VST",
-    "AI", "NOW", "WDAY", "SNPS", "CDNS", "FTNT", "CHKP", "OKTA", "TEAM", "MNDY",
-    "FSLY", "PINS", "ROKU", "TTD", "U", "APP", "DOCN", "GTLB", "ASAN", "BRZE",
-    # 핀테크 / 블록체인 / 금융 (트렌드 민감)
-    "JPM", "GS", "V", "MA", "AFRM", "UPST", "NU", "AXP", "BAC", "WFC", "C", "MS", "COF",
-    "XYZ", "PYPL", "MARA", "RIOT", "CLSK", "MSTR", "BLK", "SPGI", "MCO", "CME", "ICE",
-    # 바이오 / 헬스케어 (방어 및 변동성)
-    "MRNA", "GILD", "AMGN", "VRTX", "ISRG", "DXCM", "PODD", "REGN", "ABBV", "BMY",
-    "UNH", "LLY", "JNJ", "PFE", "MRK", "TMO", "DHR", "ABT", "SYK", "BSX", "ZTS", "ILMN",
-    # 에너지 / 원자재 / 우라늄
-    "XOM", "CVX", "FANG", "BKR", "COP", "SLB", "EOG", "MPC", "VLO", "PSX",
-    "OXY", "CCJ", "UEC", "URA", "NEM", "FCX", "ALB",
-    # 경기소비재 / 자동차 / 여행 / 유통
-    "NKE", "SBUX", "MCD", "DIS", "ABNB", "UBER", "LULU", "RCL", "CCL", "DKNG", "HD", "LOW",
-    "CMG", "DPZ", "YUM", "MAR", "HLT", "BKNG", "EXPE", "RIVN", "LCID", "F", "GM",
-    "WMT", "COST", "TGT", "DG", "DLTR", "TJX", "ROST",
-    # 필수소비재 / 방어주
-    "PG", "KO", "PEP", "PM", "MO", "CL", "KMB", "GIS", "SYY", "KR", "MDLZ", "HSY",
-    # 산업재 / 우주항공 / 방산
-    "FSLR", "ENPH", "GE", "CAT", "BA", "LMT", "RTX", "HON", "MMM",
-    "NOC", "GD", "TDG", "LHX", "TXT", "DE", "PCAR", "CMI", "ETN", "EMR", "WM", "RSG",
-    # 리츠 / 인프라
-    "AMT", "PLD", "EQIX", "VTR", "PSA", "O", "SPG", "CCI", "DLR", "SBAC", "DOC",
-    # ETF (헷지 및 시장방향성)
-    "SPY", "QQQ", "DIA", "IWM", "TQQQ", "SQQQ", "SOXL", "SOXS",
-]
+# Russell 1000 유니버스 전체(1,000+ 종목)를 실시간 후보군 스캐닝 대상으로 로드
+BASE_UNIVERSE = universe.get_all_symbols()
 
 # 방어주 별도 풀
 DEFENSIVE_UNIVERSE = [
