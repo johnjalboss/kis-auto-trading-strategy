@@ -119,7 +119,7 @@ class PositionSizer:
        BULL (1.2x) | BEAR (0.5x) | CHOPPY (0.4x)
     """
     
-    MAX_SINGLE_POSITION = 0.20  # 20% max in one stock
+    MAX_SINGLE_POSITION = 0.40  # [v1.1.8] 20% → 40%: small account needs concentration
     RISK_PER_TRADE = 0.02       # Risk 2% per trade
     
     def __init__(self, portfolio_value: float = 100000):
@@ -181,8 +181,8 @@ class PositionSizer:
             optimal *= 0.50
             details.append("BEAR_REGIME_SCALE (Risk halved to 50%)")
         elif current_regime in choppy_regimes:
-            optimal *= 0.40
-            details.append("CHOPPY_REGIME_SCALE (Risk clamped to 40%)")
+            optimal *= 0.65  # [v1.1.8] 40% → 65%: 40% was too aggressive for small accounts
+            details.append("CHOPPY_REGIME_SCALE (Risk clamped to 65%)")
         elif "BULL" in current_regime:
             optimal *= 1.20
             details.append("BULL_REGIME_SCALE (Risk boosted by 1.2x)")

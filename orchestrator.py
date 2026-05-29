@@ -721,7 +721,9 @@ class BotOrchestrator:
                             raw_qty = int(bp / empty_slots / signal.entry_price) if signal.entry_price > 0 else 0
                         
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
-                        MAX_STOCK_CONCENTRATION_PCT = 0.30  # Max 30% of portfolio per stock
+                        # [v1.1.8] Raised from 30% → 55% — 30% was rejecting most quality stocks on small accounts
+                        # e.g. $770 portfolio × 55% = $423 max stock price (covers most liquid US equities)
+                        MAX_STOCK_CONCENTRATION_PCT = 0.55  # Max 55% of portfolio per stock price
                         if signal.entry_price > total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             logger.info("SKIP {}: stock price (${:.2f}) exceeds {:.1f}% of total equity (${:.2f})", 
                                         symbol, signal.entry_price, MAX_STOCK_CONCENTRATION_PCT * 100, total_equity)
@@ -733,7 +735,7 @@ class BotOrchestrator:
                         
                         # Allow minor limit violation (up to 50% over target capital) for 1-share entry, but never exceed max concentration
                         _target_capital = bp / empty_slots
-                        if qty == 0 and signal.entry_price <= _target_capital * 1.5 and signal.entry_price <= total_equity * MAX_STOCK_CONCENTRATION_PCT:
+                        if qty == 0 and signal.entry_price <= _target_capital * 2.0 and signal.entry_price <= total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             qty = 1
                             logger.info("Sizer override for {}: 1 share allowed via minor limit violation", symbol)
                         
@@ -782,14 +784,29 @@ class BotOrchestrator:
                         except Exception:
                             existing_score = 0
                         
+                        # [FIX] PnL-adjusted scoring: penalize losing positions
+                        # A stock that's -3% down should score lower for hold purposes
+                        # Penalty: each 1% loss = -5 points (capped at -30 for >6% loss)
+                        if curr_price > 0:
+                            pnl_pct = (curr_price - pos.entry_price) / pos.entry_price
+                            if pnl_pct < 0:
+                                pnl_penalty = min(30, int(abs(pnl_pct) * 100 * 5))
+                                existing_score -= pnl_penalty
+                                logger.debug(
+                                    "UPGRADE re-score: {} raw={} pnl={:.1%} penalty={} adjusted={}",
+                                    sym, existing_score + pnl_penalty,
+                                    pnl_pct, pnl_penalty, existing_score
+                                )
+                        
                         if existing_score < worst_score:
                             worst_score = existing_score
                             worst_sym = sym
+
                     
                     # Execute upgrade if score gap is large enough
                     if worst_sym and (best_buy_signal.composite_score - worst_score) >= config.UPGRADE_SCORE_GAP:
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
-                        MAX_STOCK_CONCENTRATION_PCT = 0.30  # Max 30% of portfolio per stock
+                        MAX_STOCK_CONCENTRATION_PCT = 0.55  # [v1.1.8] Raised 30% → 55%
                         if best_buy_signal.entry_price > total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             logger.info("UPGRADE BLOCKED: {} price (${:.2f}) exceeds {:.1f}% of total equity (${:.2f})", 
                                         best_buy_signal.symbol, best_buy_signal.entry_price, MAX_STOCK_CONCENTRATION_PCT * 100, total_equity)
