@@ -161,7 +161,8 @@ class CorrelationRegimeDetector:
             )
             
         except Exception as e:
-            logger.debug(f"Correlation analysis error: {e}")
+            import traceback
+            logger.debug(f"Correlation analysis error: {e}\n{traceback.format_exc()}")
             return self._default()
     
     def _default(self) -> CorrelationRegime:

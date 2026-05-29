@@ -243,6 +243,17 @@ class UniversalAdapter(BaseAnalyzer):
                 except: pass
             return result
 
+        # Extract regime if present (works for dicts and custom objects)
+        regime_val = None
+        if isinstance(output, dict):
+            regime_val = output.get('regime')
+        elif output is not None and not isinstance(output, pd.DataFrame) and (hasattr(output, '__dict__') or hasattr(output, '__dataclass_fields__')):
+            regime_val = getattr(output, 'regime', None)
+        if regime_val:
+            sig_name = f"REGIME_{regime_val}"
+            if sig_name not in result['signals']:
+                result['signals'].append(sig_name)
+
         # Dict output
         if isinstance(output, dict):
             try:

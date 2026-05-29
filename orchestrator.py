@@ -273,7 +273,8 @@ class BotOrchestrator:
             from correlation_regime import get_correlation_regime
             corr = get_correlation_regime()
             result = corr.analyze()
-            logger.info("  -> correlation_regime.py: regime={}", result.get('regime', 'N/A'))
+            regime_name = getattr(result, 'regime', None) or (result.get('regime') if isinstance(result, dict) else 'N/A')
+            logger.info("  -> correlation_regime.py: regime={}", regime_name)
         self._safe_import("correlation_regime", _corr)
         
         # 7. Sector Rotation   strategy state  (  )
