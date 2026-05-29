@@ -57,7 +57,10 @@ BLACKLIST_PATTERNS = [
     'intraday_momentum', 'premarket_gap',
     # Utilities with potential global import side-effects
     'clean', 'get_logs', 'run_remote', 'sell', 'analyze_', 'backfill_', 'reset_', 'try_',
-    'simple_audit', 'deep_audit', 'clean_stale'
+    'simple_audit', 'deep_audit', 'clean_stale',
+    # Macro/Regime engines - run by orchestrator, not individual stock signal adapters
+    'correlation_regime', 'hidden_markov_regime', 'global_macro', 'geopolitical',
+    'fed_watch', 'vix_structure', 'economic_calendar', 'intermarket', 'sector_rotator', 'sector_rotation'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters
@@ -205,11 +208,16 @@ class UniversalAdapter(BaseAnalyzer):
                 else:
                     # Generic call fallback
                     try:
-                        # Only pass df if it seems like it wants it (has positional param or generic **kwargs)
-                        if any(p.kind in [p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY] for p in params.values()):
-                            output = method(df, **kwargs)
+                        # Only pass df if it has a parameter named df/data or has *args/**kwargs
+                        has_df_param = any(p.name in ['df', 'data', 'df_price', 'prices'] or p.kind in [p.VAR_POSITIONAL, p.VAR_KEYWORD] for p in params.values())
+                        if has_df_param:
+                            # Filter kwargs to only pass expected params or if method has **kwargs
+                            filtered_kwargs = {k: v for k, v in kwargs.items() if k in params or any(p.kind == p.VAR_KEYWORD for p in params.values())}
+                            output = method(df, **filtered_kwargs)
                         else:
-                            output = method(**kwargs)
+                            # Filter kwargs to only pass expected params or if method has **kwargs
+                            filtered_kwargs = {k: v for k, v in kwargs.items() if k in params or any(p.kind == p.VAR_KEYWORD for p in params.values())}
+                            output = method(**filtered_kwargs)
                     except TypeError:
                         try:
                             output = method(df)
