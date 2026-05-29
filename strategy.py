@@ -339,9 +339,8 @@ class StrategyEngine:
         # 9. Get Master Composite Signals
         comp_signal = None
         try:
-            from composite_signal import get_composite_engine
-            comp_engine = get_composite_engine()
-            comp_signal = comp_engine.get_signal(symbol)
+            from composite_signal import get_signal as _get_composite_signal
+            comp_signal = _get_composite_signal(symbol)
         except Exception as e:
             logger.debug("Composite signal fetch skipped for {}: {}", symbol, e)
 

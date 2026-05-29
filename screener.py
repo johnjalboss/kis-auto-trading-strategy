@@ -194,14 +194,17 @@ class DynamicScreener:
     
     def _gather_squeeze_candidates(self) -> List[str]:
         """
-        BB Squeeze + SPY 상대강도 기반 후보 종목 수집.
+        BB Squeeze + SPY 상대강도 기반 후보 종목 수집 (병렬 처리 v2).
         '이미 올라간 종목'이 아닌 '아직 안 올라간 종목' 중 컨디션 좋은 것을 선별.
         """
         import kis_data
         from indicators import calculate_bb_squeeze, calculate_relative_strength
         import config
+        import concurrent.futures
+        import threading
 
         squeeze_scores = []  # (symbol, score)
+        _lock = threading.Lock()
 
         # SPY 일봉 데이터 (상대강도 계산용)
         spy_close = None
@@ -212,14 +215,15 @@ class DynamicScreener:
         except Exception:
             pass
 
-        # 후보 풀: BASE_UNIVERSE 전체 (넓은 선택지 유지)
-        candidates = list(BASE_UNIVERSE)
+        # 후보 풀: BASE_UNIVERSE 전체 (최대 300개 — API 과부하 방지)
+        candidates = list(BASE_UNIVERSE)[:300]
 
-        for sym in candidates:
+        def _scan_symbol(sym: str):
+            """단일 종목 BB Squeeze 스캔 (스레드 워커)"""
             try:
                 df = kis_data.get_daily_ohlcv(sym, days=60)
                 if df is None or len(df) < 25:
-                    continue
+                    return
 
                 # BB Squeeze 계산
                 sq = calculate_bb_squeeze(
@@ -230,7 +234,7 @@ class DynamicScreener:
 
                 # 스퀴즈 상태가 아니면 스킵
                 if not sq['is_squeezing']:
-                    continue
+                    return
 
                 score = 0
 
@@ -274,11 +278,16 @@ class DynamicScreener:
                 elif rsi > 75 or rsi < 20:
                     score -= 15  # 극단적 RSI → 제외
 
-                squeeze_scores.append((sym, score))
+                with _lock:
+                    squeeze_scores.append((sym, score))
 
             except Exception as e:
                 logger.debug("Squeeze scan failed for {}: {}", sym, e)
-                continue
+
+        # 병렬 실행 (16 workers — KIS API 동시성 한도 내)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            futures = {executor.submit(_scan_symbol, sym): sym for sym in candidates}
+            concurrent.futures.wait(futures, timeout=120)  # 최대 2분
 
         # 점수 높은 순 정렬
         squeeze_scores.sort(key=lambda x: x[1], reverse=True)
@@ -286,10 +295,12 @@ class DynamicScreener:
         result = [s[0] for s in squeeze_scores]
         if squeeze_scores:
             top5 = squeeze_scores[:5]
-            logger.info("Squeeze candidates top5: {}", [(s, sc) for s, sc in top5])
+            logger.info("Squeeze candidates top5 (parallel scan {}): {}",
+                        len(candidates), [(s, sc) for s, sc in top5])
 
         return result
-    
+
+
     def _screen_volume_surge(self) -> List[str]:
         """거래량 급증 종목 스크리닝 (5개 KIS API 멀티소스)"""
         try:
@@ -347,36 +358,41 @@ class DynamicScreener:
             return shuffled[:30]  # fallback도 랜덤 — 항상 같은 30개 방지
     
     def _screen_breakout(self) -> List[str]:
-        """브레이크아웃 후보 — 최근 고가 돌파 근접"""
+        """브레이크아웃 후보 -- 최근 고가 돌파 근접 (병렬 처리 v2)"""
+        import concurrent.futures
+        import threading
         try:
             candidates = list(self._gather_multi_source_candidates()[:150]) + list(BASE_UNIVERSE)
-            # 중복 제거
-            candidates = list(dict.fromkeys(candidates))
+            # 중복 제거, 최대 200개
+            candidates = list(dict.fromkeys(candidates))[:200]
             breakout_stocks = []
-            
-            for symbol in candidates:
+            _lock = threading.Lock()
+
+            def _check_breakout(symbol: str):
                 try:
-                    # Breakout 특성상 OHLCV가 필요하므로 1단계 필터 없이 OHLCV 스냅샷 요청 (최대 70개)
                     df = kis_data.get_daily_ohlcv(symbol, days=100)
                     if df is None or len(df) < 20:
-                        continue
-                    
+                        return
                     current = float(df["Close"].iloc[-1])
                     high_period = float(df["High"].max())
-                    
-                    # 기간 내 고점 대비 95% 이상
-                    if high_period > 0 and (current / high_period) >= 0.92: # 약간 완화 (92%)
-                        breakout_stocks.append((symbol, current / high_period))
+                    if high_period > 0 and (current / high_period) >= 0.92:
+                        with _lock:
+                            breakout_stocks.append((symbol, current / high_period))
                 except Exception:
-                    continue
-            
+                    pass
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+                futures = {executor.submit(_check_breakout, sym): sym for sym in candidates}
+                concurrent.futures.wait(futures, timeout=90)
+
             breakout_stocks.sort(key=lambda x: x[1], reverse=True)
-            return [s[0] for s in breakout_stocks[:30]] # 2단계(OHLCV 확장 스코어링) 후보 최대 30개
-            
+            return [s[0] for s in breakout_stocks[:30]]
+
         except Exception as e:
             logger.error("Breakout screen failed: {}", e)
             return list(BASE_UNIVERSE[:30])
-    
+
+
     def _screen_defensive(self) -> List[str]:
         """방어주 스크리닝 — RISK_OFF 시 안정적 종목"""
         try:
@@ -425,16 +441,19 @@ class DynamicScreener:
             return list(INVERSE_ETFS)[:5] if 'INVERSE_ETFS' in locals() else []
     
     def _screen_oversold(self) -> List[str]:
-        """과매도 우량주 스크리닝 — RSI가 낮고 볼린저 밴드 하단에 위치한 종목"""
+        """과매도 우량주 스크리닝 — RSI가 낮고 볼린저 밴드 하단에 위치한 종목 (병렬화 v2)"""
+        import concurrent.futures
+        import threading
         try:
             candidates = list(set(BASE_UNIVERSE + DEFENSIVE_UNIVERSE))
             oversold_stocks = []
+            _lock = threading.Lock()
             
-            for symbol in candidates[:60]:
+            def _check_oversold(symbol: str):
                 try:
                     df = kis_data.get_daily_ohlcv(symbol, days=30)
                     if df is None or len(df) < 14:
-                        continue
+                        return
                     
                     close = df['Close']
                     current_price = float(close.iloc[-1])
@@ -455,9 +474,14 @@ class DynamicScreener:
                     if rsi < 35 or current_price <= lower_bb * 1.02:
                         # 과매도 강도 점수 (낮을수록 좋음)
                         oversold_score = rsi + (current_price / lower_bb if lower_bb > 0 else 1) * 10
-                        oversold_stocks.append((symbol, oversold_score))
+                        with _lock:
+                            oversold_stocks.append((symbol, oversold_score))
                 except Exception:
-                    continue
+                    pass
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+                futures = {executor.submit(_check_oversold, sym): sym for sym in candidates[:100]}
+                concurrent.futures.wait(futures, timeout=90)
             
             # 점수가 낮은 순(더 과매도된 순)으로 정렬
             oversold_stocks.sort(key=lambda x: x[1])

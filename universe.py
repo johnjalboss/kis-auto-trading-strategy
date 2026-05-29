@@ -66,18 +66,89 @@ def get_exchange(symbol: str) -> str:
 # ==============================================
 
 def _fetch_sp500_from_wikipedia() -> list:
-    """위키피디아에서 S&P 500 구성종목 가져오기"""
+    """S&P 500 구성종목 반환.
+
+    Oracle Cloud VM은 Wikipedia에서 HTTP 403으로 차단되므로
+    완전한 정적 목록을 하드코딩 (2025년 기준 S&P 500).
+    네트워크 fetch 먼저 시도, 실패 시 정적 목록 사용.
+    """
+    # ── 완전한 S&P 500 정적 목록 (Wikipedia 차단 대비 fallback) ──────────────
+    SP500_STATIC = [
+        "A", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
+        "ADP", "ADSK", "AEE", "AEP", "AES", "AFL", "AIG", "AIZ", "AJG", "AKAM",
+        "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AMD", "AME", "AMGN", "AMP",
+        "AMT", "AMZN", "ANET", "AON", "AOS", "APA", "APD", "APH", "APO", "APP",
+        "APTV", "ARE", "ARES", "ATO", "AVB", "AVGO", "AVY", "AWK", "AXON", "AXP",
+        "AZO", "BA", "BAC", "BALL", "BAX", "BBY", "BDX", "BEN", "BFB", "BG",
+        "BIIB", "BKNG", "BKR", "BLDR", "BLK", "BMY", "BNY", "BR", "BRKB", "BRO",
+        "BSX", "BX", "BXP", "C", "CAG", "CAH", "CARR", "CASY", "CAT", "CB",
+        "CBOE", "CBRE", "CCI", "CCL", "CDNS", "CDW", "CEG", "CF", "CFG", "CHD",
+        "CHRW", "CHTR", "CI", "CIEN", "CINF", "CL", "CLX", "CMCSA", "CME", "CMG",
+        "CMI", "CMS", "CNC", "CNP", "COF", "COHR", "COIN", "COO", "COP", "COR",
+        "COST", "CPAY", "CPB", "CPRT", "CPT", "CRH", "CRL", "CRM", "CRWD", "CSCO",
+        "CSGP", "CSX", "CTAS", "CTSH", "CTVA", "CVNA", "CVS", "CVX", "D", "DAL",
+        "DASH", "DD", "DDOG", "DE", "DECK", "DELL", "DG", "DGX", "DHI", "DHR",
+        "DIS", "DLR", "DLTR", "DOC", "DOV", "DOW", "DPZ", "DRI", "DTE", "DUK",
+        "DVA", "DVN", "DXCM", "EA", "EBAY", "ECL", "ED", "EFX", "EG", "EIX",
+        "EL", "ELV", "EME", "EMR", "EOG", "EPAM", "EQIX", "EQR", "EQT", "ERIE",
+        "ES", "ESS", "ETN", "ETR", "EVRG", "EW", "EXC", "EXE", "EXPD", "EXPE",
+        "EXR", "F", "FANG", "FAST", "FCX", "FDS", "FDX", "FE", "FFIV", "FICO",
+        "FIS", "FISV", "FITB", "FIX", "FOX", "FOXA", "FRT", "FSLR", "FTNT", "FTV",
+        "GD", "GDDY", "GE", "GEHC", "GEN", "GEV", "GILD", "GIS", "GL", "GLW",
+        "GM", "GNRC", "GOOG", "GOOGL", "GPC", "GPN", "GRMN", "GS", "GWW", "HAL",
+        "HAS", "HBAN", "HCA", "HD", "HIG", "HII", "HLT", "HON", "HOOD", "HPE",
+        "HPQ", "HRL", "HSIC", "HST", "HSY", "HUBB", "HUM", "HWM", "IBKR", "IBM",
+        "ICE", "IDXX", "IEX", "IFF", "INCY", "INTC", "INTU", "INVH", "IP", "IQV",
+        "IR", "IRM", "ISRG", "IT", "ITW", "IVZ", "J", "JBHT", "JBL", "JCI",
+        "JKHY", "JNJ", "JPM", "KDP", "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC",
+        "KMB", "KMI", "KO", "KR", "KVUE", "L", "LDOS", "LEN", "LH", "LHX",
+        "LII", "LIN", "LITE", "LLY", "LMT", "LNT", "LOW", "LRCX", "LULU", "LUV",
+        "LVS", "LYB", "LYV", "MA", "MAA", "MAR", "MAS", "MCD", "MCHP", "MCK",
+        "MCO", "MDLZ", "MDT", "MET", "META", "MGM", "MKC", "MLM", "MMM", "MNST",
+        "MO", "MOS", "MPC", "MPWR", "MRK", "MRNA", "MRSH", "MS", "MSCI", "MSFT",
+        "MSI", "MTB", "MTD", "MU", "NCLH", "NDAQ", "NDSN", "NEE", "NEM", "NFLX",
+        "NI", "NKE", "NOC", "NOW", "NRG", "NSC", "NTAP", "NTRS", "NUE", "NVDA",
+        "NVR", "NWS", "NWSA", "NXPI", "O", "ODFL", "OKE", "OMC", "ON", "ORCL",
+        "ORLY", "OTIS", "OXY", "PANW", "PAYX", "PCAR", "PCG", "PEG", "PEP", "PFE",
+        "PFG", "PG", "PGR", "PH", "PHM", "PKG", "PLD", "PLTR", "PM", "PNC",
+        "PNR", "PNW", "PODD", "POOL", "PPG", "PPL", "PRU", "PSA", "PSKY", "PSX",
+        "PTC", "PWR", "PYPL", "Q", "QCOM", "RCL", "REG", "REGN", "RF", "RJF",
+        "RL", "RMD", "ROK", "ROL", "ROP", "ROST", "RSG", "RTX", "RVTY", "SATS",
+        "SBAC", "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI", "SNA", "SNDK", "SNPS",
+        "SO", "SOLV", "SPG", "SPGI", "SRE", "STE", "STLD", "STT", "STX", "STZ",
+        "SW", "SWK", "SWKS", "SYF", "SYK", "SYY", "T", "TAP", "TDG", "TDY",
+        "TECH", "TEL", "TER", "TFC", "TGT", "TJX", "TKO", "TMO", "TMUS", "TPL",
+        "TPR", "TRGP", "TRMB", "TROW", "TRV", "TSCO", "TSLA", "TSN", "TT", "TTD",
+        "TTWO", "TXN", "TXT", "TYL", "UAL", "UBER", "UDR", "UHS", "ULTA", "UNH",
+        "UNP", "UPS", "URI", "USB", "V", "VEEV", "VICI", "VLO", "VLTO", "VMC",
+        "VRSK", "VRSN", "VRT", "VRTX", "VST", "VTR", "VTRS", "VZ", "WAB", "WAT",
+        "WBD", "WDAY", "WDC", "WEC", "WELL", "WFC", "WM", "WMB", "WMT", "WRB",
+        "WSM", "WST", "WTW", "WY", "WYNN", "XEL", "XOM", "XYL", "XYZ", "YUM",
+        "ZBH", "ZBRA", "ZTS",
+    ]
+
+    # 1) 네트워크 fetch 시도 (성공하면 최신 목록 우선)
     try:
         import pandas as pd
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        tables = pd.read_html(url)
+        import urllib.request
+        req = urllib.request.Request(
+            "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; trading-bot/1.0)"}
+        )
+        html = urllib.request.urlopen(req, timeout=10).read()
+        import io
+        tables = pd.read_html(io.BytesIO(html))
         df = tables[0]
-        symbols = df["Symbol"].str.replace(".", "-", regex=False).tolist()
-        logger.info("S&P 500: {} symbols from Wikipedia", len(symbols))
-        return symbols
+        symbols = df["Symbol"].str.replace(".", "", regex=False).tolist()
+        if len(symbols) > 400:
+            logger.info("S&P 500: {} symbols from Wikipedia (live)", len(symbols))
+            return symbols
     except Exception as e:
-        logger.warning("Wikipedia S&P500 fetch failed: {}", e)
-        return []
+        logger.warning("Wikipedia S&P500 fetch failed (using static list): {}", e)
+
+    # 2) 정적 목록 사용
+    logger.info("S&P 500: {} symbols from static list", len(SP500_STATIC))
+    return SP500_STATIC
 
 
 def _fetch_russell1000_tickers() -> list:
@@ -89,56 +160,74 @@ def _fetch_russell1000_tickers() -> list:
     symbols.update(sp500)
     
     # 2) Russell 1000 중 S&P500에 없는 주요 종목 추가
-    # (Russell 1000 = S&P500 + 그 아래 500개 중대형주)
     additional_russell = [
-        # AI / Tech Growth
-        "PLTR", "CRWD", "SNOW", "NET", "DDOG", "ZS", "MDB", "CFLT",
-        "PATH", "U", "RBLX", "DUOL", "DOCS", "BILL", "PCOR", "ESTC",
-        "GTLB", "BRZE", "TOST", "SAMSARA",
-        # Semiconductor
-        "SMCI", "ARM", "MRVL", "ON", "WOLF", "CRUS", "DIOD", "ACLS",
-        "RMBS", "SITM", "FORM", "POWI",
-        # EV / Clean Energy
-        "RIVN", "LCID", "NIO", "XPEV", "LI", "QS", "CHPT", "BLNK",
-        "FSLR", "ENPH", "SEDG", "RUN",
-        # Crypto / Fintech
-        "COIN", "MSTR", "MARA", "RIOT", "CLSK", "HUT", "BITF",
-        "SOFI", "HOOD", "AFRM", "UPST", "LC", "NU",
-        # Biotech
-        "MRNA", "BNTX", "CRSP", "BEAM", "EDIT", "NTLA", "EXAS",
-        "TWST", "FATE", "IOVA", "ALNY", "INCY",
-        # Space / Defense
-        "RKLB", "ASTS", "BWXT", "KTOS", "RCAT",
-        "PLTR", "LDOS", "SAIC", "BAH",
-        # Consumer / E-commerce
-        "SHOP", "MELI", "SE", "CPNG", "PINS", "SNAP", "ETSY",
-        "W", "CHWY", "RVLV", "BROS", "CAVA", "SHAK",
-        # Healthcare / MedTech
-        "DXCM", "ISRG", "VEEV", "HIMS", "OSCR", "GDRX",
-        "IRTC", "NVCR", "NVAX",
-        # Mid-cap Growth
-        "CELH", "AXON", "TMDX", "LNTH", "WDAY", "TTD", "ROKU",
-        "ZI", "ASAN", "APP", "IONQ", "RGTI", "QUBT",
-        # Energy / Materials
-        "FANG", "DVN", "OXY", "HAL", "BKR", "CTRA",
-        "FCX", "AA", "CLF", "STLD", "NUE", "RS",
-        # Financial Services
-        "ACGL", "RGA", "WRB", "AIZ", "GL", "KNSL",
-        "LPLA", "RJF", "IBKR", "MKTX", "VIRT",
-        # REITs
-        "O", "VTR", "WELL", "IRM", "DLR", "ARE",
-        # Industrials
-        "GNRC", "TT", "IR", "XYL", "ROK", "AME", "NDSN",
-        "PAYC", "PAYX", "ADP",
-        # Media / Entertainment
-        "WBD", "LYV", "IMAX", "MTCH", "BMBL",
-        # Travel / Leisure
-        "ABNB", "BKNG", "EXPE", "MAR", "HLT", "H",
-        "DAL", "UAL", "LUV", "AAL", "ALK", "JBLU",
-        # Food / Beverage
-        "MNST", "SAM", "COKE",
-        # Automotive / Industrial
-        "TSLA", "RIVN", "TER", "ANET", "KEYS",
+        "AA", "AAL", "AAMI", "AAON", "AAP", "AAT", "ABCB", "ABG", "ABM", "ABR",
+        "ACA", "ACAD", "ACHC", "ACI", "ACIW", "ACLS", "ACM", "ACMR", "ACT", "ADAM",
+        "ADC", "ADEA", "ADMA", "ADNT", "ADT", "ADUS", "AEIS", "AEO", "AESI", "AFG",
+        "AFRM", "AGCO", "AGNT", "AGO", "AGX", "AGYS", "AHCO", "AHR", "AIN", "AIR",
+        "AIT", "AKR", "ALG", "ALGM", "ALGT", "ALHC", "ALK", "ALKS", "ALLY", "ALRM",
+        "ALV", "AM", "AMG", "AMH", "AMKR", "AMN", "AMPH", "AMR", "AMRX", "AMSF",
+        "AMTM", "AMWD", "AN", "ANDE", "ANF", "ANIP", "AORT", "AOSL", "APAM", "APG",
+        "APLE", "APOG", "APPF", "AR", "ARCB", "ARI", "ARLO", "ARMK", "AROC", "ARR",
+        "ARW", "ARWR", "ASB", "ASH", "ASO", "ASTE", "ASTH", "ASTS", "ATEN", "ATI",
+        "ATMU", "ATR", "AUB", "AVA", "AVAV", "AVNS", "AVNT", "AVT", "AVTR", "AWI",
+        "AWR", "AX", "AXTA", "AYI", "AZTA", "AZZ", "BAH", "BANC", "BANF", "BANR",
+        "BBT", "BBWI", "BC", "BCC", "BCO", "BCPC", "BDC", "BFAM", "BFH", "BFS",
+        "BGC", "BHE", "BHF", "BILL", "BIO", "BJ", "BJRI", "BKE", "BKH", "BKU",
+        "BL", "BLD", "BLFS", "BLKB", "BMI", "BMRN", "BNL", "BOH", "BOOT", "BOX",
+        "BRBR", "BRC", "BRKR", "BROS", "BRX", "BSY", "BTSG", "BTU", "BURL", "BWA",
+        "BWXT", "BXMT", "BYD", "CABO", "CACI", "CAKE", "CALM", "CALX", "CALY", "CAR",
+        "CARG", "CART", "CASH", "CATY", "CAVA", "CBRL", "CBSH", "CBT", "CBU", "CC",
+        "CCK", "CCOI", "CCS", "CDP", "CE", "CELH", "CENT", "CENTA", "CENX", "CERT",
+        "CFFN", "CFLT", "CFR", "CG", "CGNX", "CHCO", "CHDN", "CHE", "CHEF", "CHH",
+        "CHRD", "CHWY", "CLB", "CLF", "CLH", "CLSK", "CMC", "CNH", "CNK", "CNM",
+        "CNMD", "CNO", "CNR", "CNS", "CNX", "CNXC", "CNXN", "COCO", "COHU", "COKE",
+        "COLB", "COLL", "COLM", "CON", "CORT", "COTY", "CPF", "CPK", "CPNG", "CPRI",
+        "CPRX", "CR", "CRBG", "CRC", "CRGY", "CRI", "CRK", "CROX", "CRS", "CRSR",
+        "CRUS", "CRVL", "CSL", "CSR", "CSW", "CTKB", "CTRE", "CTS", "CUBE", "CUBI",
+        "CURB", "CUZ", "CVBF", "CVCO", "CVI", "CVLT", "CVSA", "CW", "CWEN", "CWENA",
+        "CWK", "CWST", "CWT", "CXM", "CXT", "CXW", "CYTK", "CZR", "DAN", "DAR",
+        "DBD", "DBX", "DCH", "DCI", "DCOM", "DEA", "DEI", "DFH", "DFIN", "DGII",
+        "DINO", "DIOD", "DKS", "DLB", "DLX", "DNOW", "DOCN", "DOCS", "DOCU", "DORM",
+        "DRH", "DT", "DTM", "DUOL", "DV", "DXC", "DXPE", "DY", "EAT", "ECG",
+        "ECPG", "EEFT", "EFC", "EFOR", "EGBN", "EGP", "EHC", "EIG", "ELAN", "ELF",
+        "ELS", "EMBC", "EMN", "ENOV", "ENPH", "ENR", "ENS", "ENSG", "ENTG", "ENVA",
+        "EPAC", "EPC", "EPR", "EPRT", "EQH", "ESAB", "ESE", "ESI", "ESNT", "ETD",
+        "ETSY", "EVR", "EVTC", "EWBC", "EXEL", "EXLS", "EXP", "EXPO", "EXTR", "EYE",
+        "EZPW", "FAF", "FBIN", "FBK", "FBNC", "FBP", "FBRT", "FCF", "FCFS", "FCN",
+        "FCPT", "FDP", "FELE", "FFBC", "FFIN", "FG", "FHB", "FHI", "FHN", "FIBK",
+        "FIVE", "FIZZ", "FLEX", "FLG", "FLO", "FLR", "FLS", "FMC", "FN", "FNB",
+        "FND", "FNF", "FORM", "FOUR", "FOXF", "FR", "FRPT", "FSS", "FTDR", "FTI",
+        "FTRE", "FUL", "FULT", "FUN", "FWRD", "G", "GAP", "GATX", "GBCI", "GBX",
+        "GDYN", "GEF", "GEO", "GFF", "GGG", "GHC", "GIII", "GKOS", "GLPI", "GME",
+        "GMED", "GNL", "GNTX", "GNW", "GO", "GOGO", "GOLF", "GPI", "GPK", "GRBK",
+        "GSHD", "GT", "GTES", "GTLS", "GTM", "GTY", "GVA", "GWRE", "GXO", "H",
+        "HAE", "HAFC", "HALO", "HASI", "HAYW", "HCC", "HCI", "HCSG", "HE", "HFWA",
+        "HGV", "HIMS", "HIW", "HL", "HLI", "HLIT", "HLNE", "HLX", "HMN", "HNI",
+        "HOG", "HOMB", "HOPE", "HQY", "HR", "HRB", "HWC", "HXL", "IBOC", "IDA",
+        "IDCC", "ILMN", "INGR", "IPGP", "IRT", "ITT", "JAZZ", "JEF", "JHG", "JLL",
+        "KBH", "KBR", "KD", "KEX", "KNF", "KNSL", "KNX", "KRC", "KRG", "KTOS",
+        "LAD", "LAMR", "LCID", "LEA", "LECO", "LFUS", "LIVN", "LNTH", "LOPE", "LPX",
+        "LSCC", "LSTR", "M", "MANH", "MASI", "MAT", "MDB", "MEDP", "MELI", "MIDD",
+        "MKSI", "MLI", "MMS", "MOGA", "MORN", "MP", "MSA", "MSM", "MSTR", "MTDR",
+        "MTG", "MTN", "MTSI", "MTZ", "MUR", "MUSA", "MZTI", "NBIX", "NET", "NEU",
+        "NFG", "NJR", "NLY", "NNN", "NOV", "NOVT", "NSA", "NTNX", "NVST", "NVT",
+        "NWE", "NXST", "NXT", "NYT", "OC", "OGE", "OGS", "OHI", "OKTA", "OLED",
+        "OLLI", "OLN", "ONB", "ONTO", "OPCH", "ORA", "ORI", "OSK", "OVV", "OZK",
+        "P", "PAG", "PATH", "PB", "PBF", "PCTY", "PEGA", "PEN", "PFGC", "PII",
+        "PINS", "PK", "PLNT", "PNFP", "POR", "POST", "PPC", "PR", "PRI", "PSN",
+        "PVH", "QLYS", "QS", "R", "RBA", "RBC", "REXR", "RGA", "RGEN", "RGLD",
+        "RH", "RIVN", "RKLB", "RLI", "RMBS", "RNR", "ROIV", "RPM", "RRC", "RRX",
+        "RS", "RYAN", "RYN", "SAIA", "SAIC", "SAM", "SARO", "SBRA", "SCI", "SE",
+        "SEIC", "SF", "SFM", "SGI", "SHC", "SHOP", "SIGI", "SITM", "SLAB", "SLGN",
+        "SLM", "SMG", "SN", "SNOW", "SNX", "SOFI", "SOLS", "SON", "SPXC", "SR",
+        "SSB", "SSD", "ST", "STAG", "STRL", "STWD", "SWX", "SYNA", "TCBI", "TEX",
+        "THC", "THG", "THO", "TKR", "TLN", "TMHC", "TNL", "TOL", "TREX", "TRU",
+        "TTC", "TTEK", "TTMI", "TWLO", "TXNM", "TXRH", "UBSI", "UFPI", "UGI", "ULS",
+        "UMBF", "UNM", "USFD", "UTHR", "VAL", "VC", "VFC", "VICR", "VLY", "VMI",
+        "VNO", "VNOM", "VNT", "VOYA", "VVV", "WAL", "WBS", "WCC", "WEX", "WFRD",
+        "WH", "WHR", "WING", "WLK", "WMG", "WMS", "WPC", "WSO", "WTFC", "WTRG",
+        "WTS", "WWD", "XPO", "XRAY", "YETI", "ZION", "ZS",
     ]
     symbols.update(additional_russell)
     

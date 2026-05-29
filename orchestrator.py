@@ -337,13 +337,29 @@ class BotOrchestrator:
     # PHASE 3: SCREENER & UNIVERSE REDUCTION
     # ==========================================
     def phase_3_run_screener(self):
-        """Screen universe using screener + liquidity filter + fundamental analyzer"""
+        """Screen universe using screener + liquidity filter + fundamental analyzer.
+        
+        Screener is cached for 45 minutes to prevent hammering 1000+ symbols
+        with OHLCV API calls on every orchestrator cycle.
+        """
         logger.info("=" * 60)
         logger.info("[PHASE 3] Running Universe Screener (5 modules)")
         logger.info("=" * 60)
         
+        # ---- 45-minute screener result cache ----
+        now = datetime.now()
+        if (self.state.last_screen_refresh is not None and
+                (now - self.state.last_screen_refresh).total_seconds() < 2700 and  # 45 min
+                self.state.target_universe):
+            logger.info("  -> Screener result cached ({} symbols). Skipping re-scan.",
+                        len(self.state.target_universe))
+            return
+        
         try:
-            screener = DynamicScreener()
+            # Reuse screener instance to keep _cache and _multi_source_hits alive
+            if not hasattr(self, '_screener_instance') or self._screener_instance is None:
+                self._screener_instance = DynamicScreener()
+            screener = self._screener_instance
             
             from macro import MarketRegime
             regime = MarketRegime.RISK_OFF if self.state.global_risk_level == "RISK_OFF" else MarketRegime.RISK_ON
@@ -637,8 +653,19 @@ class BotOrchestrator:
                         logger.debug("DB Dedup check error: {}", e)
                         pass  # Fallback: trust in-memory check
                     
-                    # Check position count limit
-                    empty_slots = config.MAX_POSITIONS - len(current_positions)
+                    # Check position count limit (Macro Shield: reduce max positions in bear/choppy regimes)
+                    current_regime = getattr(self.strategy, '_last_regime', '')
+                    dynamic_max_positions = config.MAX_POSITIONS
+                    if current_regime in ["BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"]:
+                        dynamic_max_positions = max(1, config.MAX_POSITIONS // 2)
+                        logger.info("MACRO_SHIELD: Bear regime ({}) -> Reducing MAX_POSITIONS {} -> {}", 
+                                    current_regime, config.MAX_POSITIONS, dynamic_max_positions)
+                    elif current_regime in ["CHOPPY", "CHOPPY_VOLATILE"]:
+                        dynamic_max_positions = max(1, int(config.MAX_POSITIONS * 0.7))
+                        logger.info("MACRO_SHIELD: Choppy regime ({}) -> Reducing MAX_POSITIONS {} -> {}", 
+                                    current_regime, config.MAX_POSITIONS, dynamic_max_positions)
+                    
+                    empty_slots = dynamic_max_positions - len(current_positions)
                     if empty_slots > 0:
                         # Slot available
                         if bp < 50:  # Minimum $50 cash (was $10) - prevent fee-killing micro trades
@@ -785,8 +812,15 @@ class BotOrchestrator:
                             time.sleep(1)  # Brief pause for order processing
                             bp = self.trader.get_buying_power()
                             if bp > 5 and best_buy_signal.entry_price > 0:
-                                # Recalculate empty slots after sell (it should be at least 1)
-                                empty_slots_after_sell = max(1, config.MAX_POSITIONS - len(self.strategy.get_all_positions()))
+                                # Recalculate empty slots after sell with dynamic max positions (Macro Shield)
+                                current_regime = getattr(self.strategy, '_last_regime', '')
+                                dynamic_max_positions = config.MAX_POSITIONS
+                                if current_regime in ["BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"]:
+                                    dynamic_max_positions = max(1, config.MAX_POSITIONS // 2)
+                                elif current_regime in ["CHOPPY", "CHOPPY_VOLATILE"]:
+                                    dynamic_max_positions = max(1, int(config.MAX_POSITIONS * 0.7))
+                                
+                                empty_slots_after_sell = max(1, dynamic_max_positions - len(self.strategy.get_all_positions()))
                                 target_capital = bp / empty_slots_after_sell
 
                                 # Safety cap: Max 40% of total equity per position

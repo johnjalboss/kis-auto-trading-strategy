@@ -637,6 +637,34 @@ def get_composite_engine() -> CompositeSignalEngine:
     return _engine
 
 
+# ============================================================
+# Convenience wrapper (used by strategy.py check_entry)
+# ============================================================
+
+# Per-symbol result cache: {symbol: (CompositeSignal, timestamp)}
+_signal_result_cache: dict = {}
+_SIGNAL_CACHE_TTL = 1800  # 30 minutes
+
+def get_signal(symbol: str) -> CompositeSignal:
+    """
+    Return a cached CompositeSignal for `symbol`, refreshing only when
+    the TTL has expired.  Avoids running all 70+ analyzers on every
+    strategy.check_entry() call during a screener loop.
+    """
+    import time
+    global _signal_result_cache
+    now = time.time()
+    cached = _signal_result_cache.get(symbol)
+    if cached is not None:
+        result, ts = cached
+        if now - ts < _SIGNAL_CACHE_TTL:
+            return result
+    engine = get_composite_engine()
+    result = engine.analyze(symbol)
+    _signal_result_cache[symbol] = (result, now)
+    return result
+
+
 if __name__ == "__main__":
     import sys
     logger.remove()

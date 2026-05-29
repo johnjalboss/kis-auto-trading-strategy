@@ -25,7 +25,7 @@ _cache_expiry = 300  # 5 minutes
 _original_yf_download = yf.download
 _yf_call_count = 0
 _yf_last_reset_time = time.time()
-YF_CALL_LIMIT_PER_HOUR = 60  # Strict safe limit to prevent any IP bans
+YF_CALL_LIMIT_PER_HOUR = 120  # Safe limit for yfinance fallback calls (KIS-only paths unaffected)
 
 def _safe_original_yf_download(tickers, *args, **kwargs):
     """
@@ -190,12 +190,7 @@ class KISTickerProxy:
                 else:
                     info['institutionPercentHeld'] = 0.15
             
-            # Skip enrichment from real yfinance (too slow for mass screening)
-            # The current price and volume from KIS are sufficient for most modules.
             self._info_cache = info
-            return info
-
-
             return info
             
         except Exception as e:
