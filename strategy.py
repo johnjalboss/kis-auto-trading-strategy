@@ -990,12 +990,13 @@ class StrategyEngine:
                             f"TP {pnl_pct:+.1%} >= {cfg.take_profit_pct:.0%}",
                             price, pnl_pct)
         
-        # Trailing profit lock: Once up 3%, trail at -1.5% from peak (lock in gains)
-        # This prevents +3% winners from turning into -5% losses
+        # Trailing profit lock: Once up 3%, trail at -2.5% from peak (lock in gains)
+        # [v1.1.8] Loosened from -1.5% -> -2.5%: gives winners more room, improves R/R ratio
+        # This prevents +3% winners from turning into -5% losses while not cutting too early
         if pos.high_since_entry > 0:
             peak_pnl = (pos.high_since_entry - pos.entry_price) / pos.entry_price
             if peak_pnl >= 0.03:
-                trailing_lock = pos.high_since_entry * 0.985  # trail -1.5% from peak
+                trailing_lock = pos.high_since_entry * 0.975  # trail -2.5% from peak
                 if price <= trailing_lock:
                     return ExitSignal("SELL_ALL",
                                     f"TRAIL_LOCK: peak +{peak_pnl:.1%}, locked at ${trailing_lock:.2f} (P&L {pnl_pct:+.1%})",
@@ -1012,14 +1013,16 @@ class StrategyEngine:
         if ind.macd.cross_down and pnl_pct > 0:
             return ExitSignal("SELL_ALL", "MACD bearish cross", price, pnl_pct)
         
-        # Extreme overbought
-        if ind.bollinger.percent_b > 1.05 and ind.rsi > 75:
+        # Extreme overbought — only exit if we actually have profit to protect
+        # [v1.1.8] Added pnl_pct > 0.01: previously selling at BB%=1.05 even at breakeven (avg +0.02%)
+        if ind.bollinger.percent_b > 1.05 and ind.rsi > 75 and pnl_pct > 0.01:
             return ExitSignal("SELL_ALL", 
                             f"Overbought: BB%={ind.bollinger.percent_b:.2f}, RSI={ind.rsi:.0f}",
                             price, pnl_pct)
         
-        # Stochastic RSI extreme + profit   
-        if ind.stoch_rsi > 0.9 and pnl_pct > 0.02:
+        # Stochastic RSI extreme + profit
+        # [v1.1.8] Raised from 2% -> 4%: data showed StochRSI exits avg +2.58% but cutting too early
+        if ind.stoch_rsi > 0.9 and pnl_pct > 0.04:
             return ExitSignal("SELL_ALL", f"StochRSI extreme: {ind.stoch_rsi:.2f}",
                             price, pnl_pct)
         
