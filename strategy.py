@@ -263,12 +263,13 @@ class StrategyEngine:
 
         # 3. High Impact Economic Events Guard
         try:
-            from economic_calendar import get_economic_calendar
-            econ_cal = get_economic_calendar()
-            today_events = econ_cal.get_todays_events() if hasattr(econ_cal, 'get_todays_events') else []
-            high_impact = [e for e in today_events if getattr(e, 'impact', '') == 'HIGH']
-            if high_impact:
-                return EntrySignal("HOLD", 0, "ECON_EVENT_GUARD: High-impact economic event scheduled today", 0)
+            if getattr(config, 'ECON_EVENT_GUARD_ENABLED', True):
+                from economic_calendar import get_economic_calendar
+                econ_cal = get_economic_calendar()
+                today_events = econ_cal.get_todays_events() if hasattr(econ_cal, 'get_todays_events') else []
+                high_impact = [e for e in today_events if getattr(e, 'impact', '') == 'HIGH']
+                if high_impact:
+                    return EntrySignal("HOLD", 0, "ECON_EVENT_GUARD: High-impact economic event scheduled today", 0)
         except Exception:
             pass
 

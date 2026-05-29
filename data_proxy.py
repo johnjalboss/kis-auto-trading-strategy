@@ -27,6 +27,10 @@ _yf_call_count = 0
 _yf_last_reset_time = time.time()
 YF_CALL_LIMIT_PER_HOUR = 120  # Safe limit for yfinance fallback calls (KIS-only paths unaffected)
 
+import threading
+
+_yf_lock = threading.Lock()
+
 def _safe_original_yf_download(tickers, *args, **kwargs):
     """
     Executes yfinance download with a strict circuit breaker to avoid IP bans.
@@ -44,13 +48,17 @@ def _safe_original_yf_download(tickers, *args, **kwargs):
         logger.error(f"yfinance Circuit Breaker TRIPPED! Call limit ({YF_CALL_LIMIT_PER_HOUR}/hour) exceeded. Blocking call for {tickers} to protect IP reputation.")
         return pd.DataFrame()
         
-    _yf_call_count += 1
-    logger.info(f"yfinance proxy call (Count: {_yf_call_count}/{YF_CALL_LIMIT_PER_HOUR}) for {tickers}")
-    try:
-        return _original_yf_download(tickers, *args, **kwargs)
-    except Exception as e:
-        logger.error(f"yfinance original download failed for {tickers}: {e}")
-        return pd.DataFrame()
+    # Enforce strict timeout to prevent indefinite socket hangs
+    kwargs['timeout'] = 10
+    
+    with _yf_lock:
+        _yf_call_count += 1
+        logger.info(f"yfinance proxy call (Count: {_yf_call_count}/{YF_CALL_LIMIT_PER_HOUR}) for {tickers}")
+        try:
+            return _original_yf_download(tickers, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"yfinance original download failed for {tickers}: {e}")
+            return pd.DataFrame()
 
 def _proxy_download(tickers, *args, **kwargs):
     """
@@ -71,20 +79,25 @@ def _proxy_download(tickers, *args, **kwargs):
         logger.warning(f"DataProxy: Multiple tickers unsupported by KIS direct proxy. Passing to original yf. {tickers}")
         return _safe_original_yf_download(tickers, *args, **kwargs)
 
-    # Bypass KIS for specific macro/FX tickers
-    if any(bt in symbol.upper() for bt in BYPASS_TICKERS):
-        logger.debug(f"DataProxy: Bypassing KIS for macro ticker {symbol}")
-        return _safe_original_yf_download(tickers, *args, **kwargs)
-
-    # Remove noisy debug traces
-    pass
-    
     cache_key = f"{symbol}_{period}_{interval}_{auto_adjust}"
     now = time.time()
+    
+    # 1. Cache Check FIRST (Applies to KIS paths AND Macro paths to prevent parallel redundant downloads)
     if cache_key in _cache:
         cached_df, timestamp = _cache[cache_key]
         if now - timestamp < _cache_expiry:
             return cached_df.copy()
+            
+    # 2. Bypass KIS for specific macro/FX tickers (Download and Cache)
+    if any(bt in symbol.upper() for bt in BYPASS_TICKERS):
+        logger.debug(f"DataProxy: Bypassing KIS for macro ticker {symbol}")
+        df = _safe_original_yf_download(tickers, *args, **kwargs)
+        if df is not None and not df.empty:
+            _cache[cache_key] = (df.copy(), now)
+        return df
+
+    # Remove noisy debug traces
+    pass
     
     try:
         df = kis_download(tickers=symbol, period=period, interval=interval, 
