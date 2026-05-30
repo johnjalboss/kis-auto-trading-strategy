@@ -98,6 +98,65 @@ class RiskManager:
         self.cooldown_mins = getattr(config, 'COOLDOWN_MINUTES', self.COOLDOWN_MINUTES)
         self.max_position_pct = getattr(config, 'MAX_POSITION_PCT', self.MAX_POSITION_PCT)
         self.max_positions = getattr(config, 'MAX_POSITIONS', self.MAX_TOTAL_POSITIONS)
+
+    def get_systemic_risk_multiplier(self) -> float:
+        """
+        Geopolitical Yen Carry & Systemic Risk Shield (Option 3)
+        Returns a risk multiplier based on Yen Carry Trade monitor & VIX term structure.
+        Also dynamically updates self.max_positions and alerts if high risk!
+        """
+        multiplier = 1.0
+        
+        # 1. Yen Carry Trade Unwinding Risk Check
+        try:
+            from yen_carry import get_yen_carry
+            yc = get_yen_carry()
+            sig = yc.analyze()
+            
+            logger.info("[YEN_SHIELD] Carry Status: {} | Unwind Risk: {} | Severity: {}/100", 
+                        sig.carry_status, sig.unwind_risk, sig.impact_severity)
+            
+            if sig.carry_status == "CRISIS" or sig.unwind_risk == "CRITICAL":
+                multiplier *= 0.25
+                self.max_positions = 1
+                logger.warning("🚨 [YEN_SHIELD] CRITICAL Yen Carry Unwind detected! Clamping risk multiplier to 25% and slots to 1.")
+            elif sig.carry_status == "UNWINDING" or sig.unwind_risk == "HIGH":
+                multiplier *= 0.50
+                self.max_positions = 2
+                logger.warning("⚠️ [YEN_SHIELD] HIGH Yen Carry Unwind detected! Clamping risk multiplier to 50% and slots to 2.")
+            elif sig.carry_status == "UNSTABLE" or sig.unwind_risk == "MEDIUM":
+                multiplier *= 0.75
+                self.max_positions = 3
+                logger.info("⚡ [YEN_SHIELD] MEDIUM Yen Carry Unwind detected! Clamping risk multiplier to 75% and slots to 3.")
+            else:
+                # Restore default max positions from config
+                self.max_positions = getattr(config, 'MAX_POSITIONS', self.MAX_TOTAL_POSITIONS)
+        except Exception as e:
+            logger.error("[YEN_SHIELD] Failed to analyze Yen Carry: {}", e)
+
+        # 2. VIX Structure / Tail Risk Check
+        try:
+            from vix_structure import get_vix_metrics
+            vix_sig = get_vix_metrics()
+            
+            logger.info("[VIX_SHIELD] VIX: {:.2f} | Term Structure: {} | Vol Regime: {}", 
+                        vix_sig.vix, vix_sig.term_structure, vix_sig.vol_regime)
+            
+            if vix_sig.vol_regime == "EXTREME" or vix_sig.term_structure == "BACKWARDATION":
+                if vix_sig.vix > 35:
+                    multiplier *= 0.40
+                    self.max_positions = min(self.max_positions, 1)
+                    logger.warning("🚨 [VIX_SHIELD] EXTREME VIX regime! Clamping risk multiplier by additional 40% and slots to 1.")
+                elif vix_sig.vix > 25:
+                    multiplier *= 0.70
+                    self.max_positions = min(self.max_positions, 2)
+                    logger.warning("⚠️ [VIX_SHIELD] HIGH VIX regime! Clamping risk multiplier by additional 70% and slots to 2.")
+        except Exception as e:
+            logger.error("[VIX_SHIELD] Failed to analyze VIX: {}", e)
+
+        # Final safety clamp
+        multiplier = max(0.10, min(1.20, multiplier))
+        return multiplier
     
     # ==============================================
     # Daily Stats Management

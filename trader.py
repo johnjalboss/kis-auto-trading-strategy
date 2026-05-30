@@ -513,7 +513,87 @@ class Trader:
                 logger.error("Price query failed for {} on {}: {}", symbol, excd, e)
                 
         return 0.0
-    
+
+    def get_order_book(self, symbol: str, exchange: str = None) -> dict:
+        """
+        Get real-time 10-level bid/ask order book for a symbol.
+        Uses /uapi/overseas-price/v1/quotations/inquire-asking-price with TR_ID HHDFS76200100.
+        """
+        QUOTE_MAP = {
+            "NASD": "NAS",
+            "NYSE": "NYS",
+            "AMEX": "AMS",
+            "NAS": "NAS",
+            "NYS": "NYS",
+            "AMS": "AMS"
+        }
+        if exchange:
+            exchange = QUOTE_MAP.get(exchange.upper(), exchange)
+
+        exchanges_to_try = [exchange] if exchange else [self._exchange_mapper.get_quote_exchange(symbol)]
+        
+        if exchange is None and exchanges_to_try[0] == "NAS" and symbol.upper() not in self._exchange_mapper.SYMBOL_EXCHANGE:
+            exchanges_to_try = ["NAS", "NYS", "AMS"]
+
+        tr_id = "HHDFS76200100"
+        url = f"{self.base_url}/uapi/overseas-price/v1/quotations/inquire-asking-price"
+
+        for excd in exchanges_to_try:
+            params = {"AUTH": "", "EXCD": excd, "SYMB": symbol}
+            
+            # Rate limit protection (Max 20 RPS)
+            time.sleep(0.1)
+
+            try:
+                resp = requests.get(url, headers=self._get_headers(tr_id),
+                                    params=params, timeout=10)
+                data = resp.json()
+
+                if data.get("rt_cd") == "0":
+                    return data
+            except Exception as e:
+                logger.error("Order book fetch failed for {} on {}: {}", symbol, excd, e)
+        return {}
+
+    def calculate_obi(self, symbol: str, exchange: str = None) -> float:
+        """
+        Calculate Order Book Imbalance (OBI) for a symbol.
+        Returns a float between -1.0 (strong sell pressure) and +1.0 (strong buy pressure).
+        Formula: (BidVolume - AskVolume) / (BidVolume + AskVolume)
+        """
+        ob = self.get_order_book(symbol, exchange)
+        if not ob:
+            return 0.0
+
+        output1 = ob.get("output1", {})
+        output2 = ob.get("output2", {})
+
+        # Try total volumes from output1
+        try:
+            bvol = float(output1.get("bvol", 0))
+            avol = float(output1.get("avol", 0))
+            if bvol + avol > 0:
+                obi = (bvol - avol) / (bvol + avol)
+                return max(-1.0, min(1.0, obi))
+        except Exception:
+            pass
+
+        # Fallback to summing 10-level ask/bid volumes from output2
+        try:
+            bid_sum = 0.0
+            ask_sum = 0.0
+            for i in range(1, 11):
+                bid_sum += float(output2.get(f"vbid{i}", 0))
+                ask_sum += float(output2.get(f"vask{i}", 0))
+
+            if bid_sum + ask_sum > 0:
+                obi = (bid_sum - ask_sum) / (bid_sum + ask_sum)
+                return max(-1.0, min(1.0, obi))
+        except Exception:
+            pass
+
+        return 0.0
+
     # ==============================================
     # Order Execution
     # ==============================================

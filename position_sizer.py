@@ -188,6 +188,34 @@ class PositionSizer:
             optimal *= 1.20
             details.append("BULL_REGIME_SCALE (Risk boosted by 1.2x)")
             
+        # 6.5 Apply Geopolitical Yen Carry & Systemic Tail Risk Shield (Option 3)
+        yen_mult = 1.0
+        try:
+            from risk_manager import get_risk_manager
+            rm = get_risk_manager()
+            # This dynamically updates rm.max_positions and returns the systemic risk multiplier
+            yen_mult = rm.get_systemic_risk_multiplier()
+            if yen_mult < 1.0:
+                optimal *= yen_mult
+                details.append(f"YEN_SHIELD_SCALE (Risk scaled by {yen_mult:.0%})")
+        except Exception as e:
+            logger.error("[SIZER] Failed to apply Yen Shield: {}", e)
+
+        # 6.6 Microstructure Order Book Imbalance (OBI) Sizing Filter (Option 1)
+        obi_val = 0.0
+        try:
+            from trader import get_trader
+            trader_inst = get_trader()
+            obi_val = trader_inst.calculate_obi(symbol)
+            if obi_val < -0.2:
+                # Scale down position by a factor proportional to sell pressure
+                # e.g. OBI = -0.6 -> scale down by 1 + 0.5 * (-0.6) = 0.7x
+                obi_mult = max(0.5, 1.0 + 0.5 * obi_val)
+                optimal *= obi_mult
+                details.append(f"OBI_SIZER_FILTER (OBI: {obi_val:+.2f} | Scaled by {obi_mult:.0%})")
+        except Exception as e:
+            logger.debug("[SIZER] OBI scaling bypassed or failed: {}", e)
+            
         # Apply max single position limits
         max_pos = self.MAX_SINGLE_POSITION
         

@@ -214,8 +214,24 @@ class SmartOrderExecutor:
     
     def _execute_adaptive(self, order: SmartOrder, price: float, plan: ExecutionPlan):
         """Execute with adaptive limit order"""
+        obi = 0.0
+        if self.trader:
+            try:
+                obi = self.trader.calculate_obi(order.symbol)
+                logger.info("[OBI_FILTER] Order Book Imbalance for {}: {:+.2f}", order.symbol, obi)
+            except Exception as e:
+                logger.error("[OBI_FILTER] Failed to calculate OBI: {}", e)
+
         if order.side == "BUY":
-            limit = price * (1 + plan.limit_offset_pct)
+            # If sell pressure is high (negative OBI), reduce buy limit price aggression to save slippage
+            if obi < -0.3:
+                # Limit offset scaled down proportionally by OBI, clamped to a safe minimum of 0.1%
+                adjusted_offset = max(0.001, plan.limit_offset_pct * (1.0 + obi))
+                limit = price * (1 + adjusted_offset)
+                logger.info("[OBI_FILTER] High selling pressure detected. Reduced BUY limit offset from {:.3%} to {:.3%}", 
+                            plan.limit_offset_pct, adjusted_offset)
+            else:
+                limit = price * (1 + plan.limit_offset_pct)
         else:
             limit = price * (1 + plan.limit_offset_pct)
         
