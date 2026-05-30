@@ -557,9 +557,9 @@ class Trader:
 
     def calculate_obi(self, symbol: str, exchange: str = None) -> float:
         """
-        Calculate Order Book Imbalance (OBI) for a symbol.
+        Calculate Multi-Level Order Flow Imbalance (MLOFI) for a symbol using a decaying harmonic weight.
         Returns a float between -1.0 (strong sell pressure) and +1.0 (strong buy pressure).
-        Formula: (BidVolume - AskVolume) / (BidVolume + AskVolume)
+        Formula: Sum( w_i * (vbid_i - vask_i) ) / Sum( w_i * (vbid_i + vask_i) )
         """
         ob = self.get_order_book(symbol, exchange)
         if not ob:
@@ -568,7 +568,27 @@ class Trader:
         output1 = ob.get("output1", {})
         output2 = ob.get("output2", {})
 
-        # Try total volumes from output1
+        # 1. Primary: Weighted 10-level ask/bid volumes (Microstructure decay weighting)
+        try:
+            bid_sum = 0.0
+            ask_sum = 0.0
+            for i in range(1, 11):
+                vbid = float(output2.get(f"vbid{i}", 0))
+                vask = float(output2.get(f"vask{i}", 0))
+                
+                # Decaying weight: Level 1 gets 100%, Level 10 gets 10% (harmonic decay)
+                weight = 1.0 / i
+                
+                bid_sum += vbid * weight
+                ask_sum += vask * weight
+
+            if bid_sum + ask_sum > 0:
+                mlofi = (bid_sum - ask_sum) / (bid_sum + ask_sum)
+                return max(-1.0, min(1.0, mlofi))
+        except Exception:
+            pass
+
+        # 2. Fallback: Simple total volumes from output1
         try:
             bvol = float(output1.get("bvol", 0))
             avol = float(output1.get("avol", 0))
@@ -578,21 +598,27 @@ class Trader:
         except Exception:
             pass
 
-        # Fallback to summing 10-level ask/bid volumes from output2
-        try:
-            bid_sum = 0.0
-            ask_sum = 0.0
-            for i in range(1, 11):
-                bid_sum += float(output2.get(f"vbid{i}", 0))
-                ask_sum += float(output2.get(f"vask{i}", 0))
+        return 0.0
 
-            if bid_sum + ask_sum > 0:
-                obi = (bid_sum - ask_sum) / (bid_sum + ask_sum)
-                return max(-1.0, min(1.0, obi))
+    def get_spread(self, symbol: str, exchange: str = None) -> float:
+        """
+        Calculate real-time bid-ask spread of the order book.
+        Formula: (Ask_1 - Bid_1) / MidPrice
+        """
+        ob = self.get_order_book(symbol, exchange)
+        if not ob:
+            return 0.001  # Default fallback of 10 bps
+
+        output2 = ob.get("output2", {})
+        try:
+            pbid1 = float(output2.get("pbid1", 0))
+            pask1 = float(output2.get("pask1", 0))
+            if pbid1 > 0 and pask1 > 0:
+                mid = (pbid1 + pask1) / 2.0
+                return (pask1 - pbid1) / mid
         except Exception:
             pass
-
-        return 0.0
+        return 0.001  # Default fallback
 
     # ==============================================
     # Order Execution

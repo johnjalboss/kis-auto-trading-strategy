@@ -78,7 +78,31 @@ class HiddenMarkovRegime:
                     
             result['regime'] = state.value
             result['risk_score'] = risk
+            
+            # 2026 State-of-the-Art HMM Microstructural Probability & Entropy Mapping
+            d_bull = max(0.0, short_trend) / (short_vol + 0.01)
+            d_bear = max(0.0, -short_trend) / (short_vol + 0.01)
+            d_chop = 1.0 / (vol_ratio + 0.01)
+            
+            exp_b = np.exp(d_bull)
+            exp_s = np.exp(d_bear)
+            exp_c = np.exp(d_chop)
+            sum_exp = exp_b + exp_s + exp_c
+            
+            p_bull = float(exp_b / sum_exp)
+            p_bear = float(exp_s / sum_exp)
+            p_chop = float(exp_c / sum_exp)
+            
+            entropy = -float(p_bull * np.log(p_bull + 1e-9) + p_bear * np.log(p_bear + 1e-9) + p_chop * np.log(p_chop + 1e-9))
+            max_entropy = float(np.log(3))
+            confidence = max(0.0, min(1.0, 1.0 - (entropy / max_entropy)))
+            
+            result['state_probabilities'] = {"BULL": p_bull, "BEAR": p_bear, "CHOP": p_chop}
+            result['entropy'] = entropy
+            result['confidence'] = confidence
+            
             result['signals'].append(f"HMM Probability Edge: {state.value} (Volatility {short_vol:.1%} vs {long_vol:.1%})")
+            result['signals'].append(f"HMM Entropy: {entropy:.3f} | State Confidence: {confidence:.1%}")
             
         except Exception as e:
             logger.error(f"HiddenMarkovRegime failed: {e}")

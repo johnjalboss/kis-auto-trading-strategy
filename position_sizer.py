@@ -216,6 +216,36 @@ class PositionSizer:
         except Exception as e:
             logger.debug("[SIZER] OBI scaling bypassed or failed: {}", e)
             
+        # 6.7 Apply HMM Shannon Entropy Confidence Sizing (Latest 2026 Quant Research)
+        hmm_confidence = 1.0
+        try:
+            from hidden_markov_regime import HiddenMarkovRegime
+            detector = HiddenMarkovRegime("QQQ")
+            hmm_result = detector.analyze()
+            hmm_confidence = hmm_result.get("confidence", 1.0)
+            
+            # Scale optimal size by latent state probability confidence
+            optimal *= hmm_confidence
+            details.append(f"HMM_CONFIDENCE_SCALE (Confidence: {hmm_confidence:.1%} | Scaled size)")
+        except Exception as e:
+            logger.debug("[SIZER] HMM confidence scaling failed: {}", e)
+
+        # 6.8 Apply Liquidity-Aware Spread Sizing Filter (Latest 2026 Quant Research)
+        spread_val = 0.001
+        try:
+            from trader import get_trader
+            trader_inst = get_trader()
+            spread_val = trader_inst.get_spread(symbol)
+            
+            # Reference liquid spread is 15 bps (0.0015)
+            # Scale down size proportionally if the spread is wide (fragile liquidity)
+            if spread_val > 0.0015:
+                liq_mult = max(0.2, 0.0015 / spread_val)
+                optimal *= liq_mult
+                details.append(f"LIQUIDITY_SPREAD_SCALE (Spread: {spread_val:.4f} | Scaled by {liq_mult:.0%})")
+        except Exception as e:
+            logger.debug("[SIZER] Liquidity spread scaling bypassed: {}", e)
+
         # Apply max single position limits
         max_pos = self.MAX_SINGLE_POSITION
         
