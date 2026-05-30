@@ -615,12 +615,12 @@ class CompositeSignalEngine:
         return CompositeSignal(
             symbol=symbol, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             action=ActionType.HOLD, confidence=0, composite_score=0,
-            macro_score=CategoryScore("MACRO", 0, 0.15, []),
-            technical_score=CategoryScore("TECHNICAL", 0, 0.25, []),
-            fundamental_score=CategoryScore("FUNDAMENTAL", 0, 0.20, []),
-            smart_money_score=CategoryScore("SMART_MONEY", 0, 0.20, []),
-            sentiment_score=CategoryScore("SENTIMENT", 0, 0.10, []),
-            risk_score=CategoryScore("RISK", 0, 0.10, []),
+            macro_score=CategoryScore("MACRO", 0, self.WEIGHTS['macro'], []),
+            technical_score=CategoryScore("TECHNICAL", 0, self.WEIGHTS['technical'], []),
+            fundamental_score=CategoryScore("FUNDAMENTAL", 0, self.WEIGHTS['fundamental'], []),
+            smart_money_score=CategoryScore("SMART_MONEY", 0, self.WEIGHTS['smart_money'], []),
+            sentiment_score=CategoryScore("SENTIMENT", 0, self.WEIGHTS['sentiment'], []),
+            risk_score=CategoryScore("RISK", 0, self.WEIGHTS['risk'], []),
             position_size_pct=0, entry_price=0, stop_loss=0, take_profit=0, risk_reward=0,
             bullish_signals=[], bearish_signals=[], warnings=["NO_DATA"],
             summary="Unable to analyze"

@@ -135,7 +135,8 @@ def get_kelly_fraction(symbol: str = None) -> float:
         with db._get_conn() as conn:
             trades = conn.execute("SELECT pnl_pct FROM trades WHERE side='SELL'").fetchall()
         if trades and len(trades) >= 10:
-            profits = [t['pnl_pct'] for t in trades]
+            # Filter out None values to prevent TypeError in comparison operations
+            profits = [t['pnl_pct'] for t in trades if t['pnl_pct'] is not None]
             wins = [p for p in profits if p > 0]
             losses = [p for p in profits if p < 0]
             

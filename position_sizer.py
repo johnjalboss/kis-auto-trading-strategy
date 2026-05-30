@@ -77,7 +77,8 @@ def get_live_performance_metrics(db_path: str = "trades.db") -> Tuple[float, flo
         if df.empty or len(df) < 5:
             return default_win_rate, default_avg_win, default_avg_loss, f"DEFAULT_FALLBACK (Insufficient trades: {len(df)})"
             
-        pnl_list = df['pnl_pct'].astype(float).tolist()
+        # Filter out NaN values to prevent win rate deflation
+        pnl_list = df['pnl_pct'].dropna().astype(float).tolist()
         
         wins = [x for x in pnl_list if x > 0]
         losses = [x for x in pnl_list if x <= 0]

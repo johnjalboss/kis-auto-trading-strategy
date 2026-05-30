@@ -212,9 +212,11 @@ def calculate_obv(df: pd.DataFrame) -> Tuple[pd.Series, str]:
     obv_sma = obv.rolling(20).mean()
     
     if len(obv) >= 20:
-        if obv.iloc[-1] > obv_sma.iloc[-1] * 1.02:
+        # Use absolute distance threshold to handle negative OBV values correctly
+        threshold = abs(obv_sma.iloc[-1]) * 0.02
+        if obv.iloc[-1] > obv_sma.iloc[-1] + threshold:
             trend = "UP"
-        elif obv.iloc[-1] < obv_sma.iloc[-1] * 0.98:
+        elif obv.iloc[-1] < obv_sma.iloc[-1] - threshold:
             trend = "DOWN"
         else:
             trend = "NEUTRAL"

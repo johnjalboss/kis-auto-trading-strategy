@@ -673,9 +673,10 @@ class DynamicScreener:
             except Exception:
                 pass
 
-            total = min(100, short_score + momentum_score + inst_score + options_score + 
+            # Clamp total score between 0 and 100
+            total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
                        tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
-                       high52w_bonus + pead_bonus + sector_bonus)
+                       high52w_bonus + pead_bonus + sector_bonus))
             
             return StockScore(
                 symbol=symbol,
