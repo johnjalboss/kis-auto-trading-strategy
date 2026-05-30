@@ -116,27 +116,32 @@ class SmartOrderExecutor:
         """
         order_value = quantity * current_price
         
-        # Small orders - Just use limit
+        # Small orders (our typical case: 1 share of expensive stock)
+        # [v1.1.8] BUY limit raised from 0.1% -> 0.5% above market
+        # 0.1% was too tight -> frequent missed fills on fast-moving stocks
+        # 0.5% virtually guarantees fill on liquid US stocks within seconds
         if order_value < self.SMALL_ORDER_THRESHOLD:
             return ExecutionPlan(
                 order_type=OrderType.ADAPTIVE,
                 num_slices=1,
                 slice_size=quantity,
                 interval_seconds=0,
-                limit_offset_pct=0.001 if side == "BUY" else -0.001,
+                limit_offset_pct=0.005 if side == "BUY" else -0.001,
                 max_participation=1.0,
                 urgency=urgency
             )
         
-        # Medium orders - Use TWAP
+        # Medium orders - Use ADAPTIVE (not TWAP)
+        # [v1.1.8] Changed from TWAP to ADAPTIVE for medium orders too
+        # TWAP runs in background thread and can cause double-notification
+        # For our small account, medium orders are rare - just use aggressive limit
         elif order_value < self.LARGE_ORDER_THRESHOLD:
-            num_slices = 3
             return ExecutionPlan(
-                order_type=OrderType.TWAP,
-                num_slices=num_slices,
-                slice_size=quantity // num_slices,
-                interval_seconds=60,  # 1 minute apart
-                limit_offset_pct=0.002 if side == "BUY" else -0.002,
+                order_type=OrderType.ADAPTIVE,
+                num_slices=1,
+                slice_size=quantity,
+                interval_seconds=0,
+                limit_offset_pct=0.005 if side == "BUY" else -0.002,
                 max_participation=0.05,
                 urgency=urgency
             )
@@ -217,6 +222,7 @@ class SmartOrderExecutor:
         order.limit_price = limit
         
         # Simulate or execute
+        # Simulate or execute
         if self.trader:
             try:
                 if order.side == "BUY":
@@ -224,14 +230,58 @@ class SmartOrderExecutor:
                 else:
                     # Critical: Force fill on all sell orders to prevent phantom positions
                     result = self.trader.sell(order.symbol, order.total_quantity, limit, ensure_fill=True)
+                
+                order_id_from_kis = None
+                if result:
+                    order_id_from_kis = (getattr(result, 'order_id', None) or 
+                                         getattr(result, 'odno', None) or
+                                         (result.get('odno') if isinstance(result, dict) else None) or
+                                         (result.get('order_id') if isinstance(result, dict) else None))
+                
+                if order_id_from_kis:
+                    logger.info("⏳ Order placed: {} ({}). Waiting up to 30s for fill...", order_id_from_kis, order.symbol)
+                    is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=30)
                     
-                if result and getattr(result, 'success', False):
-                    order.status = OrderStatus.FILLED
-                    order.filled_quantity = order.total_quantity
-                    order.avg_fill_price = getattr(result, 'fill_price', price)
+                    if is_filled:
+                        order.status = OrderStatus.FILLED
+                        order.filled_quantity = order.total_quantity
+                        order.avg_fill_price = getattr(result, 'price', limit) or limit
+                    else:
+                        logger.warning("❌ Order {} for {} did NOT fill within 30s.", order_id_from_kis, order.symbol)
+                        exchange_to_use = getattr(result, 'exchange', None) or self.trader._exchange_mapper.get_exchange(order.symbol)
+                        
+                        if order.side == "BUY":
+                            logger.warning("Cancelling unfilled BUY order to prevent phantom position.")
+                            self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "BUY")
+                            order.status = OrderStatus.CANCELLED
+                            order.reason = "Unfilled after 30 seconds (cancelled)"
+                        else:
+                            logger.warning("Cancelling unfilled SELL order, initiating aggressive market chase.")
+                            self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "SELL")
+                            time.sleep(2)
+                            
+                            chase_price = round(price * 0.95, 2)
+                            logger.warning("Aggressive chase SELL for {} at pseudo-market price: ${:.2f}", order.symbol, chase_price)
+                            chase_result = self.trader.sell(order.symbol, order.total_quantity, limit_price=chase_price, ensure_fill=False)
+                            chase_order_id = getattr(chase_result, 'order_id', None) or getattr(chase_result, 'odno', None)
+                            
+                            if chase_order_id:
+                                is_chase_filled = self.trader.wait_for_fill(chase_order_id, order.symbol, max_wait=15)
+                                if is_chase_filled:
+                                    order.status = OrderStatus.FILLED
+                                    order.filled_quantity = order.total_quantity
+                                    order.avg_fill_price = chase_price
+                                else:
+                                    logger.error("🚨 CRITICAL: Aggressive chase SELL order {} also unfilled!", chase_order_id)
+                                    order.status = OrderStatus.PARTIAL
+                                    order.reason = "Chase SELL unfilled (requires manual intervention)"
+                            else:
+                                order.status = OrderStatus.REJECTED
+                                order.reason = f"Chase SELL order placement failed: {chase_result.message if chase_result else ''}"
                 else:
                     order.status = OrderStatus.REJECTED
-                    order.reason = "API order creation failed"
+                    order.reason = f"KIS API returned no order ID: {result}"
+                    logger.warning("Order for {} got no KIS order ID — marking REJECTED", order.symbol)
             except Exception as e:
                 logger.error("Adaptive order failed: {}", e)
                 order.status = OrderStatus.REJECTED

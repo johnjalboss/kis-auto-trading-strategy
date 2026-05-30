@@ -217,9 +217,10 @@ class TradeDatabase:
         with self._get_conn() as conn:
             rows = conn.execute("""
                 SELECT * FROM trades 
-                WHERE DATE(entry_time) BETWEEN ? AND ?
-                ORDER BY entry_time DESC
-            """, (start.isoformat(), end.isoformat())).fetchall()
+                WHERE (entry_time IS NOT NULL AND DATE(entry_time) BETWEEN ? AND ?)
+                   OR (exit_time IS NOT NULL AND DATE(exit_time) BETWEEN ? AND ?)
+                ORDER BY created_at DESC
+            """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
         
         return [self._row_to_trade(row) for row in rows]
     

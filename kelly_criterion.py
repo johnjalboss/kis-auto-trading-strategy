@@ -134,19 +134,20 @@ def get_kelly_fraction(symbol: str = None) -> float:
         # Get all completed trades (SELL side trades with valid pnl_pct)
         with db._get_conn() as conn:
             trades = conn.execute("SELECT pnl_pct FROM trades WHERE side='SELL'").fetchall()
-        if trades and len(trades) >= 10:
+        if trades:
             # Filter out None values to prevent TypeError in comparison operations
             profits = [t['pnl_pct'] for t in trades if t['pnl_pct'] is not None]
-            wins = [p for p in profits if p > 0]
-            losses = [p for p in profits if p < 0]
-            
-            if wins and losses:
-                win_rate = len(wins) / len(profits)
-                avg_win = sum(wins) / len(wins)
-                avg_loss = abs(sum(losses) / len(losses))
+            if len(profits) >= 5:
+                wins = [p for p in profits if p > 0]
+                losses = [p for p in profits if p < 0]
                 
-                result = kc.calculate(capital=10000, win_rate=win_rate, avg_win=avg_win, avg_loss=avg_loss)
-                return result.recommended_pct
+                if wins and losses and len(profits) > 0:
+                    win_rate = len(wins) / len(profits)
+                    avg_win = sum(wins) / len(wins)
+                    avg_loss = abs(sum(losses) / len(losses))
+                    
+                    result = kc.calculate(capital=10000, win_rate=win_rate, avg_win=avg_win, avg_loss=avg_loss)
+                    return result.recommended_pct
     except Exception as e:
         logger.debug(f"Could not load historical Kelly stats: {e}")
         

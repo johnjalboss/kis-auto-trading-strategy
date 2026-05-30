@@ -950,6 +950,10 @@ class BotOrchestrator:
         if action == "BUY":
             try:
                 from position_sizer import get_position_sizer
+                bp = self.trader.get_buying_power()
+                live_positions = self.trader.get_positions()
+                total_equity = bp + sum(p.market_value for p in live_positions)
+                
                 # Get the live portfolio sizer with current total equity
                 sizer = get_position_sizer(portfolio=total_equity)
                 # Calculate optimal sizing using dynamic Kelly, Volatility Parity, and Regime Scaler
@@ -1090,40 +1094,43 @@ class BotOrchestrator:
                     self._exec_tracker.record(symbol, price, getattr(order, 'avg_fill_price', price),
                                              getattr(order.order_type, 'value', "LIMIT"))
                 
-                if action == "BUY":
-                    atr = self.strategy.get_current_atr(symbol)
-                    self.strategy.add_position(symbol, price, qty, atr)
-                    self.db.record_entry(symbol, qty, price, self.state.current_regime)
-                else:
-                    # Get actual entry price before removing position to calculate PNL correctly
-                    entry_price = price  # fallback
-                    if symbol in self.strategy._positions:
-                        pos = self.strategy._positions[symbol]
-                        entry_price = pos.entry_price
+                if order.status == OrderStatus.FILLED:
+                    if action == "BUY":
+                        atr = self.strategy.get_current_atr(symbol)
+                        self.strategy.add_position(symbol, price, qty, atr)
+                        self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                    else:
+                        # Get actual entry price before removing position to calculate PNL correctly
+                        entry_price = price  # fallback
+                        if symbol in self.strategy._positions:
+                            pos = self.strategy._positions[symbol]
+                            entry_price = pos.entry_price
+                            
+                            # Handle partial sells properly without losing entry tracking
+                            if qty < pos.quantity:
+                                pos.quantity -= qty
+                                logger.info("Partial sell: {} remaining {} -> {}", symbol, pos.quantity + qty, pos.quantity)
+                            else:
+                                self.strategy.remove_position(symbol)
                         
-                        # Handle partial sells properly without losing entry tracking
-                        if qty < pos.quantity:
-                            pos.quantity -= qty
-                            logger.info("Partial sell: {} remaining {} -> {}", symbol, pos.quantity + qty, pos.quantity)
-                        else:
-                            self.strategy.remove_position(symbol)
-                    
-                    self.db.record_exit(symbol, qty, price, entry_price, reason)
-                    
-                    # ============================================================
-                    #      strategy._consecutive_losses_today 
-                    # ============================================================
-                    try:
-                        _realized_pnl = (price - entry_price) * qty
-                        if _realized_pnl < 0:
-                            _cur = getattr(self.strategy, '_consecutive_losses_today', 0)
-                            self.strategy._consecutive_losses_today = _cur + 1
-                            logger.info(" : {} ( : ${:.2f})",
-                                        self.strategy._consecutive_losses_today, _realized_pnl)
-                        else:
-                            self.strategy._consecutive_losses_today = 0  #   
-                    except Exception:
-                        pass
+                        self.db.record_exit(symbol, qty, price, entry_price, reason)
+                        
+                        # ============================================================
+                        #      strategy._consecutive_losses_today 
+                        # ============================================================
+                        try:
+                            _realized_pnl = (price - entry_price) * qty
+                            if _realized_pnl < 0:
+                                _cur = getattr(self.strategy, '_consecutive_losses_today', 0)
+                                self.strategy._consecutive_losses_today = _cur + 1
+                                logger.warning("Loss recorded! Consecutive losses today: {}", 
+                                               self.strategy._consecutive_losses_today)
+                            else:
+                                self.strategy._consecutive_losses_today = 0  # Reset
+                        except Exception as pnl_err:
+                            logger.debug("Failed to update consecutive losses: {}", pnl_err)
+                else:
+                    logger.warning("⚠️ Trade status for {} is {} (not FILLED). Skipping local database & portfolio updates.", symbol, order.status.value)
                     
                     # Add to same-day cooldown blacklist
                     if not hasattr(self, '_sold_today'):

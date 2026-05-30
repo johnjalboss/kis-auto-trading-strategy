@@ -1,5 +1,5 @@
 {
-  "version": "1.1.8",
+  "version": "1.1.9",
   "files": [
     "accumulation.py",
     "adaptive_strategy.py",
@@ -54,6 +54,7 @@
     "high_performance.py",
     "indicators.py",
     "insider_tracker.py",
+    "integration_test.py",
     "intermarket.py",
     "kelly_criterion.py",
     "kis_client.py",
@@ -111,6 +112,7 @@
     "technical_analyzer.py",
     "telegram_commander.py",
     "trade_journal.py",
+    "trader.py",
     "trailing_stop.py",
     "universe.py",
     "updater.py",
