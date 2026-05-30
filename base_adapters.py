@@ -57,10 +57,12 @@ BLACKLIST_PATTERNS = [
     'intraday_momentum', 'premarket_gap',
     # Utilities with potential global import side-effects
     'clean', 'get_logs', 'run_remote', 'sell', 'analyze_', 'backfill_', 'reset_', 'try_',
-    'simple_audit', 'deep_audit', 'clean_stale',
+    'simple_audit', 'deep_audit', 'clean_stale', 'detail_check', 'full_audit', 'full_system_check', 'schema_check', 'apply_patch',
     # Macro/Regime engines - run by orchestrator, not individual stock signal adapters
     'correlation_regime', 'hidden_markov_regime', 'global_macro', 'geopolitical',
-    'fed_watch', 'vix_structure', 'economic_calendar', 'intermarket', 'sector_rotator', 'sector_rotation'
+    'fed_watch', 'vix_structure', 'economic_calendar', 'intermarket', 'sector_rotator', 'sector_rotation',
+    # Portfolio level risk/exposure/scanners - run by orchestrator or sizer, not stock-level adapters
+    'correlation_matrix', 'gap_scanner', 'premarket', 'seasonality'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 import pandas as pd
 import numpy as np
+import data_proxy
 import yfinance as yf
 from loguru import logger
 

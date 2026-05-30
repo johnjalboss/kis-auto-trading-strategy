@@ -60,6 +60,7 @@ class EarningsSignal:
     earnings_score: int  # -100 to +100
     signal: str
     details: List[str]
+    days_since_earnings: int = 999  # Added for PEAD tracking
 
 
 class EarningsAnalyzer:
@@ -85,10 +86,12 @@ class EarningsAnalyzer:
     """
     
     def __init__(self):
-        self._cache: Dict[str, dict] = {}
+        self._cache: Dict[str, EarningsSignal] = {}
     
     def analyze(self, symbol: str) -> EarningsSignal:
-        """Analyze earnings for a symbol"""
+        """Analyze earnings for a symbol with cache protection"""
+        if symbol in self._cache:
+            return self._cache[symbol]
         details = []
         score = 0
         
@@ -180,6 +183,11 @@ class EarningsAnalyzer:
         if days_to is not None and days_to <= 5:
             details.append(f"⚠️ EARNINGS_IN_{days_to}_DAYS")
         
+        # Calculate days since last earnings report
+        days_since = 999
+        if earnings_data and len(earnings_data) > 0 and earnings_data[0].report_date:
+            days_since = (datetime.now() - earnings_data[0].report_date).days
+            
         # Signal
         if score >= 40:
             signal = "STRONG_FUNDAMENTALS"
@@ -192,7 +200,7 @@ class EarningsAnalyzer:
         else:
             signal = "NEUTRAL"
         
-        return EarningsSignal(
+        result = EarningsSignal(
             symbol=symbol,
             last_eps_surprise=last_eps_surprise,
             last_revenue_surprise=last_rev_surprise,
@@ -205,8 +213,11 @@ class EarningsAnalyzer:
             days_to_earnings=days_to or 999,
             earnings_score=max(-100, min(100, score)),
             signal=signal,
-            details=details
+            details=details,
+            days_since_earnings=days_since
         )
+        self._cache[symbol] = result
+        return result
     
     def _fetch_info(self, symbol: str) -> dict:
         """Fetch stock info via KIS API (proxy for yf.Ticker.info)"""
@@ -235,10 +246,57 @@ class EarningsAnalyzer:
     
     def _fetch_earnings(self, symbol: str) -> List[EarningsData]:
         """Fetch earnings history — KIS API doesn't provide earnings data.
-        Returns empty list; earnings scoring is handled by price-based proxies in _fetch_info.
+        Falls back to original unshimmed yfinance ticker for real fundamental data.
         """
-        # KIS API does not support earnings history.
-        # The composite signal gets fundamental scoring from price momentum instead.
+        try:
+            import yfinance as yf
+            ticker_class = getattr(yf, '_original_yf_Ticker', yf.Ticker)
+            ticker = ticker_class(symbol)
+            
+            if hasattr(ticker, 'earnings_history'):
+                hist = ticker.earnings_history
+                if hist is not None and not hist.empty:
+                    results = []
+                    for idx, row in hist.iterrows():
+                        eps_act = row.get('epsActual', 0.0)
+                        eps_est = row.get('epsEstimate', 0.0)
+                        eps_surp = row.get('surprisePercent', 0.0)
+                        
+                        eps_act = float(eps_act) if eps_act is not None else 0.0
+                        eps_est = float(eps_est) if eps_est is not None else 0.0
+                        eps_surp = float(eps_surp) if eps_surp is not None else 0.0
+                        
+                        if eps_surp == 0.0 and eps_est != 0.0:
+                            eps_surp = ((eps_act - eps_est) / abs(eps_est)) * 100
+                            
+                        rev_act = row.get('revenueActual', 0.0)
+                        rev_est = row.get('revenueEstimate', 0.0)
+                        rev_surp = row.get('revenueSurprisePercent', 0.0)
+                        
+                        rev_act = float(rev_act) if rev_act is not None else 0.0
+                        rev_est = float(rev_est) if rev_est is not None else 0.0
+                        rev_surp = float(rev_surp) if rev_surp is not None else 0.0
+                        
+                        rep_date = row.get('reportDate', None)
+                        if isinstance(rep_date, str):
+                            try:
+                                rep_date = datetime.strptime(rep_date[:10], "%Y-%m-%d")
+                            except:
+                                rep_date = None
+                        
+                        results.append(EarningsData(
+                            eps_actual=eps_act,
+                            eps_estimate=eps_est,
+                            eps_surprise_pct=eps_surp,
+                            revenue_actual=rev_act,
+                            revenue_estimate=rev_est,
+                            revenue_surprise_pct=rev_surp,
+                            quarter=str(row.get('period', '')),
+                            report_date=rep_date
+                        ))
+                    return results
+        except Exception as e:
+            logger.debug(f"Earnings history fetch failed for {symbol}: {e}")
         return []
     
     def _estimate_revision_trend(self, info: dict) -> float:

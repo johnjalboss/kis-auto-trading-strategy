@@ -300,6 +300,71 @@ class DynamicScreener:
 
         return result
 
+    def _gather_multi_source_candidates(self) -> List[str]:
+        """5개 KIS API 멀티소스 후보 수집 + 멀티소스 카운트"""
+        self._multi_source_hits = {}
+        
+        def _add_from_source(items: List[Dict], source_name: str):
+            for item in items:
+                sym = item.get("symbol", "")
+                if sym:
+                    if sym not in self._multi_source_hits:
+                        self._multi_source_hits[sym] = set()
+                    self._multi_source_hits[sym].add(source_name)
+        
+        # Source 1: 거래량순위
+        try:
+            vol_rank = kis_data.get_volume_rank("NAS", min_price=5.0, top_n=50) # increased
+            _add_from_source(vol_rank, "volume_rank")
+            for ex in ["NYS", "AMS"]:
+                extra = kis_data.get_volume_rank(ex, min_price=5.0, top_n=20) # increased
+                _add_from_source(extra, "volume_rank")
+        except Exception as e:
+            logger.debug("Volume rank API error: {}", e)
+        
+        # Source 2: 가격급등
+        try:
+            surge = kis_data.get_price_surge("NAS", sort="1", top_n=30) # increased
+            _add_from_source(surge, "price_surge")
+        except Exception as e:
+            logger.debug("Price surge API error: {}", e)
+        
+        # Source 3: 거래량급증
+        try:
+            vol_surge = kis_data.get_volume_surge("NAS", top_n=30) # increased
+            _add_from_source(vol_surge, "volume_surge")
+        except Exception as e:
+            logger.debug("Volume surge API error: {}", e)
+        
+        # Source 4: 체결강도
+        try:
+            buy_str = kis_data.get_buy_strength_rank("NAS", top_n=30) # increased
+            _add_from_source(buy_str, "buy_strength")
+        except Exception as e:
+            logger.debug("Buy strength API error: {}", e)
+        
+        # Source 5: 신고가
+        try:
+            new_highs = kis_data.get_new_highs_lows("NAS", sort="1", top_n=30) # increased
+            _add_from_source(new_highs, "new_high")
+        except Exception as e:
+            logger.debug("New highs API error: {}", e)
+        
+        # 멀티소스 히트 카운팅 정렬 (많이 겹칠수록 높은 우선순위)
+        ranked = sorted(
+            self._multi_source_hits.items(),
+            key=lambda x: len(x[1]),
+            reverse=True
+        )
+        
+        result = [sym for sym, sources in ranked]
+        
+        multi_hit = [(sym, len(src)) for sym, src in ranked if len(src) >= 2]
+        if multi_hit:
+            logger.info("Multi-source hits: {}", multi_hit[:10])
+        
+        return result
+
 
     def _screen_volume_surge(self) -> List[str]:
         """거래량 급증 종목 스크리닝 (5개 KIS API 멀티소스)"""
@@ -589,16 +654,23 @@ class DynamicScreener:
                 multi_bonus = 0
             
             # ============================================================
-            # 📰 NEWS SENTIMENT BONUS/PENALTY (+/- 10)
+            # 📰 NEWS SENTIMENT BONUS/PENALTY (Dynamic Event-Driven Filter)
             # ============================================================
             news_bonus = 0
+            news_blacklist = False
             try:
                 from news_analyzer import get_news_analyzer
                 news_result = get_news_analyzer().analyze(symbol)
-                if news_result.sentiment_score > 50:
+                if news_result.sentiment_score > 80:
+                    news_bonus = 25  # Blockbuster news momentum (e.g. key contract or breakthrough)
+                    logger.info("🔥 [NEWS_MOMENTUM_BONUS] {} blockbuster news sentiment ({:.1f})! Applying +25 bonus.", 
+                                symbol, news_result.sentiment_score)
+                elif news_result.sentiment_score > 50:
                     news_bonus = 10
+                elif news_result.sentiment_score < -70:
+                    news_blacklist = True  # Catastrophic news shock (e.g. SEC probe, FDA fail, or fraud)
                 elif news_result.sentiment_score < -40:
-                    news_bonus = -10
+                    news_bonus = -15
             except Exception:
                 pass
             
@@ -635,23 +707,38 @@ class DynamicScreener:
                 pass
 
             # ============================================================
-            # 🚀 PEAD BONUS (+15) — 실적 서프라이즈 후 잔여 모멘텀
+            # 🚀 PEAD BONUS (+15) / PEAD PANIC PENALTY (-25) — 실적 서프라이즈 vs 미스
             # earnings_analyzer.analyze() 실제 API 사용
             # ============================================================
             pead_bonus = 0
+            pead_blacklist = False
             try:
                 from earnings_analyzer import get_earnings_analyzer
                 _ea2 = get_earnings_analyzer()
                 _er = _ea2.analyze(symbol)
-                if isinstance(_er, dict):
-                    _beat2 = (_er.get('beat_surprise', 0) or _er.get('eps_surprise_pct', 0) or
-                              _er.get('surprise_pct', 0))
-                    _days2 = _er.get('days_since_earnings', 99)
+                if _er is not None:
+                    if isinstance(_er, dict):
+                        _beat2 = (_er.get('beat_surprise', 0) or _er.get('eps_surprise_pct', 0) or
+                                  _er.get('surprise_pct', 0))
+                        _days2 = _er.get('days_since_earnings', 99)
+                    else:
+                        # It is an EarningsSignal dataclass object!
+                        _beat2 = getattr(_er, 'last_eps_surprise', 0.0)
+                        _days2 = getattr(_er, 'days_since_earnings', 99)
+                        
                     if _beat2 > 5 and _days2 <= 30:
                         pead_bonus = 15
                         logger.debug("PEAD_BONUS screener: {} EPS beat {:.0f}%", symbol, _beat2)
-            except Exception:
-                pass
+                    elif _beat2 < -15 and _days2 <= 30:
+                        pead_blacklist = True  # Severe PEAD earnings crash blacklist
+                        logger.warning("🚨 [PEAD_SHOCK_BLACKLIST] {} catastrophic recent earnings miss of {:.1f}%! Blacklisting stock.",
+                                       symbol, _beat2)
+                    elif _beat2 < -5 and _days2 <= 30:
+                        pead_bonus = -25  # Severe penalty for recent earnings misses
+                        logger.warning("🚨 [PEAD_PANIC_PENALTY] {} recent earnings miss of {:.1f}%! Applying -25 penalty.", 
+                                       symbol, _beat2)
+            except Exception as e:
+                logger.error("PEAD analyzer failed for {}: {}", symbol, e)
 
             # ============================================================
             # 🔄 섹터 로테이션 보너스/페널티 (실시간 동적 반영)
@@ -668,6 +755,8 @@ class DynamicScreener:
                     _rec = _rec_map.get(_sym_etf2, 'NEUTRAL')
                     if _rec == 'OVERWEIGHT':
                         sector_bonus = 15
+                    elif _rec == 'EARLY_ACCELERATION':
+                        sector_bonus = 15  # Early rotation capture bonus!
                     elif _rec == 'UNDERWEIGHT':
                         sector_bonus = -20
             except Exception:
@@ -677,6 +766,12 @@ class DynamicScreener:
             total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
                        tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
                        high52w_bonus + pead_bonus + sector_bonus))
+            
+            # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
+            if news_blacklist or pead_blacklist:
+                total = 0
+                logger.warning("🚨 [BLACKLIST_FILTER] {} completely blacklisted (news_blacklist: {}, pead_blacklist: {})!",
+                               symbol, news_blacklist, pead_blacklist)
             
             return StockScore(
                 symbol=symbol,
