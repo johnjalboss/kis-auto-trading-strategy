@@ -654,6 +654,14 @@ class BotOrchestrator:
                         logger.debug("DB Dedup check error: {}", e)
                         pass  # Fallback: trust in-memory check
                     
+                    # [v1.1.8] Double-check in-memory strategy positions too
+                    # This catches cases where DB sync is behind but strategy already has the position
+                    in_memory_positions = self.strategy.get_all_positions()
+                    if symbol in in_memory_positions:
+                        logger.debug("DEDUP (in-memory): {} already in strategy positions, skipping BUY", symbol)
+                        continue
+
+                    
                     # Check position count limit (Macro Shield: reduce max positions in bear/choppy regimes)
                     current_regime = getattr(self.strategy, '_last_regime', '')
                     dynamic_max_positions = config.MAX_POSITIONS
@@ -1038,13 +1046,20 @@ class BotOrchestrator:
                 logger.info("??Trade Executed: {} {} x {} via smart_order ({})", 
                            action, symbol, qty, order.order_type.value)
                 
-                # Send Trade Notification (Immediate for ADAPTIVE/MARKET, 
-                # Threaded orders like TWAP/ICEBERG handle their own notifications)
+                # Send Trade Notification
+                # [v1.1.8 BUG FIX] Only send alert if order confirmed FILLED (not just placed)
+                # KIS limit orders: rt_cd=0 means "accepted", not "filled"
+                # We wait briefly and check fill status to avoid phantom alerts
                 if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT]:
                     try:
                         from notification import get_notifier
                         notifier = get_notifier()
-                        notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
+                        # Check if order was confirmed filled (order.status == FILLED)
+                        if order.status == OrderStatus.FILLED:
+                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
+                        else:
+                            logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",
+                                       symbol, order.status.value)
                     except Exception as ne:
                         logger.debug("Trade notification failed: {}", ne)
 
