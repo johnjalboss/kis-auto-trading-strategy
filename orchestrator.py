@@ -1040,6 +1040,20 @@ class BotOrchestrator:
         try:
             from smart_order import get_smart_executor, OrderStatus
             executor = get_smart_executor(self.trader)
+            
+            # [v1.1.8] Refresh price right before execution
+            # Scan→analyze→execute can take minutes, stale price = missed fill
+            if action == "BUY":
+                try:
+                    fresh_price = self.trader.get_price(symbol)
+                    if fresh_price and fresh_price > 0:
+                        if abs(fresh_price - price) / price > 0.005:  # >0.5% drift
+                            logger.info("Price refresh for {}: ${:.2f} -> ${:.2f} ({:+.2%})",
+                                       symbol, price, fresh_price, (fresh_price-price)/price)
+                        price = fresh_price
+                except Exception:
+                    pass  # Use original price if refresh fails
+            
             order = executor.execute(symbol, action, qty, price)
             
             if order.status != OrderStatus.REJECTED:
