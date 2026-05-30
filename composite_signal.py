@@ -415,13 +415,14 @@ class CompositeSignalEngine:
         
         # Overextension Penalty
         # Stocks >15% above SMA20 have a higher reversal risk
-        dist_from_sma20 = (current - float(sma20)) / float(sma20)
-        if dist_from_sma20 > 0.15:
-            score -= 30
-            signals.append(f"OVEREXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
-        elif dist_from_sma20 > 0.10:
-            score -= 15
-            signals.append(f"EXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
+        if float(sma20) > 0:
+            dist_from_sma20 = (current - float(sma20)) / float(sma20)
+            if dist_from_sma20 > 0.15:
+                score -= 30
+                signals.append(f"OVEREXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
+            elif dist_from_sma20 > 0.10:
+                score -= 15
+                signals.append(f"EXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
 
         return CategoryScore("TECHNICAL", max(-100, min(100, score)),
                             self.WEIGHTS['technical'], signals)
@@ -436,7 +437,8 @@ class CompositeSignalEngine:
         signals.extend(async_signals)
         
         # Use price momentum as a proxy for earnings momentum
-        ret_20d = (df['Close'].iloc[-1] / df['Close'].iloc[-20] - 1) * 100
+        close_20 = df['Close'].iloc[-20]
+        ret_20d = (df['Close'].iloc[-1] / close_20 - 1) * 100 if close_20 > 0 else 0
         
         if ret_20d > 5:
             score += 20
@@ -447,7 +449,8 @@ class CompositeSignalEngine:
         
         # Short-term Surge Penalty
         # Fade parabolic moves, but allow strong momentum
-        ret_5d = (df['Close'].iloc[-1] / df['Close'].iloc[-5] - 1) * 100 if len(df) >= 5 else 0
+        close_5 = df['Close'].iloc[-5]
+        ret_5d = (df['Close'].iloc[-1] / close_5 - 1) * 100 if (len(df) >= 5 and close_5 > 0) else 0
         if ret_5d > 20:
             score -= 25
             signals.append(f"PARABOLIC_5D:{ret_5d:.1f}%")
@@ -474,7 +477,8 @@ class CompositeSignalEngine:
         
         avg_vol = volume.tail(20).mean()
         recent_vol = volume.tail(5).mean()
-        price_change = close.iloc[-1] / close.iloc[-5] - 1
+        close_5 = close.iloc[-5]
+        price_change = close.iloc[-1] / close_5 - 1 if close_5 > 0 else 0
         
         # Volume + price direction
         if recent_vol > avg_vol * 1.5 and price_change > 0:
