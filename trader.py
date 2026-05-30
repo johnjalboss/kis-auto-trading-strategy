@@ -64,6 +64,8 @@ def add_to_blacklist(symbol: str, reason: str = ""):
 
 _load_blacklist()
 
+_price_query_lock = threading.Lock()
+
 
 # ==============================================
 # Data Classes
@@ -492,25 +494,25 @@ class Trader:
         for excd in exchanges_to_try:
             params = {"AUTH": "", "EXCD": excd, "SYMB": symbol}
             
-            # Rate limit protection (Max 20 RPS)
-            time.sleep(0.1)
-            
-            try:
-                resp = requests.get(url, headers=self._get_headers(tr_id),
-                                  params=params, timeout=10)
-                data = resp.json()
-                
-                if data.get("rt_cd") == "0":
-                    raw_price = data.get("output", {}).get("last", "")
-                    if raw_price is not None and str(raw_price).strip():
-                        # Cache the successful exchange if it was probed
-                        if exchange is None and symbol.upper() not in self._exchange_mapper.SYMBOL_EXCHANGE:
-                            order_excd = "NYSE" if excd == "NYS" else ("AMEX" if excd == "AMS" else "NASD")
-                            self._exchange_mapper.SYMBOL_EXCHANGE[symbol.upper()] = order_excd
-                            logger.info("Dynamically resolved exchange for {} to {}", symbol, order_excd)
-                        return float(raw_price)
-            except Exception as e:
-                logger.error("Price query failed for {} on {}: {}", symbol, excd, e)
+            # Rate limit protection (Max 20 RPS - Thread-Safe Serialization)
+            with _price_query_lock:
+                time.sleep(0.1)
+                try:
+                    resp = requests.get(url, headers=self._get_headers(tr_id),
+                                      params=params, timeout=10)
+                    data = resp.json()
+                    
+                    if data.get("rt_cd") == "0":
+                        raw_price = data.get("output", {}).get("last", "")
+                        if raw_price is not None and str(raw_price).strip():
+                            # Cache the successful exchange if it was probed
+                            if exchange is None and symbol.upper() not in self._exchange_mapper.SYMBOL_EXCHANGE:
+                                order_excd = "NYSE" if excd == "NYS" else ("AMEX" if excd == "AMS" else "NASD")
+                                self._exchange_mapper.SYMBOL_EXCHANGE[symbol.upper()] = order_excd
+                                logger.info("Dynamically resolved exchange for {} to {}", symbol, order_excd)
+                            return float(raw_price)
+                except Exception as e:
+                    logger.error("Price query failed for {} on {}: {}", symbol, excd, e)
                 
         return 0.0
 

@@ -16,6 +16,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
 from datetime import datetime, timedelta
+import sys
 import config
 
 # Import Core Systems

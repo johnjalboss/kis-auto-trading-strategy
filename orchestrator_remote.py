@@ -15,6 +15,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
 from datetime import datetime, timedelta
+import sys
 import config
 
 # Import Core Systems
@@ -250,7 +251,8 @@ class BotOrchestrator:
             from correlation_regime import get_correlation_regime
             corr = get_correlation_regime()
             result = corr.analyze()
-            logger.info("  -> correlation_regime.py: regime={}", result.get('regime', 'N/A'))
+            regime_name = getattr(result, 'regime', None) or (result.get('regime') if isinstance(result, dict) else 'N/A')
+            logger.info("  -> correlation_regime.py: regime={}", regime_name)
         self._safe_import("correlation_regime", _corr)
         
         # 7. Sector Rotation
@@ -940,7 +942,29 @@ class BotOrchestrator:
         
         try:
             while True:
+                # ✦ DYNAMIC PARAMETER RELOAD
+                try:
+                    from dotenv import load_dotenv
+                    import importlib
+                    load_dotenv(override=True)
+                    if 'config' in sys.modules:
+                        importlib.reload(sys.modules['config'])
+                except Exception as e:
+                    pass
+
                 now = datetime.now()
+                
+                # ✦ 24/7 무중단 자동 패치 체크 (4시간 주기 원격 전략 자동 업데이트 동기화 및 자체 재기동)
+                try:
+                    if not hasattr(self, '_last_update_check') or (now - self._last_update_check).total_seconds() > 14400:
+                        self._last_update_check = now
+                        import updater
+                        if updater.check_and_update():
+                            logger.warning("🔄 [24/7 무중단 패치] 최신 전략 패치가 완료되었습니다. 봇을 즉시 자체 재기동합니다!")
+                            import os
+                            os.execv(sys.executable, ['python', 'remote_main.py'] + sys.argv[1:])
+                except Exception as ue:
+                    logger.debug("24/7 무중단 업데이트 스킵: {}", ue)
                 is_open = scheduler.is_market_open()
                 
                 # Health Check for fatal data errors

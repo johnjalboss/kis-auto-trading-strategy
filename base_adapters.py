@@ -62,7 +62,11 @@ BLACKLIST_PATTERNS = [
     'correlation_regime', 'hidden_markov_regime', 'global_macro', 'geopolitical',
     'fed_watch', 'vix_structure', 'economic_calendar', 'intermarket', 'sector_rotator', 'sector_rotation',
     # Portfolio level risk/exposure/scanners - run by orchestrator or sizer, not stock-level adapters
-    'correlation_matrix', 'gap_scanner', 'premarket', 'seasonality'
+    'correlation_matrix', 'gap_scanner', 'premarket', 'seasonality',
+    # Sizing, risk, portfolio, and compound modules
+    'cost_model', 'dynamic_scaling', 'kelly_criterion', 'position_sizer',
+    'tax_optimizer', 'portfolio', 'drawdown_controller', 'exit_optimizer',
+    'auto_compound', 'fx_risk', 'hedge_manager'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters

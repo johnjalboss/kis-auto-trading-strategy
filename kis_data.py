@@ -12,6 +12,7 @@ yfinance를 완전 대체하여 모든 시세/차트 데이터를 KIS API로 조
 """
 
 import time
+import threading
 import requests
 import pandas as pd
 import numpy as np
@@ -52,16 +53,18 @@ _KIS_UNSUPPORTED: set = set()
 # Rate limiter — KIS API는 초당 ~2건
 _last_call_time = 0.0
 _MIN_INTERVAL = 0.55  # seconds between calls
+_rate_limit_lock = threading.Lock()
 
 
 def _rate_limit():
-    """KIS API 초당 호출 제한 준수"""
+    """KIS API 초당 호출 제한 준수 (Thread-Safe)"""
     global _last_call_time
-    now = time.time()
-    elapsed = now - _last_call_time
-    if elapsed < _MIN_INTERVAL:
-        time.sleep(_MIN_INTERVAL - elapsed)
-    _last_call_time = time.time()
+    with _rate_limit_lock:
+        now = time.time()
+        elapsed = now - _last_call_time
+        if elapsed < _MIN_INTERVAL:
+            time.sleep(_MIN_INTERVAL - elapsed)
+        _last_call_time = time.time()
 
 
 def _detect_exchange(symbol: str) -> str:
