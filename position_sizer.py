@@ -246,6 +246,42 @@ class PositionSizer:
         except Exception as e:
             logger.debug("[SIZER] Liquidity spread scaling bypassed: {}", e)
 
+        # 6.9 Apply Correlation-Constraint Portfolio Construction (Option 4 - World-Class Diversification)
+        try:
+            from trader import get_trader
+            tr = get_trader()
+            active_pos = tr.get_positions()
+            # Collect symbols of currently active positions (exclude our target symbol itself)
+            active_symbols = [p.symbol for p in active_pos if hasattr(p, 'symbol') and p.symbol != symbol]
+            
+            if active_symbols:
+                from correlation_matrix import get_correlation_monitor
+                cm = get_correlation_monitor()
+                # Run correlation check of symbol against existing portfolio holdings
+                test_symbols = [symbol] + active_symbols
+                corr_res = cm.analyze(test_symbols)
+                
+                max_c = 0.0
+                high_corr_symbol = ""
+                # Find maximum correlation of our target symbol with existing active symbols
+                for pair in corr_res.high_corr_pairs:
+                    if symbol in (pair[0], pair[1]):
+                        corr_val = pair[2]
+                        if corr_val > max_c:
+                            max_c = corr_val
+                            high_corr_symbol = pair[1] if pair[0] == symbol else pair[0]
+                
+                if max_c > 0.80:
+                    optimal *= 0.25  # Severe penalty for highly redundant assets
+                    details.append(f"HIGH_CORR_PENALTY (Max Corr: {max_c:.2f} with {high_corr_symbol} | Size scaled to 25%)")
+                elif max_c > 0.65:
+                    optimal *= 0.60  # Moderate penalty for correlated assets
+                    details.append(f"MODERATE_CORR_PENALTY (Max Corr: {max_c:.2f} with {high_corr_symbol} | Size scaled to 60%)")
+                else:
+                    details.append(f"PORTFOLIO_DIVERSIFIED (Max Corr: {max_c:.2f} with existing holdings)")
+        except Exception as e:
+            logger.debug("[SIZER] Portfolio correlation diversification scaling failed: {}", e)
+
         # Apply max single position limits
         max_pos = self.MAX_SINGLE_POSITION
         
