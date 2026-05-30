@@ -919,8 +919,22 @@ class StrategyEngine:
         """ATR-based stop loss with regime-aware hard fallback"""
         pnl_pct = (price - pos.entry_price) / pos.entry_price
         
-        # ATR-based stop
+        # Dynamic HMM Regime Scaling for ATR stop multiplier
+        current_regime = getattr(self, '_last_regime', '')
+        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
+        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
+        
         stop_mult = getattr(cfg, 'stop_loss_atr', 1.5)
+        
+        # Scale stop multiplier based on regime
+        if current_regime in bear_regimes:
+            stop_mult *= 0.90   # Tighter ATR stop in bear markets
+        elif current_regime in choppy_regimes:
+            stop_mult *= 1.25   # Wider ATR stop to absorb chop whipsaws
+        elif "BULL" in current_regime:
+            stop_mult *= 0.85   # Tighter ATR stop in clean bull trends
+            
+        # ATR-based stop
         if pos.atr_at_entry > 0:
             stop_price = pos.entry_price - (pos.atr_at_entry * stop_mult)
         else:
@@ -929,8 +943,6 @@ class StrategyEngine:
         # Regime-aware hard stop:
         # Bear market = tight 3% stop (was 5%  this was killing the R:R)
         # Bull/Neutral = 5% stop as before
-        current_regime = getattr(self, '_last_regime', '')
-        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
         if current_regime in bear_regimes:
             hard_stop_pct = getattr(config, 'BEAR_HARD_STOP_PCT', 0.03)  # 3%
         else:
@@ -984,22 +996,43 @@ class StrategyEngine:
     def _check_take_profit(self, pos: Position, price: float,
                           pnl_pct: float, cfg: PhaseConfig) -> Optional[ExitSignal]:
         """Take profit check with trailing profit lock"""
+        # Dynamic HMM Regime Scaling for Take Profit
+        current_regime = getattr(self, '_last_regime', '')
+        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
+        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
+        
+        tp_pct = cfg.take_profit_pct
+        if current_regime in bear_regimes:
+            tp_pct *= 0.65       # Fast cash-outs in bear markets
+        elif current_regime in choppy_regimes:
+            tp_pct *= 0.75       # Fast cash-outs in choppy ranges
+        elif "BULL" in current_regime:
+            tp_pct *= 1.40       # Let winners run in bull trends!
+            
         # Standard TP
-        if pnl_pct >= cfg.take_profit_pct and not pos.half_sold:
+        if pnl_pct >= tp_pct and not pos.half_sold:
             return ExitSignal("SELL_ALL",
-                            f"TP {pnl_pct:+.1%} >= {cfg.take_profit_pct:.0%}",
+                            f"DYNAMIC_TP {pnl_pct:+.1%} >= {tp_pct:.1%} (Regime: {current_regime or 'BULL'})",
                             price, pnl_pct)
         
-        # Trailing profit lock: Once up 3%, trail at -2.5% from peak (lock in gains)
-        # [v1.1.8] Loosened from -1.5% -> -2.5%: gives winners more room, improves R/R ratio
-        # This prevents +3% winners from turning into -5% losses while not cutting too early
+        # Dynamic Trailing profit lock: Once up, trail from peak (lock in gains)
+        trail_activate = 0.03
+        trail_dist = 0.025
+        
+        if "BULL" in current_regime:
+            trail_activate = 0.04   # Give more room before activating trail (+4%)
+            trail_dist = 0.035      # Looser trail for big winners
+        elif current_regime in bear_regimes or current_regime in choppy_regimes:
+            trail_activate = 0.02   # Activate trail faster (+2%) to lock in profits
+            trail_dist = 0.015      # Tight trail (-1.5%)
+            
         if pos.high_since_entry > 0:
             peak_pnl = (pos.high_since_entry - pos.entry_price) / pos.entry_price
-            if peak_pnl >= 0.03:
-                trailing_lock = pos.high_since_entry * 0.975  # trail -2.5% from peak
+            if peak_pnl >= trail_activate:
+                trailing_lock = pos.high_since_entry * (1 - trail_dist)
                 if price <= trailing_lock:
                     return ExitSignal("SELL_ALL",
-                                    f"TRAIL_LOCK: peak +{peak_pnl:.1%}, locked at ${trailing_lock:.2f} (P&L {pnl_pct:+.1%})",
+                                    f"DYNAMIC_TRAIL_LOCK: peak +{peak_pnl:.1%}, locked at ${trailing_lock:.2f} (P&L {pnl_pct:+.1%})",
                                     price, pnl_pct)
         
         return None
