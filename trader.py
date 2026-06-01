@@ -247,19 +247,44 @@ class TokenManager:
             time.sleep(self.REFRESH_HOURS * 3600)
     
     def get_token(self) -> str:
-        """Get valid access token (thread-safe)"""
+        """Get valid access token (thread-safe and process-safe)"""
         with self._lock:
-            # Check if current token is valid
+            # 1. Check if current in-memory token is valid
             if self._token and self._expires_at:
                 if datetime.now() + timedelta(hours=1) < self._expires_at:
                     return self._token
             
-            # Try loading from file
+            # 2. Try loading from file
             if self._load_from_file():
                 return self._token
             
-            # Request new token
-            self._request_new_token()
+            # 3. Inter-process lock to prevent concurrent API token requests
+            lock_dir = Path("token.lock")
+            acquired = False
+            for _ in range(15):  # Try for 15 seconds
+                try:
+                    lock_dir.mkdir(exist_ok=False)
+                    acquired = True
+                    break
+                except FileExistsError:
+                    # Lock is held by another process, wait and reload from file
+                    time.sleep(1.0)
+                    if self._load_from_file():
+                        return self._token
+            
+            try:
+                # Double-check file one last time after acquiring lock
+                if self._load_from_file():
+                    return self._token
+                # Request new token
+                self._request_new_token()
+            finally:
+                if acquired:
+                    try:
+                        lock_dir.rmdir()
+                    except Exception:
+                        pass
+            
             return self._token
     
     def _request_new_token(self):
