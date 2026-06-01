@@ -1364,9 +1364,9 @@ class BotOrchestrator:
                         self.state.max_exposure_pct = 1.0  # Reset before re-evaluation
                         self.phase_2_macro_evaluation()
                     
-                    # Refresh screener every 1.5 hours (90 minutes)
+                    # Refresh screener every 45 minutes (to double breakout discovery speed safely)
                     if (self.state.last_screen_refresh is None or 
-                        (now - self.state.last_screen_refresh) > timedelta(minutes=90)):
+                        (now - self.state.last_screen_refresh) > timedelta(minutes=45)):
                         self.phase_3_run_screener()
                     
                     # PHASE 4: Signal loop iteration

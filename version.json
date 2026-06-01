@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "files": [
     "accumulation.py",
     "adaptive_strategy.py",
@@ -23,6 +23,7 @@
     "data_proxy.py",
     "database.py",
     "deep_audit.py",
+    "deploy_targeted.py",
     "divergence.py",
     "drawdown_controller.py",
     "dynamic_scaling.py",
