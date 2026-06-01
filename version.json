@@ -1,5 +1,5 @@
 {
-  "version": "1.6.1",
+  "version": "1.6.2",
   "files": [
     "accumulation.py",
     "adaptive_strategy.py",
@@ -8,6 +8,7 @@
     "auth.py",
     "auto_compound.py",
     "auto_tuner.py",
+    "auto_tuner_new.py",
     "base_adapters.py",
     "base_analyzer.py",
     "candlestick.py",
@@ -88,6 +89,9 @@
     "position_sizer.py",
     "premarket.py",
     "regime_detector.py",
+    "remote_watchdog.py",
+    "reporter.py",
+    "reporter_remote.py",
     "requirements.txt",
     "risk_manager.py",
     "screener.py",
@@ -120,6 +124,7 @@
     "utils.py",
     "vix_structure.py",
     "volume_profile.py",
+    "watchdog.py",
     "winrate_optimizer.py",
     "yen_carry.py"
   ]

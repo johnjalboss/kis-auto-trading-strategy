@@ -962,7 +962,8 @@ class BotOrchestrator:
                         if updater.check_and_update():
                             logger.warning("🔄 [24/7 무중단 패치] 최신 전략 패치가 완료되었습니다. 봇을 즉시 자체 재기동합니다!")
                             import os
-                            os.execv(sys.executable, ['python', 'remote_main.py'] + sys.argv[1:])
+                            python_exe = sys.executable if sys.executable else "python3"
+                            os.execvp(python_exe, ['python', 'remote_main.py'] + sys.argv[1:])
                 except Exception as ue:
                     logger.debug("24/7 무중단 업데이트 스킵: {}", ue)
                 is_open = scheduler.is_market_open()
