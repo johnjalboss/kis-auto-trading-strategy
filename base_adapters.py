@@ -57,7 +57,8 @@ BLACKLIST_PATTERNS = [
     'intraday_momentum', 'premarket_gap',
     # Utilities with potential global import side-effects
     'clean', 'get_logs', 'run_remote', 'sell', 'analyze_', 'backfill_', 'reset_', 'try_',
-    'simple_audit', 'deep_audit', 'clean_stale', 'detail_check', 'full_audit', 'full_system_check', 'schema_check', 'apply_patch',
+    'simple_audit', 'deep_audit', 'clean_stale', 'detail_check', 'full_audit', 'full_system_check', 'schema_check', 'apply_patch', 'trace',
+    'manual_analyze', 'query_pltd', 'refresh_universe', 'find_nonstandard_params', 'get_sigs', 'parse_results', 'repair_imports', 'price_debug', 'parse_logs',
     # Macro/Regime engines - run by orchestrator, not individual stock signal adapters
     'correlation_regime', 'hidden_markov_regime', 'global_macro', 'geopolitical',
     'fed_watch', 'vix_structure', 'economic_calendar', 'intermarket', 'sector_rotator', 'sector_rotation',
