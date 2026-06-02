@@ -478,6 +478,7 @@ class StrategyEngine:
          30 .       .
         min_entry_score 60~65 , 4    .
         """
+        price = float(df['Close'].iloc[-1]) if df is not None and not df.empty else 0.0
         score = 30  # Base score ( 5030)
         
         # ================================
