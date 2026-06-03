@@ -300,7 +300,7 @@ class UniversalAdapter(BaseAnalyzer):
         
         # Object with attributes
         if hasattr(output, '__dict__') or hasattr(output, '__dataclass_fields__'):
-            for attr in ['score', 'bonus_score', 'risk_score', 'signal_score', 'overall_score', 'credit_score', 'vix_score']:
+            for attr in ['score', 'bonus_score', 'risk_score', 'signal_score', 'overall_score', 'credit_score', 'vix_score', 'sentiment_score', 'ownership_score', 'earnings_score']:
                 if hasattr(output, attr):
                     val = getattr(output, attr) 
                     # Fix DataFrame ambiguity for custom objects
