@@ -16,6 +16,7 @@
     "clean_files.py",
     "clean_files_v2.py",
     "composite_signal.py",
+    "config.py",
     "correlation_matrix.py",
     "correlation_regime.py",
     "cost_model.py",

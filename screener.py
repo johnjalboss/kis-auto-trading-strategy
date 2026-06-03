@@ -228,12 +228,12 @@ class DynamicScreener:
         except Exception:
             pass
 
-        # 후보 풀: BASE_UNIVERSE 전체 (최대 300개 — API 과부하 방지)
+        # 후보 풀: BASE_UNIVERSE 전체 (최대 SCREENER_MAX_CANDIDATES개 — API 과부하 방지)
         # ⚠️ 반드시 shuffle! 알파벳 정렬이면 항상 A~D만 스캔됨
         import random
         all_symbols = list(BASE_UNIVERSE)
         random.shuffle(all_symbols)
-        candidates = all_symbols[:300]
+        candidates = all_symbols[:config.SCREENER_MAX_CANDIDATES]
 
         def _scan_symbol(sym: str):
             """단일 종목 BB Squeeze 스캔 (스레드 워커)"""

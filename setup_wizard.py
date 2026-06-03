@@ -97,6 +97,7 @@ class SetupWizardApp:
         
         self.var_capital = tk.StringVar(value="1000") # 기본 $1,000 기준
         self.var_max_pos = tk.StringVar(value="5") # 기본 최대 5개 종목
+        self.var_screener_max_candidates = tk.StringVar(value="300") # 기본 300개 스캔
         
         # 설정 로드
         self.load_existing_config()
@@ -126,6 +127,7 @@ class SetupWizardApp:
                         elif k == "FINNHUB_API_KEY": self.var_finnhub_key.set(v)
                         elif k == "INITIAL_CAPITAL": self.var_capital.set(v)
                         elif k == "MAX_POSITIONS": self.var_max_pos.set(v)
+                        elif k == "SCREENER_MAX_CANDIDATES": self.var_screener_max_candidates.set(v)
                         elif k == "RUN_MODE": self.var_mode.set(v)
                         elif k == "REMOTE_HOST": self.var_server_host.set(v)
                         elif k == "REMOTE_USER": self.var_server_user.set(v)
@@ -363,6 +365,9 @@ class SetupWizardApp:
         # 최대 보유 종목 수
         self.create_input_row(container, "최대 보유 종목 수 (개)", self.var_max_pos, placeholder="안전 분산을 위해 3개 ~ 7개 추천")
         
+        # 최대 스크리닝 후보 수
+        self.create_input_row(container, "최대 스크리닝 후보 수 (개)", self.var_screener_max_candidates, placeholder="API 과부하 방지를 위해 300~500 추천, 전체 스캔 시 1000")
+        
         tip_frame = tk.Frame(container, bg=SURFACE_COLOR)
         tip_frame.pack(fill=tk.X, padx=20, pady=15)
         
@@ -510,6 +515,7 @@ TELEGRAM_CHAT_ID={self.var_tg_chat_id.get().strip()}
 # ⚙️ 리스크 및 매매 조건
 INITIAL_CAPITAL={self.var_capital.get().strip()}
 MAX_POSITIONS={self.var_max_pos.get().strip()}
+SCREENER_MAX_CANDIDATES={self.var_screener_max_candidates.get().strip()}
 
 # ☁️ 구동 및 배포 설정
 RUN_MODE={self.var_mode.get()}
