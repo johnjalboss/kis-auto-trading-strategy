@@ -21,6 +21,7 @@
     "cost_model.py",
     "credit_spreads.py",
     "crypto_sentiment.py",
+    "dashboard_app.py",
     "data_proxy.py",
     "database.py",
     "deep_audit.py",

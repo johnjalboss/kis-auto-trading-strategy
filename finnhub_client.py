@@ -60,7 +60,7 @@ class FinnhubClient:
     def get_insider_transactions(self, symbol: str) -> list:
         """Fetch insider transactions"""
         params = {"symbol": symbol.upper()}
-        res = self._request("stock/insider-transaction", params)
+        res = self._request("stock/insider-transactions", params)
         if res and isinstance(res, dict):
             return res.get("data", [])
         return []
