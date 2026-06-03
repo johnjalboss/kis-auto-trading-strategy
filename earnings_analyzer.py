@@ -245,9 +245,43 @@ class EarningsAnalyzer:
             return {}
     
     def _fetch_earnings(self, symbol: str) -> List[EarningsData]:
-        """Fetch earnings history — KIS API doesn't provide earnings data.
-        Falls back to original unshimmed yfinance ticker for real fundamental data.
-        """
+        """Fetch earnings history from Finnhub or yfinance"""
+        # 1. Finnhub Fallback (Preempts yfinance)
+        try:
+            from finnhub_client import get_finnhub_client
+            fh = get_finnhub_client()
+            if fh.is_enabled():
+                raw_earnings = fh.get_earnings_surprises(symbol)
+                results = []
+                for row in raw_earnings:
+                    eps_act = float(row.get('actual', 0.0) or 0.0)
+                    eps_est = float(row.get('estimate', 0.0) or 0.0)
+                    eps_surp = float(row.get('surprisePercent', 0.0) or 0.0)
+                    
+                    rep_date = row.get('period', None)
+                    if isinstance(rep_date, str):
+                        try:
+                            rep_date = datetime.strptime(rep_date, "%Y-%m-%d")
+                        except:
+                            rep_date = None
+                            
+                    results.append(EarningsData(
+                        eps_actual=eps_act,
+                        eps_estimate=eps_est,
+                        eps_surprise_pct=eps_surp,
+                        revenue_actual=0.0,
+                        revenue_estimate=0.0,
+                        revenue_surprise_pct=0.0,
+                        quarter=f"Q{row.get('quarter', 1)} {row.get('year', 2026)}",
+                        report_date=rep_date
+                    ))
+                if results:
+                    logger.debug("Successfully fetched {} earnings surprises from Finnhub for {}", len(results), symbol)
+                    return results
+        except Exception as e:
+            logger.error("Finnhub earnings surprises fetch failed for {}: {}", symbol, e)
+
+        # 2. yfinance Fallback
         import os
         if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
             return []
