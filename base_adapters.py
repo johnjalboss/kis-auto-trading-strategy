@@ -300,18 +300,24 @@ class UniversalAdapter(BaseAnalyzer):
         
         # Object with attributes
         if hasattr(output, '__dict__') or hasattr(output, '__dataclass_fields__'):
-            for attr in ['score', 'bonus_score', 'risk_score', 'signal_score', 'overall_score', 'credit_score', 'vix_score', 'sentiment_score', 'ownership_score', 'earnings_score']:
-                if hasattr(output, attr):
-                    val = getattr(output, attr) 
-                    # Fix DataFrame ambiguity for custom objects
-                    if isinstance(val, (int, float, np.integer, np.floating)):
-                        result['score'] = int(val)
-                        break
+            attrs = list(output.__dict__.keys()) if hasattr(output, '__dict__') else list(output.__dataclass_fields__.keys())
+            
+            # Prioritize standard names
+            best_score_attr = None
+            for p in ['score', 'total_score', 'overall_score', 'signal_score', 'risk_score', 'sentiment_score', 'ownership_score', 'earnings_score']:
+                if p in attrs:
+                    best_score_attr = p
+                    break
+            
+            if not best_score_attr:
+                # Fallback to any attribute ending with 'score' or containing 'score'
+                best_score_attr = next((a for a in attrs if a.endswith('score') or 'score' in a.lower()), None)
+            
+            if best_score_attr:
+                val = getattr(output, best_score_attr)
+                if not isinstance(val, (pd.DataFrame, pd.Series, list, dict)):
                     try:
-                        # Handle potential numpy types or single-value objects
-                        if not isinstance(val, (pd.DataFrame, pd.Series, list, dict)):
-                            result['score'] = int(float(val))
-                            break
+                        result['score'] = int(float(val))
                     except: pass
             
             for attr in ['details', 'signals', 'description', 'summary', 'recommendation']:
