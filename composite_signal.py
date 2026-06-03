@@ -21,6 +21,7 @@ from enum import Enum
 import pandas as pd
 import numpy as np
 import concurrent.futures
+import threading
 
 import data_proxy
 from base_adapters import get_available_adapters
@@ -120,6 +121,7 @@ class CompositeSignalEngine:
     
     def __init__(self):
         self._cache = {}  # {(analyzer_name, symbol): (result, timestamp)}
+        self._cache_lock = threading.Lock()
         self._import_analyzers()
     
     def _import_analyzers(self):
@@ -176,13 +178,17 @@ class CompositeSignalEngine:
             
             cache_key = (ana_name, symbol if is_dep else 'GLOBAL')
             
-            if cache_key in self._cache:
-                cached_res, timestamp = self._cache[cache_key]
-                expiry = CACHE_SHORT if is_dep else CACHE_LONG
-                if now - timestamp < expiry:
-                    score += cached_res.get('score', 0)
-                    signals.extend(cached_res.get('signals', []))
-                    continue
+            has_cache = False
+            with self._cache_lock:
+                if cache_key in self._cache:
+                    cached_res, timestamp = self._cache[cache_key]
+                    expiry = CACHE_SHORT if is_dep else CACHE_LONG
+                    if now - timestamp < expiry:
+                        score += cached_res.get('score', 0)
+                        signals.extend(cached_res.get('signals', []))
+                        has_cache = True
+            if has_cache:
+                continue
             
             pending_analyzers.append(analyzer)
 
@@ -202,10 +208,11 @@ class CompositeSignalEngine:
                     try:
                         result = future.result()
                         
-                        # Update cache
+                        # Update cache with thread lock
                         is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
                         cache_key = (getattr(analyzer, 'name', analyzer.__class__.__name__), symbol if is_dep_inner else 'GLOBAL')
-                        self._cache[cache_key] = (result, now)
+                        with self._cache_lock:
+                            self._cache[cache_key] = (result, now)
                         
                         score += result.get('score', 0)
                         signals.extend(result.get('signals', []))
@@ -656,6 +663,7 @@ def get_composite_engine() -> CompositeSignalEngine:
 
 # Per-symbol result cache: {symbol: (CompositeSignal, timestamp)}
 _signal_result_cache: dict = {}
+_signal_cache_lock = threading.Lock()
 _SIGNAL_CACHE_TTL = 1800  # 30 minutes
 
 def get_signal(symbol: str) -> CompositeSignal:
@@ -665,16 +673,21 @@ def get_signal(symbol: str) -> CompositeSignal:
     strategy.check_entry() call during a screener loop.
     """
     import time
-    global _signal_result_cache
+    global _signal_result_cache, _signal_cache_lock
     now = time.time()
-    cached = _signal_result_cache.get(symbol)
-    if cached is not None:
-        result, ts = cached
-        if now - ts < _SIGNAL_CACHE_TTL:
-            return result
+    
+    with _signal_cache_lock:
+        cached = _signal_result_cache.get(symbol)
+        if cached is not None:
+            result, ts = cached
+            if now - ts < _SIGNAL_CACHE_TTL:
+                return result
+                
     engine = get_composite_engine()
     result = engine.analyze(symbol)
-    _signal_result_cache[symbol] = (result, now)
+    
+    with _signal_cache_lock:
+        _signal_result_cache[symbol] = (result, now)
     return result
 
 
