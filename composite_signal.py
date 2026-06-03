@@ -195,7 +195,9 @@ class CompositeSignalEngine:
                     executor.submit(analyzer.analyze, df, **kwargs): analyzer 
                     for analyzer in pending_analyzers
                 }
-                for future in concurrent.futures.as_completed(future_to_analyzer, timeout=12.0):
+                done, not_done = concurrent.futures.wait(future_to_analyzer.keys(), timeout=25.0)
+                
+                for future in done:
                     analyzer = future_to_analyzer[future]
                     try:
                         result = future.result()
@@ -209,8 +211,14 @@ class CompositeSignalEngine:
                         signals.extend(result.get('signals', []))
                     except Exception as e:
                         logger.error(f"Analyzer {analyzer.name} raised {e}")
-        except concurrent.futures.TimeoutError:
-            logger.warning(f"Category {category_key} analysis timed out (some analyzers exceeded 12.0s limit).")
+                        
+                if not_done:
+                    timed_out_names = [getattr(future_to_analyzer[f], 'name', future_to_analyzer[f].__class__.__name__) for f in not_done]
+                    logger.warning(f"Category {category_key} analysis timed out for analyzers (25.0s limit): {timed_out_names}")
+                    for f in not_done:
+                        f.cancel()
+        except Exception as e:
+            logger.error(f"Exception in Category {category_key} analysis: {e}")
             
         return score, signals
     

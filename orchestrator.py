@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional
 import time
 import threading
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, TimeoutError as FuturesTimeoutError
 from loguru import logger
 from datetime import datetime, timedelta
 import sys
@@ -512,12 +512,24 @@ class BotOrchestrator:
         try:
             with ThreadPoolExecutor(max_workers=10) as executor:
                 future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
-                for future in as_completed(future_to_symbol, timeout=90.0):
-                    symbol, signal = future.result()
-                    if signal:
-                        signals_to_process.append(signal)
-        except (TimeoutError, FuturesTimeoutError):
-            logger.warning("Phase 4 symbol check timed out (some symbols exceeded 90s limit).")
+                # Wait for all futures with a 180-second timeout
+                done, not_done = wait(future_to_symbol.keys(), timeout=180.0)
+                
+                for future in done:
+                    try:
+                        symbol, signal = future.result()
+                        if signal:
+                            signals_to_process.append(signal)
+                    except Exception as e:
+                        logger.error("Error getting signal result for symbol: {}", e)
+                        
+                if not_done:
+                    timed_out_symbols = [future_to_symbol[f] for f in not_done]
+                    logger.warning("Phase 4 symbol check timed out for symbols (180s limit): {}", timed_out_symbols)
+                    for f in not_done:
+                        f.cancel()
+        except Exception as e:
+            logger.error("Exception in Phase 4 symbol check thread pool: {}", e)
         
         # Sort by score to process best first
         signals_to_process.sort(key=lambda x: x.composite_score, reverse=True)
