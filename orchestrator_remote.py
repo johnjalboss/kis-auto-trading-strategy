@@ -456,12 +456,18 @@ class BotOrchestrator:
                 return symbol, None
 
         signals_to_process = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        executor = ThreadPoolExecutor(max_workers=10)
+        try:
             future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
             for future in as_completed(future_to_symbol):
                 symbol, signal = future.result()
                 if signal:
                     signals_to_process.append(signal)
+        finally:
+            if sys.version_info >= (3, 9):
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=False)
         
         # Sort by score to process best first
         signals_to_process.sort(key=lambda x: x.composite_score, reverse=True)

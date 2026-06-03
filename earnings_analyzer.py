@@ -248,6 +248,10 @@ class EarningsAnalyzer:
         """Fetch earnings history — KIS API doesn't provide earnings data.
         Falls back to original unshimmed yfinance ticker for real fundamental data.
         """
+        import os
+        if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+            return []
+            
         try:
             import yfinance as yf
             ticker_class = getattr(yf, '_original_yf_Ticker', yf.Ticker)

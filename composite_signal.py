@@ -189,28 +189,29 @@ class CompositeSignalEngine:
         if not pending_analyzers:
             return score, signals
             
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_analyzer = {
-                executor.submit(analyzer.analyze, df, **kwargs): analyzer 
-                for analyzer in pending_analyzers
-            }
-            for future in concurrent.futures.as_completed(future_to_analyzer):
-                analyzer = future_to_analyzer[future]
-                try:
-                    result = future.result(timeout=10.0) # Increased timeout for slow macro
-                    
-                    # Update cache
-                    is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
-                    cache_key = (getattr(analyzer, 'name', analyzer.__class__.__name__), symbol if is_dep_inner else 'GLOBAL')
-                    self._cache[cache_key] = (result, now)
-                    
-                    score += result.get('score', 0)
-                    signals.extend(result.get('signals', []))
-                except concurrent.futures.TimeoutError:
-                    logger.warning(f"Analyzer {analyzer.name} timed out.")
-                except Exception as e:
-                    logger.error(f"Analyzer {analyzer.name} raised {e}")
-                    
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_analyzer = {
+                    executor.submit(analyzer.analyze, df, **kwargs): analyzer 
+                    for analyzer in pending_analyzers
+                }
+                for future in concurrent.futures.as_completed(future_to_analyzer, timeout=12.0):
+                    analyzer = future_to_analyzer[future]
+                    try:
+                        result = future.result()
+                        
+                        # Update cache
+                        is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
+                        cache_key = (getattr(analyzer, 'name', analyzer.__class__.__name__), symbol if is_dep_inner else 'GLOBAL')
+                        self._cache[cache_key] = (result, now)
+                        
+                        score += result.get('score', 0)
+                        signals.extend(result.get('signals', []))
+                    except Exception as e:
+                        logger.error(f"Analyzer {analyzer.name} raised {e}")
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"Category {category_key} analysis timed out (some analyzers exceeded 12.0s limit).")
+            
         return score, signals
     
     def analyze(self, symbol: str, df: Optional[pd.DataFrame] = None, **kwargs) -> CompositeSignal:

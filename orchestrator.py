@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional
 import time
 import threading
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from loguru import logger
 from datetime import datetime, timedelta
 import sys
@@ -509,12 +509,15 @@ class BotOrchestrator:
                 return symbol, None
 
         signals_to_process = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
-            for future in as_completed(future_to_symbol):
-                symbol, signal = future.result()
-                if signal:
-                    signals_to_process.append(signal)
+        try:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
+                for future in as_completed(future_to_symbol, timeout=90.0):
+                    symbol, signal = future.result()
+                    if signal:
+                        signals_to_process.append(signal)
+        except (TimeoutError, FuturesTimeoutError):
+            logger.warning("Phase 4 symbol check timed out (some symbols exceeded 90s limit).")
         
         # Sort by score to process best first
         signals_to_process.sort(key=lambda x: x.composite_score, reverse=True)
@@ -969,6 +972,13 @@ class BotOrchestrator:
                 # Standardize quantity selection
                 old_qty = qty
                 qty = min(quant_target_qty, max_allowed_qty)
+                
+                # Small Account Floor Override: Ensure we don't round down to 0 if the original logic approved at least 1 share
+                if qty == 0 and old_qty >= 1 and price <= (bp * 0.98) and price <= (total_equity * 0.40):
+                    qty = 1
+                    logger.info("📐 Small Account Floor Override for {}: 1 share allowed (price: ${:.2f}, sizer target: ${:.2f})", 
+                                symbol, price, sizer_result.position_dollars)
+                
                 qty = max(0, qty)
                 
                 logger.info("📐 QUANT_SIZING_RESULT for {}: SizerPct={:.1%} | TargetQty={} (LegacyQty={}) | Score={} | Details={}", 

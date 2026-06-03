@@ -89,6 +89,7 @@ class DynamicScreener:
         self._cache = {}
         self._cache_time = None
         self._multi_source_hits = {}  # symbol -> set of source names
+        self._ohlcv_cache = {}        # symbol -> DataFrame (TTL from gather phase)
     
     def screen(self, regime: MarketRegime = MarketRegime.RISK_ON,
                use_short_squeeze: bool = True,
@@ -145,32 +146,44 @@ class DynamicScreener:
             logger.warning("No candidates found in initial screen")
             return ScreenResult([], [], mode, regime, datetime.now())
         
-        # Score each candidate
+        # Score each candidate — PARALLEL for speed (was sequential, ~6s/stock = 5+ min)
+        import concurrent.futures
         scored = []
-        for symbol in candidates[:100]:  # Limit to top 100 for detailed scoring (expanded)
+        def _safe_score(sym):
             try:
-                score = self._score_stock(symbol, mode)
-                if score and score.total_score >= self.MIN_SCORE:
-                    scored.append(score)
+                return self._score_stock(sym, mode)
             except Exception as e:
-                logger.debug("Scoring failed for {}: {}", symbol, e)
+                logger.debug("Scoring failed for {}: {}", sym, e)
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(_safe_score, sym): sym for sym in candidates[:100]}
+            for future in concurrent.futures.as_completed(futures, timeout=300):  # 120→300s
+                try:
+                    result = future.result()
+                    if result and result.total_score >= self.MIN_SCORE:
+                        scored.append(result)
+                except Exception as e:
+                    logger.debug("Scoring future failed: {}", e)
 
         # 페널티가 삭제되었으므로 원본 점수 기준으로 정렬
         scored.sort(key=lambda x: x.total_score, reverse=True)
 
         # Determine how many stocks to return
-        # If we couldn't find enough stocks above MIN_SCORE, 
+        # If we couldn't find enough stocks above MIN_SCORE,
         # just pick the absolute best ones regardless of score
         if len(scored) < self.MAX_RESULTS:
-            # Re-score and add top ones that didn't make MIN_SCORE
+            # Re-score top 50 in parallel — replaces 25-minute sequential bottleneck
             all_scored = []
-            for symbol in candidates:
-                try:
-                    score = self._score_stock(symbol, mode)
-                    if score:
-                        all_scored.append(score)
-                except Exception:
-                    pass
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                futures2 = {executor.submit(_safe_score, sym): sym for sym in candidates[:50]}
+                for future in concurrent.futures.as_completed(futures2, timeout=300):  # 120→300s
+                    try:
+                        result = future.result()
+                        if result:
+                            all_scored.append(result)
+                    except Exception:
+                        pass
             all_scored.sort(key=lambda x: x.total_score, reverse=True)
             top_picks = all_scored[:self.MAX_RESULTS]
         else:
@@ -216,14 +229,22 @@ class DynamicScreener:
             pass
 
         # 후보 풀: BASE_UNIVERSE 전체 (최대 300개 — API 과부하 방지)
-        candidates = list(BASE_UNIVERSE)[:300]
+        # ⚠️ 반드시 shuffle! 알파벳 정렬이면 항상 A~D만 스캔됨
+        import random
+        all_symbols = list(BASE_UNIVERSE)
+        random.shuffle(all_symbols)
+        candidates = all_symbols[:300]
 
         def _scan_symbol(sym: str):
             """단일 종목 BB Squeeze 스캔 (스레드 워커)"""
             try:
-                df = kis_data.get_daily_ohlcv(sym, days=60)
+                df = kis_data.get_daily_ohlcv(sym, days=120)  # 120d: squeeze + score 모두 활용
                 if df is None or len(df) < 25:
                     return
+
+                # 캐시에 저장 (scoring 단계에서 재사용 → 중복 API 호출 제거)
+                with _lock:
+                    self._ohlcv_cache[sym] = df
 
                 # BB Squeeze 계산
                 sq = calculate_bb_squeeze(
@@ -285,9 +306,16 @@ class DynamicScreener:
                 logger.debug("Squeeze scan failed for {}: {}", sym, e)
 
         # 병렬 실행 (16 workers — KIS API 동시성 한도 내)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        import sys
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+        try:
             futures = {executor.submit(_scan_symbol, sym): sym for sym in candidates}
             concurrent.futures.wait(futures, timeout=120)  # 최대 2분
+        finally:
+            if sys.version_info >= (3, 9):
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=False)
 
         # 점수 높은 순 정렬
         squeeze_scores.sort(key=lambda x: x[1], reverse=True)
@@ -446,9 +474,16 @@ class DynamicScreener:
                 except Exception:
                     pass
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            import sys
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+            try:
                 futures = {executor.submit(_check_breakout, sym): sym for sym in candidates}
                 concurrent.futures.wait(futures, timeout=90)
+            finally:
+                if sys.version_info >= (3, 9):
+                    executor.shutdown(wait=False, cancel_futures=True)
+                else:
+                    executor.shutdown(wait=False)
 
             breakout_stocks.sort(key=lambda x: x[1], reverse=True)
             return [s[0] for s in breakout_stocks[:30]]
@@ -544,9 +579,16 @@ class DynamicScreener:
                 except Exception:
                     pass
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            import sys
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+            try:
                 futures = {executor.submit(_check_oversold, sym): sym for sym in candidates[:100]}
                 concurrent.futures.wait(futures, timeout=90)
+            finally:
+                if sys.version_info >= (3, 9):
+                    executor.shutdown(wait=False, cancel_futures=True)
+                else:
+                    executor.shutdown(wait=False)
             
             # 점수가 낮은 순(더 과매도된 순)으로 정렬
             oversold_stocks.sort(key=lambda x: x[1])
@@ -563,9 +605,12 @@ class DynamicScreener:
     def _score_stock(self, symbol: str, mode: ScreenMode) -> Optional[StockScore]:
         """Calculate comprehensive score for a stock using KIS API data"""
         try:
-            # Get data from KIS API
+            # ✅ 캐시 우선 사용 — gather 단계에서 이미 다운로드한 데이터 재활용
             import kis_data
-            hist = kis_data.download(symbol, period="90d", progress=False)
+            if symbol in self._ohlcv_cache:
+                hist = self._ohlcv_cache[symbol]
+            else:
+                hist = kis_data.download(symbol, period="1y", progress=False)
             
             if hist is None or hist.empty or len(hist) < 20:
                 return None

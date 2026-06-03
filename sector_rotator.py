@@ -197,6 +197,10 @@ class SectorRotator:
         if symbol in SYMBOL_SECTOR_MAP:
             return SYMBOL_SECTOR_MAP[symbol]
         
+        import os
+        if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+            return None
+
         # 2차: yfinance fallback (data_proxy에 의해 프록시되지 않은 오리지널 Ticker를 호출하여 섹터 메타데이터 로드)
         try:
             import yfinance as yf

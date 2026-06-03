@@ -275,6 +275,11 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
         _KIS_UNSUPPORTED.add(symbol.upper())
     
     logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
+    import os
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        logger.warning("yfinance daily OHLCV fallback bypassed because DISABLE_OPTIONS_FLOW=true")
+        return None
+        
     try:
         import yfinance as yf
         # 방어벽: data_proxy에 의해 yf.Ticker가 KISTickerProxy로 패치된 경우 원본 사용
@@ -392,6 +397,10 @@ def get_intraday_ohlcv(symbol: str, exchange: str = None,
             continue
             
     logger.warning("Could not fetch intraday OHLCV for {} via KIS API, falling back to yfinance", symbol)
+    import os
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        return None
+        
     try:
         import yfinance as yf
         if hasattr(yf, "_original_yf_Ticker"):
