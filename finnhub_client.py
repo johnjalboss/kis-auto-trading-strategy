@@ -17,9 +17,14 @@ class FinnhubClient:
         self._cache_lock = threading.Lock()
         self.cache_file = "finnhub_cache.json"
         self.cache = self._load_cache()
+        self._disabled_until = 0.0
 
     def is_enabled(self) -> bool:
-        return bool(self.api_key)
+        if not self.api_key:
+            return False
+        if time.time() < self._disabled_until:
+            return False
+        return True
 
     def _load_cache(self) -> dict:
         try:
@@ -30,8 +35,26 @@ class FinnhubClient:
             logger.error(f"Failed to load Finnhub cache: {e}")
         return {"company-news": {}, "insider-transactions": {}, "earnings-surprises": {}}
 
+    def _prune_expired_entries(self):
+        # Category TTLs
+        ttls = {
+            "company-news": 7200,
+            "insider-transactions": 43200,
+            "earnings-surprises": 86400
+        }
+        now = time.time()
+        for category, symbols in list(self.cache.items()):
+            if not isinstance(symbols, dict):
+                continue
+            ttl = ttls.get(category, 86400)
+            for symbol, entry in list(symbols.items()):
+                # Keep expired entries up to 2x TTL to allow smooth restarts, prune everything older
+                if now - entry.get("timestamp", 0.0) > ttl * 2:
+                    del self.cache[category][symbol]
+
     def _save_cache(self):
         try:
+            self._prune_expired_entries()
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -101,6 +124,12 @@ class FinnhubClient:
             try:
                 response = requests.get(url, params=params, timeout=10)
                 
+                # Trip circuit breaker on Authentication failures (e.g. invalid key)
+                if response.status_code in [401, 403]:
+                    logger.error(f"Finnhub API Authentication Failed (HTTP {response.status_code}). Disabling Finnhub for 1 hour to protect latency.")
+                    self._disabled_until = time.time() + 3600
+                    return None
+
                 if response.status_code == 429:
                     logger.warning("Finnhub API Rate Limited (429). Retrying in 2s...")
                     time.sleep(2)

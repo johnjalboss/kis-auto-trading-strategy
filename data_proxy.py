@@ -297,7 +297,8 @@ class KISTickerProxy:
 # NOTE: Must save as attribute on yf module so kis_data.py can access via
 # hasattr(yf, '_original_yf_Ticker'). Local var alone is NOT accessible there.
 _original_yf_Ticker = yf.Ticker
-yf._original_yf_Ticker = yf.Ticker   # <-- this is what kis_data.py checks
+yf._original_yf_Ticker = _original_yf_Ticker
+yf._OriginalTicker = _original_yf_Ticker
 yf.Ticker = KISTickerProxy
 
 logger.info("Data Proxy initialized: yfinance.download AND yfinance.Ticker have been shimmed to kis_data.")
