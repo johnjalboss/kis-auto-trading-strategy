@@ -459,7 +459,7 @@ class CompositeSignalEngine:
             score -= 10
             signals.append(f"SURGE_5D:{ret_5d:.1f}%")
 
-        return CategoryScore("FUNDAMENTAL", score,
+        return CategoryScore("FUNDAMENTAL", max(-100, min(100, score)),
                             self.WEIGHTS['fundamental'], signals)
     
     def _calculate_smart_money_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
@@ -489,7 +489,7 @@ class CompositeSignalEngine:
             score -= 25
             signals.append("DISTRIBUTION")
         
-        return CategoryScore("SMART_MONEY", score, 
+        return CategoryScore("SMART_MONEY", max(-100, min(100, score)), 
                             self.WEIGHTS['smart_money'], signals)
     
     def _calculate_sentiment_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
@@ -512,7 +512,7 @@ class CompositeSignalEngine:
             score -= 10  # Low vol = complacency
             signals.append("COMPLACENCY")
         
-        return CategoryScore("SENTIMENT", score, 
+        return CategoryScore("SENTIMENT", max(-100, min(100, score)), 
                             self.WEIGHTS['sentiment'], signals)
     
     def _calculate_risk_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
@@ -554,7 +554,7 @@ class CompositeSignalEngine:
             score -= 30
             signals.append("HIGH_VOL")
         
-        return CategoryScore("RISK", score, self.WEIGHTS['risk'], signals)
+        return CategoryScore("RISK", max(-100, min(100, score)), self.WEIGHTS['risk'], signals)
     
     def _calculate_rsi(self, close: pd.Series, period: int = 14) -> float:
         """Calculate RSI"""
