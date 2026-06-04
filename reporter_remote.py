@@ -34,11 +34,34 @@ class PerformanceReporter:
     # ==============================================
     
     def _us_date(self) -> date:
-        """US Eastern 기준 날짜 (KST date.today()는 미국 장중에 틀림)"""
+        """
+        US Eastern 기준 날짜.
+        만약 장이 끝나기 전(16:00 EST 이전)이면 이전 마지막 영업일을 기준일로 판정하고,
+        장이 끝난 후(16:00 EST 이후)이면 당일을 기준일로 판정합니다.
+        """
         try:
-            return datetime.now(pytz.timezone('US/Eastern')).date()
-        except Exception:
-            return date.today()
+            from datetime import time
+            tz = pytz.timezone('US/Eastern')
+            now_est = datetime.now(tz)
+            current_date = now_est.date()
+            
+            if now_est.time() < time(16, 0):
+                report_date = current_date - timedelta(days=1)
+            else:
+                report_date = current_date
+                
+            from scheduler import TradingScheduler
+            scheduler = TradingScheduler()
+            while report_date.weekday() >= 5 or report_date.strftime("%Y-%m-%d") in scheduler.HOLIDAYS:
+                report_date -= timedelta(days=1)
+                
+            return report_date
+        except Exception as e:
+            logger.error("Error calculating US report date: {}", e)
+            try:
+                return datetime.now(pytz.timezone('US/Eastern')).date()
+            except Exception:
+                return date.today()
     
     def generate_daily_report(self, d: date = None) -> str:
         """Generate daily performance report including rich dashboard info"""

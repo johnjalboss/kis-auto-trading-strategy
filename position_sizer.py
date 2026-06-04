@@ -304,6 +304,12 @@ class PositionSizer:
             optimal *= 1.15
             details.append("ULTRA_HIGH_SHARPE_BONUS")
             
+        # Apply capital utilization boost multiplier (default 1.8x)
+        # to achieve near 100% capital utilization across slots.
+        capital_scale = float(os.getenv("CAPITAL_UTILIZATION_SCALE", "1.8"))
+        optimal *= capital_scale
+        details.append(f"CAPITAL_SCALE (Scaled by {capital_scale}x)")
+
         # Clamp to bounds
         optimal = min(optimal, max_pos)
         optimal = max(0.01, optimal)  # Minimum 1% of portfolio

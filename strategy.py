@@ -278,8 +278,8 @@ class StrategyEngine:
             from insider_tracker import get_insider_tracker
             insider = get_insider_tracker()
             ins_result = insider.analyze(symbol)
-            if ins_result.insider_net_value < -5_000_000 and ins_result.insider_sentiment == "SELLING":
-                return EntrySignal("HOLD", 0, "INSIDER_GUARD: Massive insider dumping detected", 0)
+            if ins_result.insider_sentiment == "SELLING" and (ins_result.insider_net_pct < -0.10 or ins_result.insider_net_value < -20_000_000):
+                return EntrySignal("HOLD", 0, f"INSIDER_GUARD: Massive insider dumping detected ({ins_result.insider_net_pct:.3f}% of MC, Net: ${ins_result.insider_net_value/1e6:.1f}M)", 0)
         except Exception:
             pass
 

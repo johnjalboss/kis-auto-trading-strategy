@@ -39,6 +39,7 @@ class OwnershipSignal:
     insider_buys_90d: int
     insider_sells_90d: int
     insider_net_value: float  # Net $ bought
+    insider_net_pct: float    # Net value as % of market cap
     insider_sentiment: str    # "BUYING", "SELLING", "NEUTRAL"
     
     # Institutional
@@ -103,20 +104,31 @@ class InsiderInstitutionalTracker:
                 insider_sells += 1
                 insider_net -= txn.value
         
-        # Insider scoring
-        if insider_net > 1_000_000:
+        # Get market cap (default to $1B if not found or invalid)
+        market_cap = info.get('marketCap')
+        if not market_cap or not isinstance(market_cap, (int, float)) or market_cap <= 0:
+            market_cap = 1_000_000_000
+            
+        # Calculate net value relative to market cap (percentage)
+        net_pct = (insider_net / market_cap) * 100
+        
+        # Insider scoring - Hybrid relative/absolute model
+        if net_pct > 0.01 or insider_net > 5_000_000:
             insider_sentiment = "BUYING"
             score += 35
-            details.append(f"INSIDER_NET_BUY:${insider_net/1e6:.1f}M")
-        elif insider_net > 100_000:
+            details.append(f"INSIDER_NET_BUY:${insider_net/1e6:.1f}M ({net_pct:.3f}% of MC)")
+        elif net_pct > 0.002 or insider_net > 1_000_000:
             insider_sentiment = "BUYING"
             score += 20
-        elif insider_net < -5_000_000:
+            details.append(f"INSIDER_NET_BUY_MODERATE:${insider_net/1e6:.1f}M ({net_pct:.3f}% of MC)")
+        elif net_pct < -0.10 or insider_net < -20_000_000:
             insider_sentiment = "SELLING"
             score -= 15  # Less negative - selling can be for many reasons
-        elif insider_net < -1_000_000:
+            details.append(f"INSIDER_NET_SELL_MASSIVE:${insider_net/1e6:.1f}M ({net_pct:.3f}% of MC)")
+        elif net_pct < -0.03 or insider_net < -5_000_000:
             insider_sentiment = "SELLING"
             score -= 10
+            details.append(f"INSIDER_NET_SELL:${insider_net/1e6:.1f}M ({net_pct:.3f}% of MC)")
         else:
             insider_sentiment = "NEUTRAL"
         
@@ -171,6 +183,7 @@ class InsiderInstitutionalTracker:
             insider_buys_90d=insider_buys,
             insider_sells_90d=insider_sells,
             insider_net_value=insider_net,
+            insider_net_pct=net_pct,
             insider_sentiment=insider_sentiment,
             inst_ownership_pct=inst_pct,
             inst_change_qtr=inst_change,
@@ -190,9 +203,54 @@ class InsiderInstitutionalTracker:
             return {}
     
     def _fetch_insider_transactions(self, symbol: str) -> List[InsiderData]:
-        """Fetch insider transactions"""
+        """Fetch insider transactions from Finnhub or yfinance"""
+        # 1. Finnhub Fallback (Preempts yfinance)
         try:
-            ticker = yf.Ticker(symbol)
+            from finnhub_client import get_finnhub_client
+            fh = get_finnhub_client()
+            if fh.is_enabled():
+                raw_insiders = fh.get_insider_transactions(symbol)
+                result = []
+                cutoff = datetime.now() - timedelta(days=90)
+                
+                for row in raw_insiders:
+                    try:
+                        change = int(row.get('change', 0) or 0)
+                        if change == 0:
+                            continue
+                        tx_date = row.get('transactionDate')
+                        if tx_date:
+                            tx_dt = datetime.strptime(tx_date, "%Y-%m-%d")
+                            if tx_dt < cutoff:
+                                continue
+                        else:
+                            continue
+                        
+                        tx_type = "Buy" if change > 0 else "Sell"
+                        price = float(row.get('transactionPrice', 0) or 0)
+                        val = abs(change) * price
+                        
+                        result.append(InsiderData(
+                            name=row.get('name', 'Unknown'),
+                            position=row.get('position', ''),
+                            transaction=tx_type,
+                            shares=abs(change),
+                            value=val,
+                            date=tx_dt
+                        ))
+                    except:
+                        pass
+                
+                if result:
+                    logger.debug("Successfully fetched {} insider transactions from Finnhub for {}", len(result), symbol)
+                    return result[:20]
+        except Exception as e:
+            logger.error("Finnhub insider transactions fetch failed for {}: {}", symbol, e)
+
+        # 2. yfinance Fallback
+        try:
+            ticker_class = getattr(yf, '_original_yf_Ticker', yf.Ticker)
+            ticker = ticker_class(symbol)
             insiders = ticker.insider_transactions
             
             if insiders is None or insiders.empty:
