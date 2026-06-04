@@ -351,9 +351,11 @@ def start_commander() -> None:
 _HEARTBEAT_CHECK_INTERVAL = 600   # 10분마다 로그 확인
 _HEARTBEAT_SILENT_LIMIT   = 7200  # 2시간 이상 무활동이면 경보
 _LOG_PATHS = [
+    "/home/ubuntu/kis-auto-trading/logs/trading_bot.log",
     "/home/ubuntu/kis-auto-trading/remote_trading_bot.log",
     "/home/ubuntu/kis-auto-trading/trading_bot.log",
     "/home/ubuntu/kis-auto-trading/bot.log",
+    "logs/trading_bot.log",
 ]
 _last_alert_sent: float = 0.0
 
