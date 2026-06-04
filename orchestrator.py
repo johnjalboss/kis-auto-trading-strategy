@@ -510,10 +510,14 @@ class BotOrchestrator:
 
         signals_to_process = []
         try:
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            # PARALLEL processing (max_workers=5, timeout=480s):
+            # - 2 CPUs on VPS, analyzers are mostly I/O-bound (network calls to Finnhub/KIS).
+            # - 5 symbols × 8 category workers = ~40 threads max, mostly blocking on network.
+            # - 10 symbols in 2 batches (5+5) instead of 4 batches (3+3+3+1) = faster overall.
+            # - Timeout increased 360→480s: last 2 symbols were consistently hitting 360s limit.
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
-                # Wait for all futures with a 180-second timeout
-                done, not_done = wait(future_to_symbol.keys(), timeout=180.0)
+                done, not_done = wait(future_to_symbol.keys(), timeout=480.0)
                 
                 for future in done:
                     try:
@@ -525,7 +529,7 @@ class BotOrchestrator:
                         
                 if not_done:
                     timed_out_symbols = [future_to_symbol[f] for f in not_done]
-                    logger.warning("Phase 4 symbol check timed out for symbols (180s limit): {}", timed_out_symbols)
+                    logger.warning("Phase 4 symbol check timed out for symbols (480s limit): {}", timed_out_symbols)
                     for f in not_done:
                         f.cancel()
         except Exception as e:
@@ -678,17 +682,9 @@ class BotOrchestrator:
                         continue
 
                     
-                    # Check position count limit (Macro Shield: reduce max positions in bear/choppy regimes)
+                    # Check position count limit (Macro Shield bypassed per user request for maximum capital deployment)
                     current_regime = getattr(self.strategy, '_last_regime', '')
                     dynamic_max_positions = config.MAX_POSITIONS
-                    if current_regime in ["BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"]:
-                        dynamic_max_positions = max(1, config.MAX_POSITIONS // 2)
-                        logger.info("MACRO_SHIELD: Bear regime ({}) -> Reducing MAX_POSITIONS {} -> {}", 
-                                    current_regime, config.MAX_POSITIONS, dynamic_max_positions)
-                    elif current_regime in ["CHOPPY", "CHOPPY_VOLATILE"]:
-                        dynamic_max_positions = max(1, int(config.MAX_POSITIONS * 0.7))
-                        logger.info("MACRO_SHIELD: Choppy regime ({}) -> Reducing MAX_POSITIONS {} -> {}", 
-                                    current_regime, config.MAX_POSITIONS, dynamic_max_positions)
                     
                     empty_slots = dynamic_max_positions - len(current_positions)
                     if empty_slots > 0:
@@ -854,13 +850,9 @@ class BotOrchestrator:
                             time.sleep(1)  # Brief pause for order processing
                             bp = self.trader.get_buying_power()
                             if bp > 5 and best_buy_signal.entry_price > 0:
-                                # Recalculate empty slots after sell with dynamic max positions (Macro Shield)
+                                # Recalculate empty slots after sell with dynamic max positions (Macro Shield bypassed)
                                 current_regime = getattr(self.strategy, '_last_regime', '')
                                 dynamic_max_positions = config.MAX_POSITIONS
-                                if current_regime in ["BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"]:
-                                    dynamic_max_positions = max(1, config.MAX_POSITIONS // 2)
-                                elif current_regime in ["CHOPPY", "CHOPPY_VOLATILE"]:
-                                    dynamic_max_positions = max(1, int(config.MAX_POSITIONS * 0.7))
                                 
                                 empty_slots_after_sell = max(1, dynamic_max_positions - len(self.strategy.get_all_positions()))
                                 target_capital = bp / empty_slots_after_sell
