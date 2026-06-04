@@ -153,6 +153,8 @@ def calculate_adjustments(m: dict) -> dict:
 
     # 2. Market Regime Sizing (MAX_POSITION_PCT)
     current_pos_pct = float(os.getenv("MAX_POSITION_PCT", "0.25"))
+    if current_pos_pct >= 1.0:
+        current_pos_pct /= 100.0
     if pf < 0.8:
         new_pos = max(current_pos_pct - 0.05, 0.20)
         if new_pos != current_pos_pct:
@@ -166,6 +168,8 @@ def calculate_adjustments(m: dict) -> dict:
 
     # 3. Take-Profit Adaptation (TAKE_PROFIT_PCT)
     current_tp = float(os.getenv("TAKE_PROFIT_PCT", "0.20"))
+    if current_tp >= 1.0:
+        current_tp /= 100.0
     if wr > 0.45 and m["avg_hold_days"] > 8 and current_tp > 0.10:
         if pf < 1.0: 
             new_tp = max(current_tp - 0.02, 0.12)

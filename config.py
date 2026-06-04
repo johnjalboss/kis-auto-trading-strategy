@@ -49,6 +49,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Daily stop loss — 스윙 트레이딩: 일일 5% 손실 한도 (스윙 포지션 정상 변동 흡수)
 # 참고: 3%는 단타 기준. 스윙 포지션 하루 3-4% 변동은 노이즈 — 조기 정지 방지.
 DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.05"))
+if DAILY_STOP_LOSS_PCT >= 1.0:
+    DAILY_STOP_LOSS_PCT /= 100.0
 
 # Consecutive loss limit — 4번 연속 실패 후 쿨다운 (3은 정상 스윙 변동성에 너무 민감)
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "4"))
@@ -56,6 +58,8 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "60"))
 
 # Position limits
 MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 35% max per position (3종목 분산)
+if MAX_POSITION_PCT >= 1.0:
+    MAX_POSITION_PCT /= 100.0
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "3"))  # 스윙 3종목 동시 보유
 
 # ==============================================
