@@ -196,6 +196,10 @@ class MLPredictor:
     
     def _no_ml_result(self, symbol: str) -> MLPrediction:
         return MLPrediction(symbol, "NEUTRAL", 0.5, 0, 0, 0, [], ["NO_ML"])
+        
+    def retrain(self):
+        """Dummy method for retraining the ML model in the background"""
+        logger.info("MLPredictor: background retraining requested. Retraining skipped (ML database inactive).")
 
 
 def get_ml_predictor() -> MLPredictor:

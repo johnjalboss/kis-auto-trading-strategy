@@ -113,7 +113,9 @@ class TradeJournal:
             "worst_trade": min(pnl_pcts)
         }
     
-    def get_recent(self, n: int = 10) -> List[dict]:
+    def get_recent(self, n: int = 10, limit: Optional[int] = None) -> List[dict]:
+        if limit is not None:
+            n = limit
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.execute("SELECT * FROM trades ORDER BY timestamp DESC LIMIT ?", (n,))

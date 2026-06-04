@@ -169,6 +169,14 @@ class AutoCompound:
 def get_compound(initial: float = 1500) -> AutoCompound:
     return AutoCompound(initial)
 
+def update_compound_tier(buying_power: float):
+    """Module helper function to update capital and tier progression"""
+    logger.info(f"AutoCompound: updating compound tier with buying power ${buying_power:,.2f}")
+    # Instantiate or load state
+    ac = get_compound()
+    state = ac.update(buying_power)
+    logger.info(f"AutoCompound: current capital is ${state.current_capital:,.2f}, total profit is {state.total_profit_pct:+.2f}%")
+
 
 if __name__ == "__main__":
     print("Testing AutoCompound...")

@@ -19,8 +19,9 @@ RAW_BASE_URL = "https://raw.githubusercontent.com/johnjalboss/kis-auto-trading-s
 VERSION_FILE = "version.json"
 
 def check_and_update() -> bool:
-    """원격 저장소와 버전을 비교하여 최신 전략 파일들을 자동 다운로드 및 덮어쓰기합니다."""
-    logger.info("?? 원격 온라인 서버에서 최신 전략 업데이트를 확인하는 중...")
+    """원격 저장소와 버전을 비교하여 최신 전략 파일들을 자동 다운로드 및 덮어쓰기합니다. (원격 업데이트 비활성화됨)"""
+    logger.info("ℹ️ Local customizations active. Remote auto-updater bypassed.")
+    return False
     
     # 1. 로컬 버전 로드
     local_version = "1.0.0"

@@ -278,6 +278,15 @@ class PerformanceDiagnosis:
                 with open(self.data_file, 'r') as f:
                     self.trades = json.load(f)
         except: pass
+    
+    def run_diagnosis(self, days: int = 30) -> dict:
+        """Wrapper method for backward compatibility in orchestrator"""
+        report = self.diagnose(days)
+        # Return a dictionary representation with a 'summary' key
+        return {
+            'summary': f"Returns {report.total_return_pct:+.1f}% vs benchmark {report.benchmark_return_pct:+.1f}% (severity: {report.severity})",
+            'report': report
+        }
 
 
 def get_diagnosis() -> PerformanceDiagnosis:

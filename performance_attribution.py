@@ -145,6 +145,27 @@ class PerformanceAttribution:
                     data = json.load(f)
                 self.trades = data.get('trades', [])
         except: pass
+        
+    def analyze(self) -> dict:
+        """Perform attribution analysis and return a summary dict"""
+        stats = self.get_strategy_stats()
+        best = self.get_best_performers()
+        
+        summary = "No trades recorded for attribution yet."
+        if stats:
+            best_strat = best.get('best_strategy', 'N/A')
+            best_pnl = stats[0].total_pnl if stats else 0
+            summary = f"Best Strategy: {best_strat} (${best_pnl:+.2f} P&L). Total strategies analyzed: {len(stats)}."
+            
+        return {
+            'summary': summary,
+            'stats': [dict(
+                name=s.name, trades=s.trades, wins=s.wins, losses=s.losses,
+                win_rate=s.win_rate, total_pnl=s.total_pnl, avg_pnl=s.avg_pnl,
+                profit_factor=s.profit_factor
+            ) for s in stats],
+            'best_performers': best
+        }
 
 
 def get_attribution() -> PerformanceAttribution:

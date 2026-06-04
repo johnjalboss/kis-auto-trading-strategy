@@ -140,9 +140,10 @@ class TelegramNotifier:
         except Exception as e:
             logger.warning("Telegram Bot object init failed (will use requests fallback): {}", e)
     
-    def _send_sync(self, message: str):
-        """Send message synchronously to Telegram and/or Discord"""
+    def _send_sync(self, message: str) -> bool:
+        """Send message synchronously to Telegram and/or Discord. Returns True if successful."""
         import os
+        success = True
         # 발송 시점에 설정이 비어있는 경우 동적 갱신 시도
         if not self.bot_token or not self.chat_id or not self._enabled:
             self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN') or getattr(config, 'TELEGRAM_BOT_TOKEN', '')
@@ -167,10 +168,12 @@ class TelegramNotifier:
                 resp = requests.post(url, json=payload, timeout=10)
                 if not resp.ok:
                     logger.error(f"Telegram API error: {resp.status_code} {resp.text}")
+                    success = False
                 else:
                     logger.info("Telegram message successfully sent via HTTP request.")
             except Exception as e:
                 logger.error(f"Telegram send failed: {e}")
+                success = False
                 
         # Discord (Format stripped from HTML to Markdown)
         if self._discord_enabled and self.discord_url:
@@ -178,9 +181,14 @@ class TelegramNotifier:
                 # Strip simple HTML from telegram format for discord
                 discord_msg = message.replace('<b>', '**').replace('</b>', '**').replace('<code>', '`').replace('</code>', '`')
                 payload = {"content": discord_msg}
-                requests.post(self.discord_url, json=payload, timeout=3)
+                resp = requests.post(self.discord_url, json=payload, timeout=3)
+                if not resp.ok:
+                    success = False
             except Exception as e:
                 logger.error("Discord send failed: {}", e)
+                success = False
+        
+        return success
     
     def send(self, message: str):
         """Send message in background thread"""
@@ -196,9 +204,10 @@ class TelegramNotifier:
         
         threading.Thread(target=self._send_sync, args=(message,), daemon=True).start()
 
-    def _send_photo_sync(self, photo_path: str, caption: str):
-        """Send photo synchronously to Telegram"""
+    def _send_photo_sync(self, photo_path: str, caption: str) -> bool:
+        """Send photo synchronously to Telegram. Returns True if successful."""
         import os
+        success = True
         # 발송 시점에 설정이 비어있는 경우 동적 갱신 시도
         if not self.bot_token or not self.chat_id or not self._enabled:
             self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN') or getattr(config, 'TELEGRAM_BOT_TOKEN', '')
@@ -224,20 +233,27 @@ class TelegramNotifier:
                     resp = requests.post(url, data=data, files=files, timeout=30)
                     if not resp.ok:
                         logger.error(f"Telegram Photo API error: {resp.status_code} {resp.text}")
+                        success = False
             except Exception as e:
                 logger.error(f"Telegram send_photo failed: {e}")
+                success = False
                 
         # Optional: Discord webhook support for images (multipart form-data)
         if self._discord_enabled and self.discord_url:
             try:
                 discord_caption = caption.replace('<b>', '**').replace('</b>', '**').replace('<code>', '`').replace('</code>', '`')
                 with open(photo_path, 'rb') as f:
-                    requests.post(self.discord_url, 
+                    resp = requests.post(self.discord_url, 
                                   data={"payload_json": json.dumps({"content": discord_caption})},
                                   files={"file": f}, 
                                   timeout=10)
+                    if not resp.ok:
+                        success = False
             except Exception as e:
                 logger.error("Discord send_photo failed: {}", e)
+                success = False
+                
+        return success
 
     def send_photo(self, photo_path: str, caption: str = ""):
         """Send photo in background thread"""
@@ -251,6 +267,14 @@ class TelegramNotifier:
                 logger.debug("Notifications completely unconfigured, skipping photo send")
                 return
         threading.Thread(target=self._send_photo_sync, args=(photo_path, caption), daemon=True).start()
+        
+    def send_sync(self, message: str) -> bool:
+        """Send message synchronously and return success status"""
+        return self._send_sync(message)
+        
+    def send_photo_sync(self, photo_path: str, caption: str = "") -> bool:
+        """Send photo synchronously and return success status"""
+        return self._send_photo_sync(photo_path, caption)
     
     # ==============================================
     # Trade Alerts

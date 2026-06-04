@@ -196,17 +196,28 @@ class PerformanceReporter:
         except Exception as e:
             logger.warning("Chart generation failed safely: {}", e)
             
+        success = False
         try:
-            if chart_path and hasattr(self.notifier, 'send_photo'):
-                self.notifier.send_photo(photo_path=chart_path, caption=report)
+            if chart_path and hasattr(self.notifier, 'send_photo_sync'):
+                success = self.notifier.send_photo_sync(photo_path=chart_path, caption=report)
+            elif hasattr(self.notifier, 'send_sync'):
+                success = self.notifier.send_sync(report)
             else:
-                self.notifier.send_all(report)
+                # Fallback to async if sync method doesn't exist
+                if chart_path and hasattr(self.notifier, 'send_photo'):
+                    self.notifier.send_photo(photo_path=chart_path, caption=report)
+                else:
+                    self.notifier.send(report)
+                success = True # Assume success to preserve legacy behavior
         except Exception as e:
             logger.error("Notifier failed to push daily report: {}", e)
             
-        # Mark as sent
-        self.db.mark_report_sent("DAILY_SUMMARY", us_d)
-        logger.info("Daily report sent for {}", us_d)
+        if success:
+            # Mark as sent only when transmission actually succeeded
+            self.db.mark_report_sent("DAILY_SUMMARY", us_d)
+            logger.info("Daily report successfully sent and marked in database for {}", us_d)
+        else:
+            logger.warning("Daily report sending failed. Database mark skipped to allow retry.")
 
     def send_yearly_report(self):
         """Send 1-year performance report with chart"""
@@ -298,12 +309,21 @@ class PerformanceReporter:
             return
 
         report = self.generate_weekly_report()
+        success = False
         try:
-            self.notifier.send(report)
-            self.db.mark_report_sent("WEEKLY_SUMMARY", us_today)
-            logger.info("Weekly report sent for week ending {}", us_today)
+            if hasattr(self.notifier, 'send_sync'):
+                success = self.notifier.send_sync(report)
+            else:
+                self.notifier.send(report)
+                success = True
         except Exception as e:
             logger.error("Weekly report send failed: {}", e)
+            
+        if success:
+            self.db.mark_report_sent("WEEKLY_SUMMARY", us_today)
+            logger.info("Weekly report successfully sent and marked in database for week ending {}", us_today)
+        else:
+            logger.warning("Weekly report sending failed. Database mark skipped to allow retry.")
     
     # ==============================================
     # Symbol Analysis
