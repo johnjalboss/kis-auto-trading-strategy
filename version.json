@@ -1,5 +1,5 @@
 {
-  "version": "1.7.3",
+  "version": "1.7.4",
   "files": [
     "accumulation.py",
     "adaptive_strategy.py",
@@ -17,6 +17,7 @@
     "clean_files_v2.py",
     "composite_signal.py",
     "config.py",
+    "config_remote.py",
     "correlation_matrix.py",
     "correlation_regime.py",
     "cost_model.py",

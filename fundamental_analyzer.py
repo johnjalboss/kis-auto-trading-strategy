@@ -79,23 +79,73 @@ class FundamentalAnalyzer:
             de = info.get('debtToEquity', 0) or 0
             cr = info.get('currentRatio', 0) or 0
             fcf = info.get('freeCashflow', 0) or 0
-            
             details = []
+
+            # 1. Sector-based PE threshold adjustment
+            sector = info.get('sector', '') or ''
+            sector_lower = sector.lower()
             
-            # Value Score (lower PE = higher score)
+            pe_value_score = 50
             if pe > 0:
-                if pe < 15:
-                    value = 90
-                    details.append("LOW_PE")
-                elif pe < 25:
-                    value = 70
-                elif pe < 40:
-                    value = 50
+                # Growth Sectors (Tech, Healthcare, Communication)
+                if any(x in sector_lower for x in ['technology', 'healthcare', 'communication']):
+                    if pe < 25:
+                        pe_value_score = 90
+                        details.append("GROWTH_LOW_PE")
+                    elif pe < 45:
+                        pe_value_score = 70
+                    elif pe < 65:
+                        pe_value_score = 50
+                    else:
+                        pe_value_score = 30
+                        details.append("GROWTH_HIGH_PE")
+                # Conservative Sectors (Utilities, Financials, Real Estate, Energy)
+                elif any(x in sector_lower for x in ['utility', 'financial', 'real estate', 'energy']):
+                    if pe < 12:
+                        pe_value_score = 90
+                        details.append("VALUE_LOW_PE")
+                    elif pe < 20:
+                        pe_value_score = 70
+                    elif pe < 30:
+                        pe_value_score = 50
+                    else:
+                        pe_value_score = 30
+                        details.append("VALUE_HIGH_PE")
+                # General Sectors
                 else:
-                    value = 30
-                    details.append("HIGH_PE")
+                    if pe < 15:
+                        pe_value_score = 90
+                        details.append("LOW_PE")
+                    elif pe < 25:
+                        pe_value_score = 70
+                    elif pe < 40:
+                        pe_value_score = 50
+                    else:
+                        pe_value_score = 30
+                        details.append("HIGH_PE")
             else:
-                value = 50
+                pe_value_score = 50
+
+            # 2. PEG Ratio scoring (Valuation relative to Growth)
+            if peg > 0:
+                if peg < 1.0:
+                    peg_score = 95
+                    details.append("PEG_UNDER_1.0_EXCELLENT")
+                elif peg < 1.5:
+                    peg_score = 75
+                    details.append("PEG_UNDER_1.5_DECENT")
+                elif peg < 2.5:
+                    peg_score = 50
+                else:
+                    peg_score = 25
+                    details.append("PEG_OVER_2.5_HIGH")
+                
+                # Combine Sector PE score (60%) and PEG score (40%)
+                value = int(pe_value_score * 0.6 + peg_score * 0.4)
+            else:
+                # Fallback to Sector PE score if PEG is not available
+                value = pe_value_score
+                details.append("NO_PEG_DATA")
             
             # Quality Score
             quality = 50
