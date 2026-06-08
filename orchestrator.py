@@ -902,9 +902,10 @@ class BotOrchestrator:
     def phase_5_execute_trade(self, symbol: str, action: str, qty: int, price: float, reason: str):
         """Pass through 20+ risk and sizing modules before hitting the smart router"""
         
-        # Daily trade limit (exits always allowed)
-        if action == "BUY" and self._daily_trade_count >= config.MAX_DAILY_TRADES:
-            logger.warning("? ?  ?  ({}/{}): {}  ",
+        # Daily trade limit (exits and upgrade buys always allowed)
+        is_upgrade = "UPGRADE" in reason.upper()
+        if action == "BUY" and not is_upgrade and self._daily_trade_count >= config.MAX_DAILY_TRADES:
+            logger.warning("Daily trade limit exceeded ({}/{}): {}  ",
                           self._daily_trade_count, config.MAX_DAILY_TRADES, symbol)
             return
         
