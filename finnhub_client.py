@@ -39,7 +39,8 @@ class FinnhubClient:
             "insider-transactions": {}, 
             "earnings-surprises": {},
             "basic-financials": {},
-            "company-profile": {}
+            "company-profile": {},
+            "candles": {}
         }
 
     def _prune_expired_entries(self):
@@ -49,7 +50,8 @@ class FinnhubClient:
             "insider-transactions": 43200,
             "earnings-surprises": 86400,
             "basic-financials": 86400,
-            "company-profile": 432000
+            "company-profile": 432000,
+            "candles": 86400
         }
         now = time.time()
         for category, symbols in list(self.cache.items()):
@@ -86,6 +88,8 @@ class FinnhubClient:
             category = "basic-financials"
         elif endpoint == "stock/profile2":
             category = "company-profile"
+        elif endpoint in ["stock/candle", "crypto/candle", "forex/candle"]:
+            category = "candles"
         
         # News TTL: 2 hours (7200s), Insider TTL: 12 hours (43200s), Earnings TTL: 24 hours (86400s)
         ttl = 7200
@@ -97,6 +101,8 @@ class FinnhubClient:
             ttl = 86400
         elif category == "company-profile":
             ttl = 432000
+        elif category == "candles":
+            ttl = 86400
 
         with self._cache_lock:
             if category in self.cache and symbol in self.cache[category]:
@@ -120,6 +126,8 @@ class FinnhubClient:
             category = "basic-financials"
         elif endpoint == "stock/profile2":
             category = "company-profile"
+        elif endpoint in ["stock/candle", "crypto/candle", "forex/candle"]:
+            category = "candles"
 
         with self._cache_lock:
             if category not in self.cache:
@@ -270,6 +278,36 @@ class FinnhubClient:
         data = res if isinstance(res, dict) else {}
         self._set_cached("stock/profile2", symbol, data)
         return data
+
+    def get_candles(self, symbol: str, category: str = "stock", days_back: int = 90) -> Optional[dict]:
+        """
+        Fetch daily candles for a symbol under stock, crypto, or forex categories.
+        """
+        symbol = symbol.upper()
+        endpoint = f"{category}/candle"
+        
+        cached = self._get_cached(endpoint, symbol)
+        if cached is not None:
+            return cached
+
+        to_time = int(time.time())
+        from_time = to_time - (days_back * 86400)
+        
+        params = {
+            "symbol": symbol,
+            "resolution": "D",
+            "from": from_time,
+            "to": to_time
+        }
+        
+        res = self._request(endpoint, params)
+        data = res if isinstance(res, dict) else {}
+        
+        if data and data.get("s") == "ok":
+            self._set_cached(endpoint, symbol, data)
+            return data
+        
+        return None
 
 _client = None
 def get_finnhub_client() -> FinnhubClient:

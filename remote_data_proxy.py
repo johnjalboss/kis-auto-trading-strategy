@@ -33,7 +33,11 @@ def _proxy_download(tickers, *args, **kwargs):
     progress = kwargs.get('progress', False)
     auto_adjust = kwargs.get('auto_adjust', True)
     
-    BYPASS_TICKERS = ["KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF"]
+    BYPASS_TICKERS = [
+        "KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF", 
+        "VIXY", "UUP", "LQD", "GLD", "SPY", 
+        "XLK", "XLV", "XLC", "XLY", "XLP", "XLE", "XLU", "XLRE", "XLB"
+    ]
     
     if isinstance(tickers, list) and len(tickers) == 1:
         symbol = tickers[0]
@@ -46,7 +50,97 @@ def _proxy_download(tickers, *args, **kwargs):
     # Bypass KIS for specific macro/FX tickers
     if any(bt in symbol.upper() for bt in BYPASS_TICKERS):
         logger.debug(f"DataProxy: Bypassing KIS for macro ticker {symbol}")
-        return _original_yf_download(tickers, *args, **kwargs)
+        df = _original_yf_download(tickers, *args, **kwargs)
+        if df is not None and not df.empty:
+            return df
+            
+        # --- yfinance download FAILED -> Attempt recovery for macro tickers ---
+        symbol_upper = symbol.upper()
+        logger.warning(f"yfinance download failed for macro {symbol_upper} on remote. Attempting multi-source fallback recovery...")
+        
+        recovered_df = pd.DataFrame()
+        days_back = 90
+        if period == '1mo':
+            days_back = 30
+        elif period == '3mo':
+            days_back = 90
+        elif period == '6mo':
+            days_back = 180
+        elif period == '1y':
+            days_back = 365
+            
+        try:
+            # 1. KIS API Fallback (for standard ETFs like SPY, GLD, TLT)
+            if not symbol_upper.startswith("^") and symbol_upper not in ["BTC-USD", "KRW=X", "CL=F"]:
+                logger.info(f"Attempting KIS API fallback download for {symbol_upper} on remote...")
+                df = kis_download(tickers=symbol_upper, period=period, interval=interval, 
+                                  progress=progress, auto_adjust=auto_adjust)
+                if df is not None and not df.empty:
+                    recovered_df = df
+
+            # 2. Multi-source Fallbacks (Finnhub & FRED)
+            if recovered_df.empty:
+                # 2.1. Crypto Fallback
+                if symbol_upper == "BTC-USD":
+                    from finnhub_client import get_finnhub_client
+                    fc = get_finnhub_client()
+                    if fc.is_enabled():
+                        res = fc.get_candles("BINANCE:BTCUSDT", category="crypto", days_back=days_back)
+                        recovered_df = _parse_finnhub_candle(res)
+                    if recovered_df.empty:
+                        from fred_macro import get_fred_analyzer
+                        fa = get_fred_analyzer()
+                        if fa.is_enabled():
+                            recovered_df = fa.fetch_series_df("CBBTCUSD", limit=days_back * 2)
+                            
+                # 2.2. Oil Fallback (via USO ETF or FRED WTI Spot Price)
+                elif symbol_upper == "CL=F":
+                    from finnhub_client import get_finnhub_client
+                    fc = get_finnhub_client()
+                    if fc.is_enabled():
+                        res = fc.get_candles("USO", category="stock", days_back=days_back)
+                        recovered_df = _parse_finnhub_candle(res)
+                    if recovered_df.empty:
+                        from fred_macro import get_fred_analyzer
+                        fa = get_fred_analyzer()
+                        if fa.is_enabled():
+                            recovered_df = fa.fetch_series_df("DCOILWTICO", limit=days_back * 2)
+                            
+                # 2.3. Forex Fallback (Finnhub USD_KRW or FRED DEXKOUS)
+                elif symbol_upper == "KRW=X":
+                    from finnhub_client import get_finnhub_client
+                    fc = get_finnhub_client()
+                    if fc.is_enabled():
+                        res = fc.get_candles("OANDA:USD_KRW", category="forex", days_back=days_back)
+                        recovered_df = _parse_finnhub_candle(res)
+                    if recovered_df.empty:
+                        from fred_macro import get_fred_analyzer
+                        fa = get_fred_analyzer()
+                        if fa.is_enabled():
+                            recovered_df = fa.fetch_series_df("DEXKOUS", limit=days_back * 2)
+                            
+                # 2.4. VIX Fallback (FRED VIXCLS)
+                elif symbol_upper in ["^VIX", "VIXY"]:
+                    from fred_macro import get_fred_analyzer
+                    fa = get_fred_analyzer()
+                    if fa.is_enabled():
+                        recovered_df = fa.get_vix_history(days_back=days_back)
+                        
+                # 2.5. Standard Macro ETFs
+                elif any(etf in symbol_upper for etf in ["SPY", "TLT", "GLD", "TIP", "HYG", "UUP", "LQD", "XLI", "XLF", "XLK", "XLV", "XLC", "XLY", "XLP", "XLE", "XLU", "XLRE", "XLB"]):
+                    from finnhub_client import get_finnhub_client
+                    fc = get_finnhub_client()
+                    if fc.is_enabled():
+                        res = fc.get_candles(symbol_upper, category="stock", days_back=days_back)
+                        recovered_df = _parse_finnhub_candle(res)
+        except Exception as recovery_err:
+            logger.error(f"Failed to recover {symbol_upper} via fallback sources on remote: {recovery_err}")
+            
+        if recovered_df is not None and not recovered_df.empty:
+            logger.info(f"SUCCESSFULLY recovered {symbol_upper} macro DataFrame from backup sources on remote (len={len(recovered_df)})")
+            return recovered_df
+            
+        return pd.DataFrame()
 
     # Remove noisy debug traces
     pass
@@ -63,9 +157,31 @@ def _proxy_download(tickers, *args, **kwargs):
                           progress=progress, auto_adjust=auto_adjust)
         if df is not None and not df.empty:
             _cache[cache_key] = (df.copy(), now)
-        return df
+            return df
     except Exception as e:
         logger.error(f"DataProxy Error fetching KIS data for {symbol}: {e}")
+        
+    return pd.DataFrame()
+
+def _parse_finnhub_candle(res: dict) -> pd.DataFrame:
+    if not res or res.get("s") != "ok":
+        return pd.DataFrame()
+    try:
+        df = pd.DataFrame({
+            'Open': res['o'],
+            'High': res['h'],
+            'Low': res['l'],
+            'Close': res['c'],
+            'Volume': res['v']
+        })
+        df.index = pd.to_datetime(res['t'], unit='s')
+        df.index.name = 'Date'
+        df['Adj Close'] = df['Close']
+        for col in df.columns:
+            df[col] = df[col].astype('float64')
+        return df.sort_index()
+    except Exception as e:
+        logger.error(f"Error parsing Finnhub candle JSON to DataFrame: {e}")
         return pd.DataFrame()
 
 yf.download = _proxy_download

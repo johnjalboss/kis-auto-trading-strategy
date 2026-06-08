@@ -34,7 +34,9 @@ def run_tests():
         fa = get_fred_analyzer()
         res = fa.analyze()
         print(f"  Score: {res['score']}")
-        print(f"  T10Y2Y: {res['t10y2y']}% | FEDFUNDS: {res['fedfunds']}%")
+        print(f"  T10Y2Y: {res['t10y2y']}% | FEDFUNDS: {res['fedfunds']}% | Real Yield (DFII10): {res['dfii10']}%")
+        print(f"  M2 YoY: {res['m2_yoy']*100:.2f}% | Credit Spread: {res['credit_spread']}%")
+        print(f"  Fed Assets 3mo: {res['walcl_3mo']*100:.2f}% | Consumer Sentiment: {res['sentiment']}")
         print(f"  Signals: {res['signals']}")
         print(f"  Reason: {res['reason']}")
     except Exception as e:
@@ -94,6 +96,35 @@ def run_tests():
     print(f"  Done in {t1-t0:.4f} seconds.")
     print(f"  Overall Score: {res_nvda_cached.overall_score} ({res_nvda_cached.recommendation})")
     
+    # 5. Test yfinance Fallback Recovery Simulation
+    print("\n[5/5] Testing yfinance Fallback Recovery Simulation (Simulating yfinance block)...")
+    import yfinance as yf
+    import pandas as pd
+    
+    # Save original download proxy
+    old_download = data_proxy._safe_original_yf_download
+    # Force original yfinance download to return empty DataFrame to trigger fallback
+    data_proxy._safe_original_yf_download = lambda *args, **kwargs: pd.DataFrame()
+    # Reset call limit just in case
+    data_proxy._yf_call_count = 0
+    
+    test_symbols = ["SPY", "^VIX", "BTC-USD", "CL=F", "KRW=X"]
+    for sym in test_symbols:
+        print(f"\n  Downloading {sym} via proxy (with simulated yfinance block)...")
+        try:
+            df = yf.download(sym, period="1mo")
+            if df is not None and not df.empty:
+                print(f"  ✅ SUCCESS: Recovered {sym} DataFrame (len={len(df)})")
+                print(f"     Columns: {list(df.columns)}")
+                print(f"     Index range: {df.index.min()} to {df.index.max()}")
+            else:
+                print(f"  ❌ FAILURE: Failed to recover {sym}")
+        except Exception as test_err:
+            print(f"  ❌ Error testing fallback for {sym}: {test_err}")
+            
+    # Restore original download proxy
+    data_proxy._safe_original_yf_download = old_download
+
     print("=" * 60)
     print("TEST COMPLETED")
     print("=" * 60)
