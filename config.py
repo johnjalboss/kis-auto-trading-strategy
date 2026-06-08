@@ -97,7 +97,7 @@ TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.04"))  # 4% �
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.02"))         # 고점 -2% 트레일링
 
 # Daily trade limit — 스윙 진입 기회 충분히 허용
-MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "6"))
+MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "15"))
 
 # ==============================================
 # BB Squeeze (Screener) Parameters
