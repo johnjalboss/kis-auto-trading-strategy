@@ -83,13 +83,40 @@ class CryptoSentimentIndicator:
                     fng_value, fng_classification = _fng_cache
         
         try:
-            # Get BTC data
-            btc = yf.download('BTC-USD', period='1mo', progress=False)
+            # Download QQQ and BTC data (2mo to ensure we have enough data for 30-day correlation)
+            qqq = yf.download('QQQ', period='2mo', progress=False)
+            btc = yf.download('BTC-USD', period='2mo', progress=False)
+            
+            if hasattr(qqq.columns, 'get_level_values'):
+                qqq.columns = qqq.columns.get_level_values(0)
             if hasattr(btc.columns, 'get_level_values'):
                 btc.columns = btc.columns.get_level_values(0)
             
             if btc.empty:
                 return self._default()
+            
+            # Calculate daily returns and rolling correlation
+            correlation = 0.5
+            is_decoupled = False
+            if not qqq.empty:
+                try:
+                    import pandas as pd
+                    qqq_close = qqq['Close']
+                    btc_close = btc['Close']
+                    if isinstance(qqq_close, pd.DataFrame):
+                        qqq_close = qqq_close.iloc[:, 0]
+                    if isinstance(btc_close, pd.DataFrame):
+                        btc_close = btc_close.iloc[:, 0]
+                        
+                    df_aligned = pd.DataFrame({'QQQ': qqq_close, 'BTC': btc_close}).dropna()
+                    returns = df_aligned.pct_change().dropna()
+                    if len(returns) >= 15:
+                        correlation = float(returns['QQQ'].corr(returns['BTC']))
+                        # If correlation is weak (< 0.3) or negative, we treat it as decoupled
+                        if correlation < 0.3:
+                            is_decoupled = True
+                except Exception as corr_err:
+                    logger.debug(f"Correlation calculation failed: {corr_err}")
             
             current = float(btc['Close'].iloc[-1])
             day_ago = float(btc['Close'].iloc[-2]) if len(btc) > 1 else current
@@ -111,18 +138,22 @@ class CryptoSentimentIndicator:
                 price_score = 50
                 
             # Combine 50% price action score and 50% Fear & Greed index
-            combined_score = int(price_score * 0.5 + fng_value * 0.5)
-            
-            if combined_score < 25:
-                sentiment = "EXTREME_FEAR"
-            elif combined_score < 45:
-                sentiment = "FEAR"
-            elif combined_score < 65:
+            if is_decoupled:
+                combined_score = 50  # Neutralized
                 sentiment = "NEUTRAL"
-            elif combined_score < 85:
-                sentiment = "GREED"
             else:
-                sentiment = "EXTREME_GREED"
+                combined_score = int(price_score * 0.5 + fng_value * 0.5)
+                
+                if combined_score < 25:
+                    sentiment = "EXTREME_FEAR"
+                elif combined_score < 45:
+                    sentiment = "FEAR"
+                elif combined_score < 65:
+                    sentiment = "NEUTRAL"
+                elif combined_score < 85:
+                    sentiment = "GREED"
+                else:
+                    sentiment = "EXTREME_GREED"
             
             # Correlation signal
             if change_24h < -5:
@@ -139,19 +170,22 @@ class CryptoSentimentIndicator:
                 impact = "No strong crypto signal"
             
             # Recommendation
-            if sentiment == "EXTREME_FEAR":
-                rec = "🚨 Crypto fear → expect stock volatility, reduce risk"
-            elif sentiment == "FEAR":
-                rec = "⚠️ Crypto weak → caution on stock longs"
-            elif sentiment == "EXTREME_GREED":
-                rec = "📈 Crypto euphoria → risk-on, but watch for reversal"
-            elif sentiment == "GREED":
-                rec = "✅ Crypto strong → favorable for tech stocks"
+            if is_decoupled:
+                rec = f"F&G Index: {fng_value} ({fng_classification}) (IGNORED - decoupled, corr={correlation:.2f}) | Crypto decoupled from Nasdaq"
             else:
-                rec = "Crypto neutral, no strong signal"
+                if sentiment == "EXTREME_FEAR":
+                    rec = "🚨 Crypto fear → expect stock volatility, reduce risk"
+                elif sentiment == "FEAR":
+                    rec = "⚠️ Crypto weak → caution on stock longs"
+                elif sentiment == "EXTREME_GREED":
+                    rec = "📈 Crypto euphoria → risk-on, but watch for reversal"
+                elif sentiment == "GREED":
+                    rec = "✅ Crypto strong → favorable for tech stocks"
+                else:
+                    rec = "Crypto neutral, no strong signal"
                 
-            # Prepend active index value to recommendation
-            rec = f"F&G Index: {fng_value} ({fng_classification}) | {rec}"
+                # Prepend active index value and correlation to recommendation
+                rec = f"F&G Index: {fng_value} ({fng_classification}) (corr={correlation:.2f}) | {rec}"
             
             return CryptoSentiment(
                 btc_price=current,
