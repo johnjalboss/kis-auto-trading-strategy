@@ -46,31 +46,30 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Risk Management
 # ==============================================
 
-# Daily stop loss — 스윙 트레이딩: 일일 5% 손실 한도 (스윙 포지션 정상 변동 흡수)
-# 참고: 3%는 단타 기준. 스윙 포지션 하루 3-4% 변동은 노이즈 — 조기 정지 방지.
-DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.05"))
+# Daily stop loss — 스윙 트레이딩: 일일 3% 손실 한도
+DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.03"))
 if DAILY_STOP_LOSS_PCT >= 1.0:
     DAILY_STOP_LOSS_PCT /= 100.0
 
-# Consecutive loss limit — 4번 연속 실패 후 쿨다운 (3은 정상 스윙 변동성에 너무 민감)
-CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "4"))
+# Consecutive loss limit — 3번 연속 실패 후 쿨다운
+CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "3"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "60"))
 
 # Position limits
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 35% max per position (3종목 분산)
+MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.30"))  # 30% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "3"))  # 스윙 3종목 동시 보유
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "7"))  # 스윙 최대 7종목 동시 보유
 
 # ==============================================
 # Position Upgrade (교체 매매)
 # ==============================================
 
 # 새 종목 점수가 보유 종목 점수보다 이 이상 높으면 교체
-UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "30"))
+UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "25"))
 
 # 매수 후 최소 보유 시간 (분) — 이 시간 전에는 교체 불가
-UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "60"))
+UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "120"))
 
 # 하루 최대 교체 횟수
 UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "5"))
@@ -196,15 +195,15 @@ MFI_OVERBOUGHT = int(os.getenv("MFI_OVERBOUGHT", "80"))
 PREMARKET_TIME = os.getenv("PREMARKET_TIME", "21:00")
 
 # Main analysis
-MACRO_ANALYSIS_TIME = os.getenv("MACRO_ANALYSIS_TIME", "22:00")
-SCREENING_TIME = os.getenv("SCREENING_TIME", "22:30")
+MACRO_ANALYSIS_TIME = os.getenv("MACRO_ANALYSIS_TIME", "21:30")
+SCREENING_TIME = os.getenv("SCREENING_TIME", "22:00")
 
 # Trading session
-TRADING_START_TIME = os.getenv("TRADING_START_TIME", "23:30")
-CLOSE_ALL_TIME = os.getenv("CLOSE_ALL_TIME", "05:55")
+TRADING_START_TIME = os.getenv("TRADING_START_TIME", "22:30")
+CLOSE_ALL_TIME = os.getenv("CLOSE_ALL_TIME", "04:55")
 
 # Reports
-DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "06:00")
+DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "05:00")
 
 # ==============================================
 # Oracle Cloud / System
