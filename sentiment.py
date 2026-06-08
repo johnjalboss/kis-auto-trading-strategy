@@ -154,27 +154,33 @@ class SentimentAnalyzer:
                 return data
         
         try:
-            # Use alternative.me API (free)
-            url = "https://api.alternative.me/fng/?limit=1"
-            resp = requests.get(url, timeout=10)
+            # Fetch CNN Fear & Greed Index from internal Dataviz API
+            url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+                'accept': 'application/json'
+            }
+            resp = requests.get(url, headers=headers, timeout=10)
             
             if resp.status_code == 200:
                 result = resp.json()
-                if result.get('data'):
-                    item = result['data'][0]
-                    value = int(item['value'])
-                    label = item['value_classification']
-                    
-                    if value < 25:
-                        signal = "BUY"
-                    elif value > 75:
-                        signal = "SELL"
-                    else:
-                        signal = "HOLD"
-                    
-                    fg = FearGreedData(value=value, label=label, signal=signal)
-                    self._fg_cache = (fg, datetime.now())
-                    return fg
+                fng_data = result.get('fear_and_greed', {})
+                value = int(fng_data.get('score', 50))
+                rating = fng_data.get('rating', 'neutral')
+                
+                # Format label (e.g. "extreme_fear" -> "Extreme Fear")
+                label = rating.replace('_', ' ').title()
+                
+                if value < 25:
+                    signal = "BUY"
+                elif value > 75:
+                    signal = "SELL"
+                else:
+                    signal = "HOLD"
+                
+                fg = FearGreedData(value=value, label=label, signal=signal)
+                self._fg_cache = (fg, datetime.now())
+                return fg
                     
         except Exception as e:
             logger.debug("Fear & Greed fetch failed: {}", e)
