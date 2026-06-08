@@ -170,9 +170,9 @@ class CompositeSignalEngine:
         symbol = kwargs.get('symbol', 'GLOBAL')
         now = time.time()
         
-        # 30-minute cache for symbol-specific, 2-hour for macro/global
-        CACHE_LONG = 7200  # 2 hours
-        CACHE_SHORT = 1800 # 30 mins
+        # 5-minute cache (fresh on every 45-min cycle, but shared during a single screening run)
+        CACHE_LONG = 300   # 5 mins for macro/global
+        CACHE_SHORT = 300  # 5 mins for symbol-specific
         # Per-analyzer timeout: 15s is generous for a single analyzer's network call.
         # If it can't complete in 15s it's blocking and should be skipped.
         PER_ANALYZER_TIMEOUT = 15.0
