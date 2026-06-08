@@ -175,50 +175,60 @@ class FREDMacroAnalyzer:
 
     def analyze(self) -> Dict[str, Any]:
         """
-        Analyze macro conditions based on 7 FRED macro indicators.
+        Analyze macro conditions based on 10 FRED macro/market-stress indicators.
         Returns:
-            Dict containing:
-                score: -100 to +100 (Negative means macro risk, positive is favorable)
-                t10y2y: yield spread value
-                fedfunds: interest rate value
-                dfii10: 10-year real yield
-                m2_yoy: M2 Money Supply YoY% change
-                credit_spread: BofA High Yield Credit Spread
-                walcl_3mo: Fed Total Assets 3-month% change
-                sentiment: Michigan Consumer Sentiment
-                signals: list of active indicator flags
-                reason: human-readable summary string
+            Dict containing scores and each sub-indicator value
         """
         score = 0
         signals = []
         
         t10y2y = 0.0
+        t10y3m = 0.0
         fedfunds = 5.0
         dfii10 = 1.0
         m2_yoy = 0.0
         credit_spread = 4.0
         walcl_3mo = 0.0
         sentiment = 70.0
+        financial_stress = 0.0
+        sahm_recession = 0.0
         
         if not self.is_enabled():
             return {
                 "score": 0,
                 "t10y2y": 0.0,
+                "t10y3m": 0.0,
                 "fedfunds": 5.0,
                 "dfii10": 1.0,
                 "m2_yoy": 0.0,
                 "credit_spread": 4.0,
                 "walcl_3mo": 0.0,
                 "sentiment": 70.0,
+                "financial_stress": 0.0,
+                "sahm_recession": 0.0,
                 "signals": ["FRED_KEY_MISSING"],
                 "reason": "FRED API Key is not configured. Falling back to default risk profile."
             }
             
         try:
-            # 1. 10Y-2Y Yield Spread (T10Y2Y)
+            # 1. 10Y-2Y Yield Spread (T10Y2Y) & Un-inversion Velocity
             t10y2y = self._fetch_latest_observation("T10Y2Y")
-            if t10y2y < 0:
-                score -= 25
+            t10y2y_df = self.fetch_series_df("T10Y2Y", limit=70)
+            t10y2y_change_90d = 0.0
+            if len(t10y2y_df) >= 60:
+                t10y2y_change_90d = t10y2y_df['Close'].iloc[-1] - t10y2y_df['Close'].iloc[-60]
+                
+            fedfunds_df = self.fetch_series_df("FEDFUNDS", limit=5)
+            fedfunds_change_3mo = 0.0
+            if len(fedfunds_df) >= 3:
+                fedfunds_change_3mo = fedfunds_df['Close'].iloc[-1] - fedfunds_df['Close'].iloc[-3]
+                
+            if t10y2y_change_90d > 0.5 and t10y2y >= 0.0 and fedfunds_change_3mo < 0.0:
+                # Bear Steepening/Rate cut un-inversion (Recession warning)
+                score -= 30
+                signals.append("RECESSION_UNINVERSION_STEEP")
+            elif t10y2y < 0:
+                score -= 20
                 signals.append("YIELD_CURVE_INVERTED")
             elif t10y2y < 0.2:
                 score -= 10
@@ -230,7 +240,19 @@ class FREDMacroAnalyzer:
                 score += 5
                 signals.append("YIELD_CURVE_STEEP_STRESS")
                 
-            # 2. Fed Funds Rate (FEDFUNDS)
+            # 2. 10Y-3M Yield Spread (T10Y3M) - Highly predictive yield curve metric
+            t10y3m = self._fetch_latest_observation("T10Y3M")
+            if t10y3m < 0:
+                score -= 15
+                signals.append("T10Y3M_INVERTED")
+            elif t10y3m < 0.2:
+                score -= 5
+                signals.append("T10Y3M_FLAT")
+            else:
+                score += 10
+                signals.append("T10Y3M_STEEP_HEALTHY")
+
+            # 3. Fed Funds Rate (FEDFUNDS)
             fedfunds = self._fetch_latest_observation("FEDFUNDS")
             if fedfunds > 5.0:
                 score -= 15
@@ -242,44 +264,55 @@ class FREDMacroAnalyzer:
                 score += 5
                 signals.append("RATES_NEUTRAL")
                 
-            # 3. 10-Year Real Yield (DFII10)
+            # 4. 10-Year Real Yield (DFII10)
             dfii10 = self._fetch_latest_observation("DFII10")
             if dfii10 > 2.0:
-                score -= 15
+                score -= 20
                 signals.append("REAL_YIELD_HIGH")
             elif dfii10 < 0.0:
-                score += 15
+                score += 10
                 signals.append("REAL_YIELD_NEGATIVE")
+            elif 0.0 <= dfii10 <= 1.5:
+                score += 15
+                signals.append("REAL_YIELD_GOLDILOCKS")
             else:
                 score += 5
                 signals.append("REAL_YIELD_NEUTRAL")
                 
-            # 4. M2 Money Supply (M2SL) YoY
+            # 5. M2 Money Supply (M2SL) YoY - Symmetric evaluation
             m2_df = self.fetch_series_df("M2SL", limit=15)
             if len(m2_df) >= 12:
                 latest_m2 = m2_df['Close'].iloc[-1]
                 prev_m2 = m2_df['Close'].iloc[-12]
                 m2_yoy = (latest_m2 / prev_m2) - 1.0
                 if m2_yoy < 0.0:
-                    score -= 15
+                    score -= 20
                     signals.append("M2_CONTRACTING")
-                elif m2_yoy > 0.05:
+                elif 0.02 <= m2_yoy <= 0.07:
                     score += 15
-                    signals.append("M2_EXPANDING")
+                    signals.append("M2_HEALTHY_GROWTH")
+                elif m2_yoy > 0.10:
+                    score -= 10
+                    signals.append("M2_OVEREXPANSION_INFLATION")
                 else:
                     score += 5
                     signals.append("M2_NEUTRAL")
             else:
                 signals.append("M2_DATA_INSUFFICIENT")
                 
-            # 5. ICE BofA High Yield Spread (BAMLH0A0HYM2)
+            # 6. ICE BofA High Yield Spread (BAMLH0A0HYM2) & Momentum
             credit_spread = self._fetch_latest_observation("BAMLH0A0HYM2")
+            credit_df = self.fetch_series_df("BAMLH0A0HYM2", limit=30)
+            credit_change_30d = 0.0
+            if len(credit_df) >= 20:
+                credit_change_30d = credit_df['Close'].iloc[-1] - credit_df['Close'].iloc[-20]
+                
             if credit_spread > 5.0:
-                score -= 25
+                score -= 30
                 signals.append("CREDIT_STRESS_HIGH")
-            elif credit_spread > 4.0:
-                score -= 10
-                signals.append("CREDIT_STRESS_ELEVATED")
+            elif credit_spread > 4.0 and credit_change_30d > 0.5:
+                score -= 25
+                signals.append("CREDIT_STRESS_SPIKE")
             elif credit_spread < 3.5:
                 score += 15
                 signals.append("CREDIT_STRESS_LOW")
@@ -287,44 +320,77 @@ class FREDMacroAnalyzer:
                 score += 5
                 signals.append("CREDIT_STRESS_NEUTRAL")
                 
-            # 6. Federal Reserve Total Assets (WALCL) 3mo
+            # 7. Federal Reserve Total Assets (WALCL) 3mo
             walcl_df = self.fetch_series_df("WALCL", limit=20)
             if len(walcl_df) >= 12:
                 latest_walcl = walcl_df['Close'].iloc[-1]
-                prev_walcl = walcl_df['Close'].iloc[-12] # ~12 weeks ago (approx 3 months)
+                prev_walcl = walcl_df['Close'].iloc[-12]
                 walcl_3mo = (latest_walcl / prev_walcl) - 1.0
-                if walcl_3mo < 0.0:
-                    score -= 10
-                    signals.append("FED_QT_ACTIVE")
+                if walcl_3mo < -0.015:
+                    score -= 15
+                    signals.append("FED_QT_STRONG")
+                elif walcl_3mo < 0.0:
+                    score -= 5
+                    signals.append("FED_QT_MILD")
                 else:
                     score += 15
                     signals.append("FED_QE_ACTIVE")
             else:
                 signals.append("FED_ASSETS_INSUFFICIENT")
                 
-            # 7. Michigan Consumer Sentiment (UMCSENT)
+            # 8. Michigan Consumer Sentiment (UMCSENT) - Lower weight
             sentiment = self._fetch_latest_observation("UMCSENT")
-            if sentiment < 60.0:
-                score -= 15
+            if sentiment < 55.0:
+                score -= 10
                 signals.append("CONSUMER_PESSIMISM")
-            elif sentiment > 80.0:
-                score += 15
+            elif sentiment > 75.0:
+                score += 10
                 signals.append("CONSUMER_OPTIMISM")
             else:
                 score += 5
                 signals.append("CONSUMER_NEUTRAL")
+                
+            # 9. St. Louis Fed Financial Stress Index (STLFSI4)
+            financial_stress = self._fetch_latest_observation("STLFSI4")
+            if financial_stress > 1.0:
+                score -= 30
+                signals.append("FINANCIAL_STRESS_SEVERE")
+            elif financial_stress > 0.0:
+                score -= 10
+                signals.append("FINANCIAL_STRESS_ELEVATED")
+            elif financial_stress < -0.5:
+                score += 10
+                signals.append("FINANCIAL_STRESS_VERY_LOW")
+            else:
+                score += 5
+                signals.append("FINANCIAL_STRESS_NORMAL")
+                
+            # 10. Sahm Rule Recession Indicator (SAHMREALTIME) - Employment distress
+            sahm_recession = self._fetch_latest_observation("SAHMREALTIME")
+            if sahm_recession >= 0.5:
+                score -= 30
+                signals.append("SAHM_RECESSION_ACTIVE")
+            elif sahm_recession >= 0.3:
+                score -= 10
+                signals.append("SAHM_RECESSION_ALERT")
+            else:
+                score += 10
+                signals.append("SAHM_SAFE_ZONE")
                 
         except Exception as e:
             logger.error(f"FRED macro analysis failed: {e}")
             return {
                 "score": 0,
                 "t10y2y": 0.0,
+                "t10y3m": 0.0,
                 "fedfunds": 5.0,
                 "dfii10": 1.0,
                 "m2_yoy": 0.0,
                 "credit_spread": 4.0,
                 "walcl_3mo": 0.0,
                 "sentiment": 70.0,
+                "financial_stress": 0.0,
+                "sahm_recession": 0.0,
                 "signals": ["FRED_ANALYSIS_FAILED"],
                 "reason": f"Error resolving FRED data: {e}"
             }
@@ -332,7 +398,11 @@ class FREDMacroAnalyzer:
         # Clip score
         score = max(-100, min(100, score))
         
-        reason = f"Yield Spread: {t10y2y:+.2f}%, Fed Funds: {fedfunds:.2f}%, Real Yield: {dfii10:.2f}%, M2 YoY: {m2_yoy*100:+.1f}%, Credit Spread: {credit_spread:.2f}%, Fed Assets 3mo: {walcl_3mo*100:+.1f}%, Consumer Sentiment: {sentiment:.1f}."
+        reason = (f"Yield Spread 10Y-2Y: {t10y2y:+.2f}%, 10Y-3M: {t10y3m:+.2f}%, Fed Funds: {fedfunds:.2f}%, "
+                  f"Real Yield: {dfii10:.2f}%, M2 YoY: {m2_yoy*100:+.1f}%, Credit Spread: {credit_spread:.2f}%, "
+                  f"Fed Assets 3mo: {walcl_3mo*100:+.1f}%, Consumer Sentiment: {sentiment:.1f}, "
+                  f"Financial Stress Index: {financial_stress:.2f}, Sahm Indicator: {sahm_recession:.2f}.")
+                  
         if score < -30:
             reason += " High macro risk detected."
         elif score < 0:
@@ -343,12 +413,15 @@ class FREDMacroAnalyzer:
         return {
             "score": score,
             "t10y2y": t10y2y,
+            "t10y3m": t10y3m,
             "fedfunds": fedfunds,
             "dfii10": dfii10,
             "m2_yoy": m2_yoy,
             "credit_spread": credit_spread,
             "walcl_3mo": walcl_3mo,
             "sentiment": sentiment,
+            "financial_stress": financial_stress,
+            "sahm_recession": sahm_recession,
             "signals": signals,
             "reason": reason
         }

@@ -34,9 +34,9 @@ def run_tests():
         fa = get_fred_analyzer()
         res = fa.analyze()
         print(f"  Score: {res['score']}")
-        print(f"  T10Y2Y: {res['t10y2y']}% | FEDFUNDS: {res['fedfunds']}% | Real Yield (DFII10): {res['dfii10']}%")
-        print(f"  M2 YoY: {res['m2_yoy']*100:.2f}% | Credit Spread: {res['credit_spread']}%")
-        print(f"  Fed Assets 3mo: {res['walcl_3mo']*100:.2f}% | Consumer Sentiment: {res['sentiment']}")
+        print(f"  T10Y2Y: {res['t10y2y']}% | T10Y3M: {res['t10y3m']}% | FEDFUNDS: {res['fedfunds']}% | Real Yield (DFII10): {res['dfii10']}%")
+        print(f"  M2 YoY: {res['m2_yoy']*100:.2f}% | Credit Spread: {res['credit_spread']}% | Fed Assets 3mo: {res['walcl_3mo']*100:.2f}%")
+        print(f"  Consumer Sentiment: {res['sentiment']} | Financial Stress Index: {res['financial_stress']} | Sahm Indicator: {res['sahm_recession']}")
         print(f"  Signals: {res['signals']}")
         print(f"  Reason: {res['reason']}")
     except Exception as e:
