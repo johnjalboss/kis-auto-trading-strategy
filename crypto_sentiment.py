@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from typing import Optional
 import yfinance as yf
 from loguru import logger
+import time
+import requests
+
+# Module level cache for Fear & Greed index
+_fng_cache = None
+_fng_last_time = 0.0
 
 
 @dataclass
@@ -49,7 +55,32 @@ class CryptoSentimentIndicator:
         pass
     
     def analyze(self) -> CryptoSentiment:
-        """Analyze crypto sentiment"""
+        """Analyze crypto sentiment combining price action with live Fear & Greed Index"""
+        global _fng_cache, _fng_last_time
+        
+        # 1. Fetch Alternative.me Fear & Greed Index
+        fng_value = 50
+        fng_classification = "NEUTRAL"
+        now = time.time()
+        
+        if _fng_cache is not None and now - _fng_last_time < 7200:
+            fng_value, fng_classification = _fng_cache
+        else:
+            try:
+                resp = requests.get("https://api.alternative.me/fng/", timeout=5)
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    if res_json.get("data"):
+                        first = res_json["data"][0]
+                        fng_value = int(first.get("value", 50))
+                        fng_classification = first.get("value_classification", "NEUTRAL").upper()
+                        _fng_cache = (fng_value, fng_classification)
+                        _fng_last_time = now
+            except Exception as e:
+                logger.debug(f"Failed to fetch Alternative.me F&G index: {e}")
+                if _fng_cache is not None:
+                    # Fallback to expired cache if API fails
+                    fng_value, fng_classification = _fng_cache
         
         try:
             # Get BTC data
@@ -69,20 +100,29 @@ class CryptoSentimentIndicator:
             
             # Sentiment based on price action
             if change_7d < -20:
-                sentiment = "EXTREME_FEAR"
-                score = 10
+                price_score = 10
             elif change_7d < -10:
-                sentiment = "FEAR"
-                score = 30
+                price_score = 30
             elif change_7d > 20:
-                sentiment = "EXTREME_GREED"
-                score = 90
+                price_score = 90
             elif change_7d > 10:
-                sentiment = "GREED"
-                score = 70
+                price_score = 70
             else:
+                price_score = 50
+                
+            # Combine 50% price action score and 50% Fear & Greed index
+            combined_score = int(price_score * 0.5 + fng_value * 0.5)
+            
+            if combined_score < 25:
+                sentiment = "EXTREME_FEAR"
+            elif combined_score < 45:
+                sentiment = "FEAR"
+            elif combined_score < 65:
                 sentiment = "NEUTRAL"
-                score = 50
+            elif combined_score < 85:
+                sentiment = "GREED"
+            else:
+                sentiment = "EXTREME_GREED"
             
             # Correlation signal
             if change_24h < -5:
@@ -109,13 +149,16 @@ class CryptoSentimentIndicator:
                 rec = "✅ Crypto strong → favorable for tech stocks"
             else:
                 rec = "Crypto neutral, no strong signal"
+                
+            # Prepend active index value to recommendation
+            rec = f"F&G Index: {fng_value} ({fng_classification}) | {rec}"
             
             return CryptoSentiment(
                 btc_price=current,
                 btc_change_24h=change_24h,
                 btc_change_7d=change_7d,
                 sentiment=sentiment,
-                sentiment_score=score,
+                sentiment_score=combined_score,
                 correlation_signal=corr,
                 risk_indicator=risk,
                 stock_impact=impact,

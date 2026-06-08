@@ -104,6 +104,74 @@ def _guess_exchange_for_symbol(symbol: str) -> str:
 # Core API Functions
 # ==============================================
 
+def get_fundamental_data(symbol: str, exchange: str = None) -> Optional[Dict]:
+    """해외주식 시세 상세 조회 (TR: HHDFS76200200) - PER, PBR, EPS, BPS, 시총 등 조회
+    
+    Args:
+        symbol: 종목코드 (예: AAPL, TSLA)
+        exchange: 거래소코드 (NAS/NYS/AMS). None이면 자동 감지
+        
+    Returns:
+        dict containing fundamental metrics or None on error
+    """
+    if exchange is None:
+        exchange = _guess_exchange_for_symbol(symbol)
+        
+    auth = get_auth()
+    
+    exchanges_to_try = [exchange]
+    for ex in ["NAS", "NYS", "AMS"]:
+        if ex not in exchanges_to_try:
+            exchanges_to_try.append(ex)
+            
+    for excd in exchanges_to_try:
+        _rate_limit()
+        
+        headers = auth.get_headers(tr_id="HHDFS76200200")
+        params = {
+            "AUTH": "",
+            "EXCD": excd,
+            "SYMB": symbol.upper()
+        }
+        
+        try:
+            resp = requests.get(
+                f"{config.BASE_URL}/uapi/overseas-price/v1/quotations/price-detail",
+                headers=headers,
+                params=params,
+                timeout=10
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("rt_cd") == "0" and data.get("output"):
+                o = data["output"]
+                return {
+                    "symbol": symbol.upper(),
+                    "exchange": excd,
+                    "last": float(o.get("last", 0) or 0),
+                    "base": float(o.get("base", 0) or 0),
+                    "open": float(o.get("open", 0) or 0),
+                    "high": float(o.get("high", 0) or 0),
+                    "low": float(o.get("low", 0) or 0),
+                    "fiftyTwoWeekHigh": float(o.get("h52p", 0) or 0),
+                    "fiftyTwoWeekHighDate": o.get("h52d", ""),
+                    "fiftyTwoWeekLow": float(o.get("l52p", 0) or 0),
+                    "fiftyTwoWeekLowDate": o.get("l52d", ""),
+                    "trailingPE": float(o.get("perx", 0) or 0),
+                    "priceToBook": float(o.get("pbrx", 0) or 0),
+                    "trailingEps": float(o.get("epsx", 0) or 0),
+                    "bookValue": float(o.get("bpsx", 0) or 0),
+                    "sharesOutstanding": int(o.get("shar", 0) or 0),
+                    "marketCap": float(o.get("tomv", 0) or 0)
+                }
+        except Exception as e:
+            logger.debug(f"KIS price-detail failed for {symbol} on {excd}: {e}")
+            continue
+            
+    return None
+
+
 def get_current_price(symbol: str, exchange: str = None) -> Optional[Dict]:
     """해외주식 현재체결가 조회 (TR: HHDFS00000300)
     
@@ -276,8 +344,9 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
     
     logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
     import os
-    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
-        logger.warning("yfinance daily OHLCV fallback bypassed because DISABLE_OPTIONS_FLOW=true")
+    macro_whitelist = {"^VIX", "^GSPC", "^DJI", "^IXIC", "^TNX", "^IRX", "BTC-USD", "CL=F", "UUP", "GLD", "TLT", "SPY", "QQQ", "DIA", "IWM", "BRK-B", "BRKB"}
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true" and symbol.upper() not in macro_whitelist:
+        logger.warning("yfinance daily OHLCV fallback bypassed for {} because DISABLE_OPTIONS_FLOW=true", symbol)
         return None
         
     try:
@@ -398,7 +467,8 @@ def get_intraday_ohlcv(symbol: str, exchange: str = None,
             
     logger.warning("Could not fetch intraday OHLCV for {} via KIS API, falling back to yfinance", symbol)
     import os
-    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+    macro_whitelist = {"^VIX", "^GSPC", "^DJI", "^IXIC", "^TNX", "^IRX", "BTC-USD", "CL=F", "UUP", "GLD", "TLT", "SPY", "QQQ", "DIA", "IWM", "BRK-B", "BRKB"}
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true" and symbol.upper() not in macro_whitelist:
         return None
         
     try:

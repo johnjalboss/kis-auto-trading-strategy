@@ -14,7 +14,6 @@ from kis_data import download as kis_download
 from loguru import logger
 import pandas as pd
 import time
-import threading
 
 # ============================================================
 # PART 1: yf.download() Shim (기존)
@@ -22,44 +21,8 @@ import threading
 
 _cache = {}
 _cache_expiry = 300  # 5 minutes
-_download_locks = {}
-_locks_lock = threading.Lock()
 
 _original_yf_download = yf.download
-_yf_call_count = 0
-_yf_last_reset_time = time.time()
-YF_CALL_LIMIT_PER_HOUR = 300  # Safe limit for yfinance fallback calls (KIS-only paths unaffected)
-
-_yf_lock = threading.RLock()
-
-def _safe_original_yf_download(tickers, *args, **kwargs):
-    """
-    Executes yfinance download with a strict circuit breaker to avoid IP bans.
-    """
-    global _yf_call_count, _yf_last_reset_time
-    now = time.time()
-    
-    # Reset count every 1 hour (3600 seconds)
-    if now - _yf_last_reset_time > 3600:
-        _yf_call_count = 0
-        _yf_last_reset_time = now
-        logger.info("yfinance Circuit Breaker: Hourly counter reset.")
-        
-    if _yf_call_count >= YF_CALL_LIMIT_PER_HOUR:
-        logger.error(f"yfinance Circuit Breaker TRIPPED! Call limit ({YF_CALL_LIMIT_PER_HOUR}/hour) exceeded. Blocking call for {tickers} to protect IP reputation.")
-        return pd.DataFrame()
-        
-    # Enforce strict timeout to prevent indefinite socket hangs
-    kwargs['timeout'] = 10
-    
-    with _yf_lock:
-        _yf_call_count += 1
-        logger.info(f"yfinance proxy call (Count: {_yf_call_count}/{YF_CALL_LIMIT_PER_HOUR}) for {tickers}")
-        try:
-            return _original_yf_download(tickers, *args, **kwargs)
-        except Exception as e:
-            logger.error(f"yfinance original download failed for {tickers}: {e}")
-            return pd.DataFrame()
 
 def _proxy_download(tickers, *args, **kwargs):
     """
@@ -70,77 +33,40 @@ def _proxy_download(tickers, *args, **kwargs):
     progress = kwargs.get('progress', False)
     auto_adjust = kwargs.get('auto_adjust', True)
     
-    # All GICS Sector ETFs and Macro ETFs are bypassed to yfinance directly
-    # to protect KIS API rate limits for target stock scans
-    BYPASS_TICKERS = [
-        "KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF", 
-        "VIXY", "UUP", "LQD", "GLD", "SPY", 
-        "XLK", "XLV", "XLC", "XLY", "XLP", "XLE", "XLU", "XLRE", "XLB"
-    ]
+    BYPASS_TICKERS = ["KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF"]
     
-    # Standardize cache key
-    if isinstance(tickers, list):
-        tickers_key = tuple(sorted(tickers))
+    if isinstance(tickers, list) and len(tickers) == 1:
+        symbol = tickers[0]
+    elif isinstance(tickers, str):
+        symbol = tickers
     else:
-        tickers_key = tickers
+        logger.warning(f"DataProxy: Multiple tickers unsupported by KIS direct proxy. Passing to original yf. {tickers}")
+        return _original_yf_download(tickers, *args, **kwargs)
 
-    cache_key = f"{tickers_key}_{period}_{interval}_{auto_adjust}"
-    now = time.time()
+    # Bypass KIS for specific macro/FX tickers
+    if any(bt in symbol.upper() for bt in BYPASS_TICKERS):
+        logger.debug(f"DataProxy: Bypassing KIS for macro ticker {symbol}")
+        return _original_yf_download(tickers, *args, **kwargs)
+
+    # Remove noisy debug traces
+    pass
     
-    # 1. Cache Check FIRST (Lock-free, fast path)
+    cache_key = f"{symbol}_{period}_{interval}_{auto_adjust}"
+    now = time.time()
     if cache_key in _cache:
         cached_df, timestamp = _cache[cache_key]
         if now - timestamp < _cache_expiry:
             return cached_df.copy()
-            
-    # Get or create lock for this specific cache_key
-    with _locks_lock:
-        if cache_key not in _download_locks:
-            _download_locks[cache_key] = threading.Lock()
-        lock = _download_locks[cache_key]
-        
-    with lock:
-        now = time.time()
-        # Double-check cache inside the lock
-        if cache_key in _cache:
-            cached_df, timestamp = _cache[cache_key]
-            if now - timestamp < _cache_expiry:
-                return cached_df.copy()
-                
-        # Check if we should bypass KIS for specific macro/FX tickers
-        is_bypass = False
-        if isinstance(tickers, str):
-            if any(bt in tickers.upper() for bt in BYPASS_TICKERS):
-                is_bypass = True
-        elif isinstance(tickers, list):
-            if any(any(bt in t.upper() for bt in BYPASS_TICKERS) for t in tickers):
-                is_bypass = True
-
-        # 2. Non-bypassed KIS path
-        if not is_bypass and ((isinstance(tickers, str)) or (isinstance(tickers, list) and len(tickers) == 1)):
-            symbol = tickers[0] if isinstance(tickers, list) else tickers
-            try:
-                df = kis_download(tickers=symbol, period=period, interval=interval, 
-                                  progress=progress, auto_adjust=auto_adjust)
-                if df is not None and not df.empty:
-                    _cache[cache_key] = (df.copy(), now)
-                return df
-            except Exception as e:
-                logger.error(f"DataProxy Error fetching KIS data for {symbol}: {e}")
-                return pd.DataFrame()
-
-        # 3. Bypassed macro/FX tickers or multiple tickers using original yfinance
-        with _yf_lock:
-            # Double-check cache under lock
-            if cache_key in _cache:
-                cached_df, timestamp = _cache[cache_key]
-                if now - timestamp < _cache_expiry:
-                    return cached_df.copy()
-                    
-            df = _safe_original_yf_download(tickers, *args, **kwargs)
-            if df is not None and not df.empty:
-                _cache[cache_key] = (df.copy(), now)
-            return df
+    
+    try:
+        df = kis_download(tickers=symbol, period=period, interval=interval, 
+                          progress=progress, auto_adjust=auto_adjust)
+        if df is not None and not df.empty:
+            _cache[cache_key] = (df.copy(), now)
+        return df
+    except Exception as e:
+        logger.error(f"DataProxy Error fetching KIS data for {symbol}: {e}")
+        return pd.DataFrame()
 
 yf.download = _proxy_download
 
@@ -432,8 +358,7 @@ class KISTickerProxy:
 # NOTE: Must save as attribute on yf module so kis_data.py can access via
 # hasattr(yf, '_original_yf_Ticker'). Local var alone is NOT accessible there.
 _original_yf_Ticker = yf.Ticker
-yf._original_yf_Ticker = _original_yf_Ticker
-yf._OriginalTicker = _original_yf_Ticker
+yf._original_yf_Ticker = yf.Ticker   # <-- this is what kis_data.py checks
 yf.Ticker = KISTickerProxy
 
 logger.info("Data Proxy initialized: yfinance.download AND yfinance.Ticker have been shimmed to kis_data.")

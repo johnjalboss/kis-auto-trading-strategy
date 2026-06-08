@@ -18,6 +18,7 @@ class FinnhubClient:
         self.cache_file = "finnhub_cache.json"
         self.cache = self._load_cache()
         self._disabled_until = 0.0
+        self._last_save_time = 0.0
 
     def is_enabled(self) -> bool:
         if not self.api_key:
@@ -33,14 +34,22 @@ class FinnhubClient:
                     return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load Finnhub cache: {e}")
-        return {"company-news": {}, "insider-transactions": {}, "earnings-surprises": {}}
+        return {
+            "company-news": {}, 
+            "insider-transactions": {}, 
+            "earnings-surprises": {},
+            "basic-financials": {},
+            "company-profile": {}
+        }
 
     def _prune_expired_entries(self):
         # Category TTLs
         ttls = {
             "company-news": 7200,
             "insider-transactions": 43200,
-            "earnings-surprises": 86400
+            "earnings-surprises": 86400,
+            "basic-financials": 86400,
+            "company-profile": 432000
         }
         now = time.time()
         for category, symbols in list(self.cache.items()):
@@ -52,8 +61,12 @@ class FinnhubClient:
                 if now - entry.get("timestamp", 0.0) > ttl * 2:
                     del self.cache[category][symbol]
 
-    def _save_cache(self):
+    def _save_cache(self, force: bool = False):
         try:
+            now = time.time()
+            if not force and now - getattr(self, "_last_save_time", 0.0) < 10.0:
+                return
+            self._last_save_time = now
             self._prune_expired_entries()
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
@@ -69,6 +82,10 @@ class FinnhubClient:
             category = "earnings-surprises"
         elif endpoint == "company-news":
             category = "company-news"
+        elif endpoint == "stock/metric":
+            category = "basic-financials"
+        elif endpoint == "stock/profile2":
+            category = "company-profile"
         
         # News TTL: 2 hours (7200s), Insider TTL: 12 hours (43200s), Earnings TTL: 24 hours (86400s)
         ttl = 7200
@@ -76,6 +93,10 @@ class FinnhubClient:
             ttl = 43200
         elif category == "earnings-surprises":
             ttl = 86400
+        elif category == "basic-financials":
+            ttl = 86400
+        elif category == "company-profile":
+            ttl = 432000
 
         with self._cache_lock:
             if category in self.cache and symbol in self.cache[category]:
@@ -95,6 +116,10 @@ class FinnhubClient:
             category = "earnings-surprises"
         elif endpoint == "company-news":
             category = "company-news"
+        elif endpoint == "stock/metric":
+            category = "basic-financials"
+        elif endpoint == "stock/profile2":
+            category = "company-profile"
 
         with self._cache_lock:
             if category not in self.cache:
@@ -103,26 +128,39 @@ class FinnhubClient:
                 "timestamp": time.time(),
                 "data": data
             }
-            self._save_cache()
+            self._save_cache(force=False)
+
+    def flush_cache(self):
+        with self._cache_lock:
+            self._save_cache(force=True)
 
     def _request(self, endpoint: str, params: dict = None) -> Optional[dict]:
         if not self.is_enabled():
             return None
         
-        # Enforce thread-safe rate limiting
+        # Enforce thread-safe rate limiting (sleep outside the lock to prevent serializing parallel threads)
+        sleep_time = 0.0
         with self._rate_limit_lock:
-            elapsed = time.time() - self._last_call_time
+            now = time.time()
+            elapsed = now - self._last_call_time
             if elapsed < self._min_interval:
-                time.sleep(self._min_interval - elapsed)
-            self._last_call_time = time.time()
+                sleep_time = self._min_interval - elapsed
+                self._last_call_time = now + sleep_time
+            else:
+                self._last_call_time = now
+        
+        if sleep_time > 0.0:
+            time.sleep(sleep_time)
             
         url = f"{self.base_url}/{endpoint}"
         params = params or {}
         params['token'] = self.api_key
         
-        for attempt in range(3):
+        for attempt in range(2):  # Reduced from 3→2 attempts: saves up to 11s on timeout
             try:
-                response = requests.get(url, params=params, timeout=10)
+                # Reduced timeout 10s→5s: Finnhub is fast when reachable.
+                # 5s is still generous; if it times out twice, the endpoint is down.
+                response = requests.get(url, params=params, timeout=5)
                 
                 # Trip circuit breaker on Authentication failures (e.g. invalid key)
                 if response.status_code in [401, 403]:
@@ -139,10 +177,20 @@ class FinnhubClient:
                     
                 response.raise_for_status()
                 return response.json()
+            except requests.exceptions.Timeout:
+                logger.warning(f"Finnhub API timeout (endpoint={endpoint}, attempt={attempt+1}/2, limit=5s)")
+                if attempt == 0:
+                    time.sleep(0.5)  # Reduced from 1s to 0.5s between retries
             except Exception as e:
                 logger.error(f"Finnhub API request failed (endpoint={endpoint}, attempt={attempt+1}): {e}")
-                time.sleep(1)
+                if attempt == 0:
+                    time.sleep(0.5)
+        
+        # After 2 failed attempts, disable Finnhub for 5 minutes to prevent cascade
+        logger.warning(f"Finnhub endpoint '{endpoint}' failed 2 times. Disabling for 5 min.")
+        self._disabled_until = time.time() + 300
         return None
+
 
     def get_company_news(self, symbol: str, days_back: int = 7) -> list:
         """Fetch news for a symbol from a date range"""
@@ -192,6 +240,35 @@ class FinnhubClient:
         res = self._request("stock/earnings", params)
         data = res if isinstance(res, list) else []
         self._set_cached("stock/earnings", symbol, data)
+        return data
+
+    def get_basic_financials(self, symbol: str) -> Optional[dict]:
+        """Fetch basic financials (metrics) for a symbol"""
+        symbol = symbol.upper()
+        cached = self._get_cached("stock/metric", symbol)
+        if cached is not None:
+            return cached
+
+        params = {
+            "symbol": symbol,
+            "metric": "all"
+        }
+        res = self._request("stock/metric", params)
+        data = res if isinstance(res, dict) else {}
+        self._set_cached("stock/metric", symbol, data)
+        return data
+
+    def get_company_profile(self, symbol: str) -> Optional[dict]:
+        """Fetch company profile for a symbol"""
+        symbol = symbol.upper()
+        cached = self._get_cached("stock/profile2", symbol)
+        if cached is not None:
+            return cached
+
+        params = {"symbol": symbol}
+        res = self._request("stock/profile2", params)
+        data = res if isinstance(res, dict) else {}
+        self._set_cached("stock/profile2", symbol, data)
         return data
 
 _client = None
