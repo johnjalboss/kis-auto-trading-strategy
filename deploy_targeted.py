@@ -11,11 +11,7 @@ REMOTE_DIR = '/home/ubuntu/kis-auto-trading'
 
 # Only the files that changed this session (v1.6.0 System Optimizations)
 CHANGED_FILES = [
-    'kis_data.py',
-    'trader.py',
-    'orchestrator.py',
-    'orchestrator_remote.py',
-    'base_adapters.py'
+    'config.py'
 ]
 
 def scp(local, remote):
