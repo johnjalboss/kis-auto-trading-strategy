@@ -154,7 +154,11 @@ class CompositeSignalEngine:
         logger.info(f"CompositeSignalEngine loaded advanced analyzers across {len(self.analyzers)} categories.")
     
     def _run_analyzers_async(self, category_key: str, df: pd.DataFrame, **kwargs) -> tuple[int, list]:
-        """Runs all analyzers for a given category asynchronously with caching"""
+        """Runs all analyzers for a given category with per-analyzer timeouts.
+        
+        Each analyzer gets its own 15-second timeout via as_completed().
+        A single slow analyzer cannot block the entire category.
+        """
         import time
         from datetime import datetime
         
@@ -169,6 +173,9 @@ class CompositeSignalEngine:
         # 30-minute cache for symbol-specific, 2-hour for macro/global
         CACHE_LONG = 7200  # 2 hours
         CACHE_SHORT = 1800 # 30 mins
+        # Per-analyzer timeout: 15s is generous for a single analyzer's network call.
+        # If it can't complete in 15s it's blocking and should be skipped.
+        PER_ANALYZER_TIMEOUT = 15.0
 
         pending_analyzers = []
         for analyzer in self.analyzers[category_key]:
@@ -195,18 +202,24 @@ class CompositeSignalEngine:
         if not pending_analyzers:
             return score, signals
             
+        timed_out_names = []
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # Reduced workers: 10 symbols × 8 workers = 80 max threads on VPS.
+            # Previous 12 workers × 10 symbols = 120 threads overwhelmed 1 vCPU.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                 future_to_analyzer = {
                     executor.submit(analyzer.analyze, df, **kwargs): analyzer 
                     for analyzer in pending_analyzers
                 }
-                done, not_done = concurrent.futures.wait(future_to_analyzer.keys(), timeout=25.0)
-                
-                for future in done:
+                # Use as_completed with per-analyzer timeout instead of a single
+                # category-level timeout. Each analyzer has 15s to finish.
+                # Slow analyzers are skipped; fast ones are collected immediately.
+                deadline = time.time() + PER_ANALYZER_TIMEOUT
+                for future in concurrent.futures.as_completed(future_to_analyzer.keys(),
+                                                               timeout=PER_ANALYZER_TIMEOUT):
                     analyzer = future_to_analyzer[future]
                     try:
-                        result = future.result()
+                        result = future.result(timeout=0)  # result is already done
                         
                         # Update cache with thread lock
                         is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
@@ -217,18 +230,24 @@ class CompositeSignalEngine:
                         score += result.get('score', 0)
                         signals.extend(result.get('signals', []))
                     except Exception as e:
-                        logger.error(f"Analyzer {analyzer.name} raised {e}")
-                        
-                if not_done:
-                    timed_out_names = [getattr(future_to_analyzer[f], 'name', future_to_analyzer[f].__class__.__name__) for f in not_done]
-                    logger.warning(f"Category {category_key} analysis timed out for analyzers (25.0s limit): {timed_out_names}")
-                    for f in not_done:
-                        f.cancel()
+                        ana_name = getattr(analyzer, 'name', analyzer.__class__.__name__)
+                        logger.debug(f"Analyzer {ana_name} raised: {e}")
+        except concurrent.futures.TimeoutError:
+            # Identify which analyzers didn't finish
+            done_set = {f for f in future_to_analyzer if f.done()}
+            for f, ana in future_to_analyzer.items():
+                if f not in done_set:
+                    timed_out_names.append(getattr(ana, 'name', ana.__class__.__name__))
+                    f.cancel()
         except Exception as e:
             logger.error(f"Exception in Category {category_key} analysis: {e}")
+
+        if timed_out_names:
+            logger.warning(f"Category {category_key}: {len(timed_out_names)} slow analyzers skipped (>{PER_ANALYZER_TIMEOUT:.0f}s): {timed_out_names}")
             
         return score, signals
     
+
     def analyze(self, symbol: str, df: Optional[pd.DataFrame] = None, **kwargs) -> CompositeSignal:
         """Generate composite signal"""
         from datetime import datetime

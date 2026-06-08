@@ -38,15 +38,6 @@ def main():
     load_dotenv()
     setup_logging()
     
-    # ✦ 지능형 자동 업데이트 체크 및 자체 재기동(Self-Reload)
-    try:
-        import updater
-        if updater.check_and_update():
-            logger.warning("🔄 최신 전략 패치가 완료되었습니다. 프로그램을 즉시 재기동합니다!")
-            os.execv(sys.executable, ['python'] + sys.argv)
-    except Exception as ue:
-        logger.debug("자동 업데이트 스킵: {}", ue)
-    
     logger.info("="*60)
     logger.info("🚀 KIS AUTO-TRADING BOT INITIALIZING (DRY RUN: {})", args.dry_run)
     logger.info("="*60)

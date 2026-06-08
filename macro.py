@@ -21,8 +21,16 @@ import pandas as pd
 import numpy as np
 import kis_data as yf  # KIS API drop-in replacement
 from loguru import logger
+import threading
+import time
+import concurrent.futures
 
 import config
+
+# Global caches to prevent thundering herd and duplicate downloads
+_macro_cache = {}
+_macro_cache_time = 0.0
+_macro_lock = threading.Lock()
 
 
 class MarketRegime(Enum):
@@ -109,35 +117,55 @@ class MacroAnalyzer:
     
     def _fetch_data(self) -> bool:
         """Fetch all macro data via KIS API (개별 종목 조회)"""
-        # Check cache (5 min)
-        if self._cache_time:
-            if (datetime.now() - self._cache_time).seconds < 300:
-                return True
+        global _macro_cache, _macro_cache_time
         
-        try:
-            fetched = 0
-            for name, ticker in self.TICKERS.items():
-                try:
-                    df = yf.download(ticker, period=f"{self.lookback + 10}d",
-                                    progress=False, auto_adjust=True)
-                    if df is not None and not df.empty and 'Close' in df.columns:
-                        self._cache[name] = df['Close'].dropna()
-                        fetched += 1
-                    else:
-                        logger.debug("No data for macro ticker: {}", ticker)
-                except Exception as e:
-                    logger.debug("Failed to fetch {}: {}", ticker, e)
-            
-            if fetched == 0:
-                return False
-            
-            self._cache_time = datetime.now()
-            logger.info("Macro data fetched: {}/{} tickers", fetched, len(self.TICKERS))
+        # Check cache (15 min)
+        now = time.time()
+        if now - _macro_cache_time < 900 and _macro_cache:
+            self._cache = _macro_cache.copy()
             return True
             
-        except Exception as e:
-            logger.error("Macro data fetch failed: {}", e)
-            return False
+        # Double-checked locking pattern inside single-flight fetch
+        with _macro_lock:
+            now = time.time()
+            if now - _macro_cache_time < 900 and _macro_cache:
+                self._cache = _macro_cache.copy()
+                return True
+                
+            try:
+                temp_cache = {}
+                def _fetch_ticker(name, ticker):
+                    try:
+                        df = yf.download(ticker, period=f"{self.lookback + 10}d",
+                                        progress=False, auto_adjust=True)
+                        if df is not None and not df.empty and 'Close' in df.columns:
+                            return name, df['Close'].dropna()
+                        else:
+                            logger.debug("No data for macro ticker: {}", ticker)
+                    except Exception as e:
+                        logger.debug("Failed to fetch {}: {}", ticker, e)
+                    return None
+
+                # Parallel fetch across 7 macro assets
+                with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+                    futures = [executor.submit(_fetch_ticker, name, ticker) for name, ticker in self.TICKERS.items()]
+                    for fut in concurrent.futures.as_completed(futures):
+                        res = fut.result()
+                        if res:
+                            name, close_data = res
+                            temp_cache[name] = close_data
+                            
+                if len(temp_cache) > 0:
+                    _macro_cache = temp_cache.copy()
+                    _macro_cache_time = now
+                    self._cache = temp_cache.copy()
+                    logger.info("MacroAnalyzer: Macro data fetched: {}/{} tickers in parallel", len(temp_cache), len(self.TICKERS))
+                    return True
+                return False
+                
+            except Exception as e:
+                logger.error("Macro data fetch failed: {}", e)
+                return False
     
     def analyze(self) -> MacroState:
         """Perform complete macro analysis"""

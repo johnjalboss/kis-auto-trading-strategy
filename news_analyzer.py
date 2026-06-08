@@ -80,7 +80,7 @@ class NewsAnalyzer:
     
     def __init__(self):
         self._cache: Dict[str, tuple] = {}
-        self._cache_ttl = 1800  # 30 minutes
+        self._cache_ttl = 7200  # 2 hours (Finnhub free plan: 60 calls/min, conserve quota)
     
     def analyze(self, symbol: str) -> NewsSentiment:
         """Analyze news sentiment for a symbol"""
@@ -158,54 +158,105 @@ class NewsAnalyzer:
         return result
     
     def _fetch_news(self, symbol: str) -> List[NewsItem]:
-        """Fetch news from yfinance — KIS 프록시 우회하여 실제 yfinance 사용"""
+        """
+        Fetch news from 3 sources in priority order:
+        1. Finnhub API (primary — structured, comprehensive)
+        2. Finviz RSS  (secondary — cloud-safe, no auth needed, DISABLE_OPTIONS_FLOW 무관)
+        3. yfinance    (tertiary — only if available and not blocked)
+        """
         news_items = []
-        
+
+        # ── Source 1: Finnhub ──────────────────────────────────────────────────
         try:
-            # KISTickerProxy는 .news 미지원 → sys.modules에서 실제 yfinance 직접 호출
-            import sys
-            _real_yf = sys.modules.get('yfinance._original', None)
-            if _real_yf is None:
-                # data_proxy.py가 yfinance를 shimming 하지만 원본은 다른 이름으로 보존
-                import importlib
-                try:
-                    import yfinance as _yf_raw
-                    # KISTickerProxy가 아닌 원본 Ticker 클래스 직접 사용
-                    _orig_ticker_cls = getattr(_yf_raw, '_OriginalTicker', None) or getattr(_yf_raw, 'Ticker', None)
-                    ticker = _orig_ticker_cls(symbol)
-                except Exception:
-                    ticker = yf.Ticker(symbol)
-            else:
-                ticker = _real_yf.Ticker(symbol)
-            
-            # .news 접근 — KISTickerProxy라면 AttributeError 발생
-            raw_news = getattr(ticker, 'news', None)
-            if raw_news is None:
-                # fallback: 뉴스 없음으로 처리 (스크리너 페널티 없음)
-                return []
-            
-            for item in raw_news[:10]:  # Last 10 news items
+            from finnhub_client import get_finnhub_client
+            fh = get_finnhub_client()
+            if fh.is_enabled():
+                raw_news = fh.get_company_news(symbol)
+                for item in raw_news[:12]:
+                    title = item.get('headline', '')
+                    if not title:
+                        continue
+                    sentiment, score = self._analyze_headline(title)
+                    pub_time = datetime.fromtimestamp(item.get('datetime', 0))
+                    news_items.append(NewsItem(
+                        title=title,
+                        source=item.get('source', 'Finnhub'),
+                        published=pub_time,
+                        sentiment=sentiment,
+                        sentiment_score=score,
+                        relevance=1.0
+                    ))
+                if news_items:
+                    logger.debug("Finnhub: {} news items for {}", len(news_items), symbol)
+                    return news_items
+        except Exception as e:
+            logger.warning("Finnhub news fetch failed for {}: {}", symbol, e)
+
+        # ── Source 2: Finviz RSS (cloud-safe, no API key, works with DISABLE_OPTIONS_FLOW) ──
+        try:
+            import re
+            import requests as _req
+            finviz_url = f"https://finviz.com/quote.ashx?t={symbol.upper()}"
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; trading-bot/2.0)"}
+            resp = _req.get(finviz_url, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                # Parse news table from Finviz HTML (lightweight regex)
+                pattern = r'class="news-link-container"[^>]*><a[^>]*href="([^"]+)"[^>]*>([^<]+)</a>'
+                matches = re.findall(pattern, resp.text)
+                if not matches:
+                    # fallback pattern for different Finviz layout versions
+                    pattern2 = r'<a[^>]+class="tab-link"[^>]+>([^<]{10,120})</a>'
+                    titles = re.findall(pattern2, resp.text)
+                    matches = [('finviz.com', t) for t in titles[:12]]
+                for url_or_src, title in matches[:12]:
+                    title = title.strip()
+                    if not title or len(title) < 10:
+                        continue
+                    sentiment, score = self._analyze_headline(title)
+                    news_items.append(NewsItem(
+                        title=title,
+                        source='Finviz',
+                        published=datetime.now(),
+                        sentiment=sentiment,
+                        sentiment_score=score,
+                        relevance=0.9
+                    ))
+                if news_items:
+                    logger.debug("Finviz: {} news items for {}", len(news_items), symbol)
+                    return news_items
+        except Exception as e:
+            logger.debug("Finviz news fetch failed for {}: {}", symbol, e)
+
+        # ── Source 3: yfinance (only if not blocked by DISABLE_OPTIONS_FLOW) ──
+        import os
+        if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+            logger.debug("yfinance news fetch skipped (DISABLE_OPTIONS_FLOW=true) — Finviz already attempted")
+            return []
+
+        try:
+            import yfinance as _yf_raw
+            _orig_ticker_cls = getattr(_yf_raw, '_OriginalTicker', None) or _yf_raw.Ticker
+            ticker = _orig_ticker_cls(symbol)
+            raw_news = getattr(ticker, 'news', None) or []
+            for item in raw_news[:10]:
                 if not isinstance(item, dict):
                     continue
                 title = item.get('title', '') or item.get('content', {}).get('title', '')
                 if not title:
                     continue
-                
                 sentiment, score = self._analyze_headline(title)
                 pub_time = datetime.fromtimestamp(item.get('providerPublishTime', 0))
-                
                 news_items.append(NewsItem(
                     title=title,
-                    source=item.get('publisher', 'Unknown'),
+                    source=item.get('publisher', 'yfinance'),
                     published=pub_time,
                     sentiment=sentiment,
                     sentiment_score=score,
                     relevance=1.0
                 ))
-                
         except Exception as e:
-            logger.debug("News fetch failed for {}: {}", symbol, e)
-        
+            logger.debug("yfinance news fetch failed for {}: {}", symbol, e)
+
         return news_items
     
     def _analyze_headline(self, headline: str) -> tuple:

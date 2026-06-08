@@ -8,8 +8,15 @@ from dataclasses import dataclass
 from typing import Dict
 import pandas as pd
 import numpy as np
+import time
 import yfinance as yf
 from loguru import logger
+
+
+# 전역 캐시 — composite signal 10종목 병렬 분석 시 중복 API 호출 방지
+_intermarket_cache = None
+_intermarket_cache_time = 0
+INTERMARKET_CACHE_EXPIRY = 3600  # 1시간 캐시
 
 
 @dataclass
@@ -78,8 +85,12 @@ class IntermarketAnalyzer:
         pass
     
     def analyze(self) -> IntermarketSignal:
-        """Run full intermarket analysis"""
-        
+        """Run full intermarket analysis (1h global cache to prevent repeated rate-limited yfinance calls)"""
+        global _intermarket_cache, _intermarket_cache_time
+        now = time.time()
+        if _intermarket_cache is not None and (now - _intermarket_cache_time < INTERMARKET_CACHE_EXPIRY):
+            return _intermarket_cache
+
         try:
             data = {}
             trends = {}
@@ -167,7 +178,7 @@ class IntermarketAnalyzer:
                 outlook = "NEUTRAL"
                 rec = "Mixed signals - selective trading"
             
-            return IntermarketSignal(
+            result = IntermarketSignal(
                 dxy=data.get('DXY', 100),
                 dxy_trend=trends.get('DXY', 'FLAT'),
                 gold=data.get('GOLD', 180),
@@ -183,6 +194,9 @@ class IntermarketAnalyzer:
                 key_insights=insights,
                 trading_recommendation=rec
             )
+            _intermarket_cache = result
+            _intermarket_cache_time = now
+            return result
             
         except Exception as e:
             logger.error(f"Intermarket analysis error: {e}")

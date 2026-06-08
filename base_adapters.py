@@ -67,7 +67,11 @@ BLACKLIST_PATTERNS = [
     # Sizing, risk, portfolio, and compound modules
     'cost_model', 'dynamic_scaling', 'kelly_criterion', 'position_sizer',
     'tax_optimizer', 'portfolio', 'drawdown_controller', 'exit_optimizer',
-    'auto_compound', 'fx_risk', 'hedge_manager'
+    'auto_compound', 'fx_risk', 'hedge_manager',
+    # Utility and verification scripts that shouldn't be loaded as adapters
+    'validate', 'ultimate_module_check', 'auto_tuner', 'chart_generator',
+    'research_discovery', 'release_valuation_fix', 'scan_overseas_apis',
+    'trigger_reports_server', 'download_log', 'print_report', 'query_db'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters

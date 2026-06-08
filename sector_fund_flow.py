@@ -18,6 +18,17 @@ import numpy as np
 import yfinance as yf
 from loguru import logger
 from typing import Dict, Any
+import threading
+import time
+import concurrent.futures
+
+# Global caches to prevent thundering herd and duplicate downloads
+_sector_returns_cache = {}
+_sector_returns_cache_time = 0.0
+_sector_returns_lock = threading.Lock()
+
+_symbol_sector_cache = {}
+_symbol_sector_cache_lock = threading.Lock()
 
 try:
     from base_analyzer import BaseAnalyzer
@@ -71,23 +82,58 @@ class SectorFundFlow(BaseAnalyzer):
         score = 0
         signals = []
 
+        global _sector_returns_cache, _sector_returns_cache_time
+        global _symbol_sector_cache
+
         try:
-            # 1. Get sector flows (5d momentum of each sector ETF)
+            # 1. Get sector flows (5d momentum of each sector ETF) with global cache & lock
             sector_returns = {}
-            for etf, sector in self.SECTOR_ETFS.items():
-                try:
-                    data = yf.download(etf, period="1mo", progress=False, auto_adjust=True)
-                    if isinstance(data.columns, pd.MultiIndex):
-                        data.columns = data.columns.get_level_values(0)
-                    if data.empty or len(data) < 5:
-                        continue
-                    close = data["Close"].dropna()
-                    ret_5d = (close.iloc[-1] / close.iloc[-5] - 1) * 100
-                    ret_1m = (close.iloc[-1] / close.iloc[0] - 1) * 100
-                    # Composite: 70% recent (5d) + 30% monthly
-                    sector_returns[sector] = ret_5d * 0.7 + ret_1m * 0.3
-                except Exception:
-                    continue
+            need_fetch = False
+            
+            with _sector_returns_lock:
+                now = time.time()
+                # Cache valid for 2 hours (7200 seconds)
+                if now - _sector_returns_cache_time < 7200 and _sector_returns_cache:
+                    sector_returns = _sector_returns_cache.copy()
+                else:
+                    need_fetch = True
+                    
+            if need_fetch:
+                with _sector_returns_lock:
+                    now = time.time()
+                    # Recheck inside lock
+                    if now - _sector_returns_cache_time < 7200 and _sector_returns_cache:
+                        sector_returns = _sector_returns_cache.copy()
+                    else:
+                        temp_returns = {}
+                        def _fetch_etf(etf, sector):
+                            try:
+                                data = yf.download(etf, period="1mo", progress=False, auto_adjust=True)
+                                if isinstance(data.columns, pd.MultiIndex):
+                                    data.columns = data.columns.get_level_values(0)
+                                if data.empty or len(data) < 5:
+                                    return None
+                                close = data["Close"].dropna()
+                                ret_5d = (close.iloc[-1] / close.iloc[-5] - 1) * 100
+                                ret_1m = (close.iloc[-1] / close.iloc[0] - 1) * 100
+                                return sector, ret_5d * 0.7 + ret_1m * 0.3
+                            except Exception:
+                                return None
+
+                        # Parallel fetch across 11 sector ETFs
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=11) as executor:
+                            futures = [executor.submit(_fetch_etf, etf, sector) for etf, sector in self.SECTOR_ETFS.items()]
+                            for fut in concurrent.futures.as_completed(futures):
+                                res = fut.result()
+                                if res:
+                                    s_name, val = res
+                                    temp_returns[s_name] = val
+                                    
+                        if temp_returns:
+                            _sector_returns_cache = temp_returns.copy()
+                            _sector_returns_cache_time = now
+                            sector_returns = temp_returns.copy()
+                            logger.info("SectorFundFlow: Updated global sector returns cache.")
 
             if not sector_returns:
                 return {"score": 0, "signals": ["SECTOR_FLOW_NO_DATA"], "name": self.name}
@@ -102,14 +148,25 @@ class SectorFundFlow(BaseAnalyzer):
             signals.append(f"TOP_INFLOW:{best_sector[0]}({best_sector[1]:+.1f}%)")
             signals.append(f"TOP_OUTFLOW:{worst_sector[0]}({worst_sector[1]:+.1f}%)")
 
-            # 3. Get stock's sector
-            try:
-                ticker = yf.Ticker(symbol)
-                info = ticker.info if hasattr(ticker, "info") else {}
-                yf_sector = info.get("sector", "")
-                stock_sector = self.SECTOR_MAP.get(yf_sector, "")
-            except Exception:
-                stock_sector = ""
+            # 3. Get stock's sector with cache (sector never changes, so cache indefinitely)
+            stock_sector = ""
+            with _symbol_sector_cache_lock:
+                stock_sector = _symbol_sector_cache.get(symbol, "")
+                
+            if not stock_sector:
+                try:
+                    # yfinance info call is made outside the lock to prevent serializing parallel threads
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info if hasattr(ticker, "info") else {}
+                    yf_sector = info.get("sector", "")
+                    stock_sector = self.SECTOR_MAP.get(yf_sector, "")
+                    if stock_sector:
+                        with _symbol_sector_cache_lock:
+                            _symbol_sector_cache[symbol] = stock_sector
+                        logger.info(f"SectorFundFlow: Cached sector '{stock_sector}' for {symbol}")
+                except Exception as e:
+                    logger.debug(f"SectorFundFlow({symbol}): Failed to fetch sector info: {e}")
+                    stock_sector = ""
 
             # 4. Score based on sector positioning
             if stock_sector:

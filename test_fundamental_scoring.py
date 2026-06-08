@@ -125,6 +125,38 @@ def run_tests():
     # Restore original download proxy
     data_proxy._safe_original_yf_download = old_download
 
+    # 6. Test MACRO_BLIND_POLICY modes (circuit breaker simulation)
+    print("\n[6/6] Testing MACRO_BLIND_POLICY Circuit Breaker Modes...")
+    from fred_macro import FREDMacroAnalyzer
+    import unittest.mock as mock
+
+    _sentinel_error = Exception("Simulated FRED API failure")
+
+    for policy in ["PENALTY", "BLOCK", "NEUTRAL"]:
+        os.environ["MACRO_BLIND_POLICY"] = policy
+        analyzer_cb = FREDMacroAnalyzer()
+        # Patch _fetch_latest_observation and fetch_series_df to always fail
+        with mock.patch.object(analyzer_cb, "_fetch_latest_observation", side_effect=_sentinel_error), \
+             mock.patch.object(analyzer_cb, "fetch_series_df", side_effect=_sentinel_error):
+            try:
+                cb_result = analyzer_cb.analyze()
+                cb_score = cb_result.get("score")
+                cb_signals = cb_result.get("signals", [])
+                cb_has_policy_signal = any(f"MACRO_BLIND_{policy}" in s for s in cb_signals)
+                status_icon = "✅" if cb_has_policy_signal else "⚠️"
+                print(f"  {status_icon} Policy={policy}: score={cb_score}, signals={cb_signals[-3:]}")
+                # Validate expected scores
+                expected = {"PENALTY": -25, "BLOCK": -100, "NEUTRAL": 0}
+                if cb_score != expected[policy]:
+                    print(f"     ❌ Expected score={expected[policy]} but got {cb_score}")
+                else:
+                    print(f"     ✅ Score matches expected value ({expected[policy]})")
+            except Exception as policy_err:
+                print(f"  ❌ Policy={policy} raised unexpected error: {policy_err}")
+
+    # Restore env to default
+    os.environ["MACRO_BLIND_POLICY"] = "PENALTY"
+
     print("=" * 60)
     print("TEST COMPLETED")
     print("=" * 60)

@@ -149,16 +149,25 @@ class SignalAggregator:
         ind_recent = indicator.tail(window).values
         if len(price_recent) < 10: return "NONE"
         
-        price_lows = self._find_swing_points(price_recent, mode="low")
-        ind_lows = self._find_swing_points(ind_recent, mode="low")
-        price_highs = self._find_swing_points(price_recent, mode="high")
-        ind_highs = self._find_swing_points(ind_recent, mode="high")
-        
-        if len(price_lows) >= 2 and len(ind_lows) >= 2:
-            if price_lows[-1] < price_lows[-2] and ind_lows[-1] > ind_lows[-2]:
+        # Find swing point indices in price series
+        low_indices = []
+        high_indices = []
+        for i in range(2, len(price_recent) - 2):
+            if (price_recent[i] < price_recent[i-1] and price_recent[i] < price_recent[i-2] and
+                price_recent[i] < price_recent[i+1] and price_recent[i] < price_recent[i+2]):
+                low_indices.append(i)
+            if (price_recent[i] > price_recent[i-1] and price_recent[i] > price_recent[i-2] and
+                price_recent[i] > price_recent[i+1] and price_recent[i] > price_recent[i+2]):
+                high_indices.append(i)
+                
+        # Compare price and indicator values at the exact same swing indices
+        if len(low_indices) >= 2:
+            i1, i2 = low_indices[-2], low_indices[-1]
+            if price_recent[i2] < price_recent[i1] and ind_recent[i2] > ind_recent[i1]:
                 return "BULLISH"
-        if len(price_highs) >= 2 and len(ind_highs) >= 2:
-            if price_highs[-1] > price_highs[-2] and ind_highs[-1] < ind_highs[-2]:
+        if len(high_indices) >= 2:
+            i1, i2 = high_indices[-2], high_indices[-1]
+            if price_recent[i2] > price_recent[i1] and ind_recent[i2] < ind_recent[i1]:
                 return "BEARISH"
         return "NONE"
 
@@ -245,10 +254,10 @@ class SignalAggregator:
         pivot = (h_prev + l_prev + c_prev) / 3
         s1, r1 = 2 * pivot - h_prev, 2 * pivot - l_prev
         
-        if current > s1 and (current - s1) / current < 0.02:
+        if abs(current - s1) / current < 0.02:
             score += 8
             details.append("NEAR_SUPPORT")
-        elif current < r1 and (r1 - current) / current < 0.02:
+        elif abs(current - r1) / current < 0.02:
             score -= 6
             details.append("NEAR_RESISTANCE")
             
@@ -293,15 +302,19 @@ class SignalAggregator:
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = {executor.submit(a.analyze, df, symbol=symbol): a for a in analyzers}
-            for future in concurrent.futures.as_completed(futures):
+            done, not_done = concurrent.futures.wait(futures.keys(), timeout=5.0)
+            for future in done:
                 try:
-                    res = future.result(timeout=5.0)
+                    res = future.result()
                     s = res.get('score', 0)
                     sigs = res.get('signals', [])
                     score += s
                     if s > 15: details.append(f"INST_BULL:{sigs[0] if sigs else 'YES'}")
                     elif s < -15: details.append(f"INST_BEAR:{sigs[0] if sigs else 'YES'}")
-                except Exception: continue
+                except Exception:
+                    continue
+            for future in not_done:
+                future.cancel()
         
         final_score = int(score / 15.0)
         return max(-12, min(12, final_score)), details

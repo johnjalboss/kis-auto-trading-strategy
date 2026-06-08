@@ -36,10 +36,10 @@ class FREDMacroAnalyzer:
         cache = self._load_cache()
         now = time.time()
         
-        # 24-hour cache (86400 seconds)
+        # 7-day cache (604800 seconds) — survive API outages without falling blind
         if series_id in cache:
             entry = cache[series_id]
-            if now - entry.get("timestamp", 0) < 86400:
+            if now - entry.get("timestamp", 0) < 604800:
                 logger.debug(f"FRED Cache HIT: {series_id} = {entry.get('value')}")
                 return entry.get("value")
                 
@@ -97,10 +97,10 @@ class FREDMacroAnalyzer:
         now = time.time()
         cache_key = f"{series_id}_history"
         
-        # Check cache (24 hours)
+        # Check cache (7 days)
         if cache_key in cache:
             entry = cache[cache_key]
-            if now - entry.get("timestamp", 0) < 86400:
+            if now - entry.get("timestamp", 0) < 604800:
                 logger.debug(f"FRED History Cache HIT: {series_id}")
                 data_list = entry.get("data", [])
                 if data_list:
@@ -176,11 +176,13 @@ class FREDMacroAnalyzer:
     def analyze(self) -> Dict[str, Any]:
         """
         Analyze macro conditions based on 10 FRED macro/market-stress indicators.
+        Uses resilient individual try-except wrappers and blind-penalty circuit breaker.
         Returns:
             Dict containing scores and each sub-indicator value
         """
         score = 0
         signals = []
+        success_count = 0
         
         t10y2y = 0.0
         t10y3m = 0.0
@@ -194,8 +196,15 @@ class FREDMacroAnalyzer:
         sahm_recession = 0.0
         
         if not self.is_enabled():
+            policy = os.getenv("MACRO_BLIND_POLICY", "PENALTY").upper()
+            score_fallback = -25
+            if policy == "BLOCK":
+                score_fallback = -100
+            elif policy == "NEUTRAL":
+                score_fallback = 0
+
             return {
-                "score": 0,
+                "score": score_fallback,
                 "t10y2y": 0.0,
                 "t10y3m": 0.0,
                 "fedfunds": 5.0,
@@ -206,13 +215,29 @@ class FREDMacroAnalyzer:
                 "sentiment": 70.0,
                 "financial_stress": 0.0,
                 "sahm_recession": 0.0,
-                "signals": ["FRED_KEY_MISSING"],
-                "reason": "FRED API Key is not configured. Falling back to default risk profile."
+                "signals": ["FRED_KEY_MISSING", f"MACRO_BLIND_{policy}"],
+                "reason": f"FRED API Key is not configured. Fallback to {policy} policy (score={score_fallback})."
             }
-            
+
+        # ── Pre-warm cache for auxiliary series ──────────────────────────
+        # VIXCLS and T10Y3M_history are fetched by vix_structure.py and
+        # other modules. Pre-warming here ensures they are always cached
+        # so downstream modules get instant cache hits (< 1ms).
         try:
-            # 1. 10Y-2Y Yield Spread (T10Y2Y) & Un-inversion Velocity
+            self.fetch_series_df("VIXCLS", limit=130)    # ~6 months daily VIX
+        except Exception:
+            pass
+        try:
+            self.fetch_series_df("T10Y3M", limit=70)     # 10Y-3M spread history
+        except Exception:
+            pass
+
+            
+        # 1. 10Y-2Y Yield Spread (T10Y2Y) & Un-inversion Velocity
+        try:
             t10y2y = self._fetch_latest_observation("T10Y2Y")
+            success_count += 1
+            
             t10y2y_df = self.fetch_series_df("T10Y2Y", limit=70)
             t10y2y_change_90d = 0.0
             if len(t10y2y_df) >= 60:
@@ -224,7 +249,6 @@ class FREDMacroAnalyzer:
                 fedfunds_change_3mo = fedfunds_df['Close'].iloc[-1] - fedfunds_df['Close'].iloc[-3]
                 
             if t10y2y_change_90d > 0.5 and t10y2y >= 0.0 and fedfunds_change_3mo < 0.0:
-                # Bear Steepening/Rate cut un-inversion (Recession warning)
                 score -= 30
                 signals.append("RECESSION_UNINVERSION_STEEP")
             elif t10y2y < 0:
@@ -239,9 +263,14 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("YIELD_CURVE_STEEP_STRESS")
-                
-            # 2. 10Y-3M Yield Spread (T10Y3M) - Highly predictive yield curve metric
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch T10Y2Y: {e}")
+            signals.append("T10Y2Y_FETCH_FAILED")
+            
+        # 2. 10Y-3M Yield Spread (T10Y3M)
+        try:
             t10y3m = self._fetch_latest_observation("T10Y3M")
+            success_count += 1
             if t10y3m < 0:
                 score -= 15
                 signals.append("T10Y3M_INVERTED")
@@ -251,9 +280,14 @@ class FREDMacroAnalyzer:
             else:
                 score += 10
                 signals.append("T10Y3M_STEEP_HEALTHY")
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch T10Y3M: {e}")
+            signals.append("T10Y3M_FETCH_FAILED")
 
-            # 3. Fed Funds Rate (FEDFUNDS)
+        # 3. Fed Funds Rate (FEDFUNDS)
+        try:
             fedfunds = self._fetch_latest_observation("FEDFUNDS")
+            success_count += 1
             if fedfunds > 5.0:
                 score -= 15
                 signals.append("RATES_HIGH")
@@ -263,9 +297,14 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("RATES_NEUTRAL")
-                
-            # 4. 10-Year Real Yield (DFII10)
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch FEDFUNDS: {e}")
+            signals.append("FEDFUNDS_FETCH_FAILED")
+            
+        # 4. 10-Year Real Yield (DFII10)
+        try:
             dfii10 = self._fetch_latest_observation("DFII10")
+            success_count += 1
             if dfii10 > 2.0:
                 score -= 20
                 signals.append("REAL_YIELD_HIGH")
@@ -278,10 +317,15 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("REAL_YIELD_NEUTRAL")
-                
-            # 5. M2 Money Supply (M2SL) YoY - Symmetric evaluation
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch DFII10: {e}")
+            signals.append("DFII10_FETCH_FAILED")
+            
+        # 5. M2 Money Supply (M2SL)
+        try:
             m2_df = self.fetch_series_df("M2SL", limit=15)
             if len(m2_df) >= 12:
+                success_count += 1
                 latest_m2 = m2_df['Close'].iloc[-1]
                 prev_m2 = m2_df['Close'].iloc[-12]
                 m2_yoy = (latest_m2 / prev_m2) - 1.0
@@ -299,9 +343,15 @@ class FREDMacroAnalyzer:
                     signals.append("M2_NEUTRAL")
             else:
                 signals.append("M2_DATA_INSUFFICIENT")
-                
-            # 6. ICE BofA High Yield Spread (BAMLH0A0HYM2) & Momentum
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch M2SL: {e}")
+            signals.append("M2SL_FETCH_FAILED")
+            
+        # 6. ICE BofA High Yield Spread (BAMLH0A0HYM2)
+        try:
             credit_spread = self._fetch_latest_observation("BAMLH0A0HYM2")
+            success_count += 1
+            
             credit_df = self.fetch_series_df("BAMLH0A0HYM2", limit=30)
             credit_change_30d = 0.0
             if len(credit_df) >= 20:
@@ -319,10 +369,15 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("CREDIT_STRESS_NEUTRAL")
-                
-            # 7. Federal Reserve Total Assets (WALCL) 3mo
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch BAMLH0A0HYM2: {e}")
+            signals.append("BAMLH0A0HYM2_FETCH_FAILED")
+            
+        # 7. Federal Reserve Total Assets (WALCL)
+        try:
             walcl_df = self.fetch_series_df("WALCL", limit=20)
             if len(walcl_df) >= 12:
+                success_count += 1
                 latest_walcl = walcl_df['Close'].iloc[-1]
                 prev_walcl = walcl_df['Close'].iloc[-12]
                 walcl_3mo = (latest_walcl / prev_walcl) - 1.0
@@ -337,9 +392,14 @@ class FREDMacroAnalyzer:
                     signals.append("FED_QE_ACTIVE")
             else:
                 signals.append("FED_ASSETS_INSUFFICIENT")
-                
-            # 8. Michigan Consumer Sentiment (UMCSENT) - Lower weight
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch WALCL: {e}")
+            signals.append("WALCL_FETCH_FAILED")
+            
+        # 8. Michigan Consumer Sentiment (UMCSENT)
+        try:
             sentiment = self._fetch_latest_observation("UMCSENT")
+            success_count += 1
             if sentiment < 55.0:
                 score -= 10
                 signals.append("CONSUMER_PESSIMISM")
@@ -349,9 +409,14 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("CONSUMER_NEUTRAL")
-                
-            # 9. St. Louis Fed Financial Stress Index (STLFSI4)
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch UMCSENT: {e}")
+            signals.append("UMCSENT_FETCH_FAILED")
+            
+        # 9. St. Louis Fed Financial Stress Index (STLFSI4)
+        try:
             financial_stress = self._fetch_latest_observation("STLFSI4")
+            success_count += 1
             if financial_stress > 1.0:
                 score -= 30
                 signals.append("FINANCIAL_STRESS_SEVERE")
@@ -364,9 +429,14 @@ class FREDMacroAnalyzer:
             else:
                 score += 5
                 signals.append("FINANCIAL_STRESS_NORMAL")
-                
-            # 10. Sahm Rule Recession Indicator (SAHMREALTIME) - Employment distress
+        except Exception as e:
+            logger.warning(f"FRED analyze: failed to fetch STLFSI4: {e}")
+            signals.append("STLFSI4_FETCH_FAILED")
+            
+        # 10. Sahm Rule Recession Indicator (SAHMREALTIME)
+        try:
             sahm_recession = self._fetch_latest_observation("SAHMREALTIME")
+            success_count += 1
             if sahm_recession >= 0.5:
                 score -= 30
                 signals.append("SAHM_RECESSION_ACTIVE")
@@ -376,39 +446,44 @@ class FREDMacroAnalyzer:
             else:
                 score += 10
                 signals.append("SAHM_SAFE_ZONE")
-                
         except Exception as e:
-            logger.error(f"FRED macro analysis failed: {e}")
-            return {
-                "score": 0,
-                "t10y2y": 0.0,
-                "t10y3m": 0.0,
-                "fedfunds": 5.0,
-                "dfii10": 1.0,
-                "m2_yoy": 0.0,
-                "credit_spread": 4.0,
-                "walcl_3mo": 0.0,
-                "sentiment": 70.0,
-                "financial_stress": 0.0,
-                "sahm_recession": 0.0,
-                "signals": ["FRED_ANALYSIS_FAILED"],
-                "reason": f"Error resolving FRED data: {e}"
-            }
+            logger.warning(f"FRED analyze: failed to fetch SAHMREALTIME: {e}")
+            signals.append("SAHMREALTIME_FETCH_FAILED")
             
-        # Clip score
-        score = max(-100, min(100, score))
-        
-        reason = (f"Yield Spread 10Y-2Y: {t10y2y:+.2f}%, 10Y-3M: {t10y3m:+.2f}%, Fed Funds: {fedfunds:.2f}%, "
-                  f"Real Yield: {dfii10:.2f}%, M2 YoY: {m2_yoy*100:+.1f}%, Credit Spread: {credit_spread:.2f}%, "
-                  f"Fed Assets 3mo: {walcl_3mo*100:+.1f}%, Consumer Sentiment: {sentiment:.1f}, "
-                  f"Financial Stress Index: {financial_stress:.2f}, Sahm Indicator: {sahm_recession:.2f}.")
-                  
-        if score < -30:
-            reason += " High macro risk detected."
-        elif score < 0:
-            reason += " Moderate macro headwind."
+        # Circuit Breaker: If we failed to get at least 7 indicators, apply MACRO_BLIND_POLICY
+        if success_count < 7:
+            policy = os.getenv("MACRO_BLIND_POLICY", "PENALTY").upper()
+            if policy == "BLOCK":
+                score = -100
+            elif policy == "NEUTRAL":
+                score = 0
+            else:  # PENALTY (default)
+                score = -25
+            signals.append(f"MACRO_BLIND_{policy}")
+            logger.error(
+                f"FRED macro blind circuit breaker tripped: Only {success_count}/10 indicators succeeded. "
+                f"Policy={policy}, score={score}."
+            )
+            reason = (
+                f"Macro Blind! Only {success_count}/10 macro indicators resolved. "
+                f"Policy={policy} → score={score}. "
+                f"Partial signals: {', '.join(signals[:-1]) if len(signals) > 1 else 'none'}."
+            )
         else:
-            reason += " Healthy macro environment."
+            # Clip score
+            score = max(-100, min(100, score))
+            
+            reason = (f"Yield Spread 10Y-2Y: {t10y2y:+.2f}%, 10Y-3M: {t10y3m:+.2f}%, Fed Funds: {fedfunds:.2f}%, "
+                      f"Real Yield: {dfii10:.2f}%, M2 YoY: {m2_yoy*100:+.1f}%, Credit Spread: {credit_spread:.2f}%, "
+                      f"Fed Assets 3mo: {walcl_3mo*100:+.1f}%, Consumer Sentiment: {sentiment:.1f}, "
+                      f"Financial Stress Index: {financial_stress:.2f}, Sahm Indicator: {sahm_recession:.2f}.")
+                      
+            if score < -30:
+                reason += " High macro risk detected."
+            elif score < 0:
+                reason += " Moderate macro headwind."
+            else:
+                reason += " Healthy macro environment."
             
         return {
             "score": score,

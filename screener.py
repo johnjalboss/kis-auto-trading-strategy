@@ -146,51 +146,89 @@ class DynamicScreener:
             logger.warning("No candidates found in initial screen")
             return ScreenResult([], [], mode, regime, datetime.now())
         
-        # Score each candidate — PARALLEL for speed (was sequential, ~6s/stock = 5+ min)
+        # Score each candidate using a two-pass architecture for extreme speed
+        # Pass 1: Quick preliminary pass (OHLCV factors only, no slow Finnhub APIs)
         import concurrent.futures
-        scored = []
-        def _safe_score(sym):
+        preliminary_scored = []
+        def _safe_prelim_score(sym):
             try:
-                return self._score_stock(sym, mode)
+                return self._score_stock(sym, mode, preliminary=True)
             except Exception as e:
-                logger.debug("Scoring failed for {}: {}", sym, e)
+                logger.debug("Preliminary scoring failed for {}: {}", sym, e)
                 return None
 
+        # Preliminary pass workers: 8 (was 16). The Oracle VPS has 2 CPUs.
+        # OHLCV downloads are I/O-bound but KIS API enforces rate limits;
+        # 16 concurrent threads cause 429 bursts. 8 workers is the sweet spot.
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_safe_score, sym): sym for sym in candidates[:100]}
-            for future in concurrent.futures.as_completed(futures, timeout=300):  # 120→300s
-                try:
-                    result = future.result()
-                    if result and result.total_score >= self.MIN_SCORE:
-                        scored.append(result)
-                except Exception as e:
-                    logger.debug("Scoring future failed: {}", e)
-
-        # 페널티가 삭제되었으므로 원본 점수 기준으로 정렬
-        scored.sort(key=lambda x: x.total_score, reverse=True)
-
-        # Determine how many stocks to return
-        # If we couldn't find enough stocks above MIN_SCORE,
-        # just pick the absolute best ones regardless of score
-        if len(scored) < self.MAX_RESULTS:
-            # Re-score top 50 in parallel — replaces 25-minute sequential bottleneck
-            all_scored = []
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-                futures2 = {executor.submit(_safe_score, sym): sym for sym in candidates[:50]}
-                for future in concurrent.futures.as_completed(futures2, timeout=300):  # 120→300s
+            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:100]}
+            try:
+                # Increased timeout 90s→150s: 100 candidates × KIS download.
+                # Each KIS call can take up to 2-3s; at 8 workers, 100 symbols = ~37s min.
+                # 150s gives 4× headroom for slow API responses on VPS.
+                for future in concurrent.futures.as_completed(futures, timeout=150):
                     try:
                         result = future.result()
                         if result:
-                            all_scored.append(result)
-                    except Exception:
-                        pass
-            all_scored.sort(key=lambda x: x.total_score, reverse=True)
-            top_picks = all_scored[:self.MAX_RESULTS]
-        else:
+                            preliminary_scored.append(result)
+                    except Exception as e:
+                        logger.debug("Preliminary scoring future failed: {}", e)
+            except concurrent.futures.TimeoutError:
+                logger.warning("Preliminary screener scoring timed out (150s limit)")
+
+        # Sort by preliminary score and take the top 20 for full scoring
+        preliminary_scored.sort(key=lambda x: x.total_score, reverse=True)
+        top_candidates = [s.symbol for s in preliminary_scored[:20]]
+        
+        # Pass 2: Full event-driven scoring (calls Finnhub APIs) on top 20 candidates only
+        scored = []
+        def _safe_full_score(sym):
+            try:
+                return self._score_stock(sym, mode, preliminary=False)
+            except Exception as e:
+                logger.debug("Full scoring failed for {}: {}", sym, e)
+                return None
+
+        if top_candidates:
+            # Full scoring: max_workers=4 (was 8). Each symbol calls Finnhub (news, insider, earnings)
+            # Finnhub read timeout=10s × 3 retries = up to 30s/symbol. With 8 workers, 20 symbols
+            # could spike to 240 concurrent Finnhub connections causing mass timeouts.
+            # 4 workers × 20 symbols = 5 batches × ~30s max = ~150s worst case.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                futures2 = {executor.submit(_safe_full_score, sym): sym for sym in top_candidates}
+                try:
+                    # Increased timeout 120s→180s: Finnhub retries can take 30s/symbol.
+                    # 4 workers × 20 symbols = ~150s max. 180s gives safe headroom.
+                    for future in concurrent.futures.as_completed(futures2, timeout=180):
+                        try:
+                            result = future.result()
+                            if result:
+                                scored.append(result)
+                        except Exception as e:
+                            logger.debug("Full scoring future failed: {}", e)
+                except concurrent.futures.TimeoutError:
+                    unfinished = [futures2[f] for f in futures2 if not f.done()]
+                    logger.warning("Full screener scoring timed out (180s limit). Unfinished: {}", unfinished)
+
+        # Flush Finnhub cache to disk after batch completion
+        try:
+            from finnhub_client import get_finnhub_client
+            get_finnhub_client().flush_cache()
+        except Exception:
+            pass
+
+        # Filter candidates above MIN_SCORE
+        above_min = [s for s in scored if s.total_score >= self.MIN_SCORE]
+        above_min.sort(key=lambda x: x.total_score, reverse=True)
+
+        if len(above_min) < self.MAX_RESULTS:
+            # Fallback: if not enough candidates exceed MIN_SCORE, take the best fully-scored ones
+            scored.sort(key=lambda x: x.total_score, reverse=True)
             top_picks = scored[:self.MAX_RESULTS]
+        else:
+            top_picks = above_min[:self.MAX_RESULTS]
         
         tickers = [s.symbol for s in top_picks]
-        
         logger.info("Screen returned {} stocks (mode: {})", len(tickers), mode.value)
         
         return ScreenResult(
@@ -305,12 +343,12 @@ class DynamicScreener:
             except Exception as e:
                 logger.debug("Squeeze scan failed for {}: {}", sym, e)
 
-        # 병렬 실행 (16 workers — KIS API 동시성 한도 내)
+        # 병렬 실행 (8 workers — VPS 2 CPU 기준 최적값, KIS API rate limit 고려)
         import sys
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         try:
             futures = {executor.submit(_scan_symbol, sym): sym for sym in candidates}
-            concurrent.futures.wait(futures, timeout=120)  # 최대 2분
+            concurrent.futures.wait(futures, timeout=150)  # 최대 2.5분
         finally:
             if sys.version_info >= (3, 9):
                 executor.shutdown(wait=False, cancel_futures=True)
@@ -475,10 +513,10 @@ class DynamicScreener:
                     pass
 
             import sys
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
             try:
                 futures = {executor.submit(_check_breakout, sym): sym for sym in candidates}
-                concurrent.futures.wait(futures, timeout=90)
+                concurrent.futures.wait(futures, timeout=120)
             finally:
                 if sys.version_info >= (3, 9):
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -580,10 +618,10 @@ class DynamicScreener:
                     pass
 
             import sys
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
             try:
                 futures = {executor.submit(_check_oversold, sym): sym for sym in candidates[:100]}
-                concurrent.futures.wait(futures, timeout=90)
+                concurrent.futures.wait(futures, timeout=120)
             finally:
                 if sys.version_info >= (3, 9):
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -602,7 +640,7 @@ class DynamicScreener:
     # Scoring Methods (KIS API data)
     # ==============================================
     
-    def _score_stock(self, symbol: str, mode: ScreenMode) -> Optional[StockScore]:
+    def _score_stock(self, symbol: str, mode: ScreenMode, preliminary: bool = False) -> Optional[StockScore]:
         """Calculate comprehensive score for a stock using KIS API data"""
         try:
             # ✅ 캐시 우선 사용 — gather 단계에서 이미 다운로드한 데이터 재활용
@@ -699,39 +737,42 @@ class DynamicScreener:
                 multi_bonus = 0
             
             # ============================================================
+            # ============================================================
             # 📰 NEWS SENTIMENT BONUS/PENALTY (Dynamic Event-Driven Filter)
             # ============================================================
             news_bonus = 0
             news_blacklist = False
-            try:
-                from news_analyzer import get_news_analyzer
-                news_result = get_news_analyzer().analyze(symbol)
-                if news_result.sentiment_score > 80:
-                    news_bonus = 25  # Blockbuster news momentum (e.g. key contract or breakthrough)
-                    logger.info("🔥 [NEWS_MOMENTUM_BONUS] {} blockbuster news sentiment ({:.1f})! Applying +25 bonus.", 
-                                symbol, news_result.sentiment_score)
-                elif news_result.sentiment_score > 50:
-                    news_bonus = 10
-                elif news_result.sentiment_score < -70:
-                    news_blacklist = True  # Catastrophic news shock (e.g. SEC probe, FDA fail, or fraud)
-                elif news_result.sentiment_score < -40:
-                    news_bonus = -15
-            except Exception:
-                pass
+            if not preliminary:
+                try:
+                    from news_analyzer import get_news_analyzer
+                    news_result = get_news_analyzer().analyze(symbol)
+                    if news_result.sentiment_score > 80:
+                        news_bonus = 25  # Blockbuster news momentum (e.g. key contract or breakthrough)
+                        logger.info("🔥 [NEWS_MOMENTUM_BONUS] {} blockbuster news sentiment ({:.1f})! Applying +25 bonus.", 
+                                    symbol, news_result.sentiment_score)
+                    elif news_result.sentiment_score > 50:
+                        news_bonus = 10
+                    elif news_result.sentiment_score < -70:
+                        news_blacklist = True  # Catastrophic news shock (e.g. SEC probe, FDA fail, or fraud)
+                    elif news_result.sentiment_score < -40:
+                        news_bonus = -15
+                except Exception:
+                    pass
             
             # ============================================================
             # 👔 INSIDER BUYING BONUS (+15) / SELLING PENALTY (-10)
             # ============================================================
             insider_bonus = 0
-            try:
-                from insider_tracker import get_insider_tracker
-                ins_result = get_insider_tracker().analyze(symbol)
-                if ins_result.insider_sentiment == "BUYING" and ins_result.insider_net_value > 500_000:
-                    insider_bonus = 15
-                elif ins_result.insider_sentiment == "SELLING" and ins_result.insider_net_value < -2_000_000:
-                    insider_bonus = -10
-            except Exception:
-                pass
+            if not preliminary:
+                try:
+                    from insider_tracker import get_insider_tracker
+                    ins_result = get_insider_tracker().analyze(symbol)
+                    if ins_result.insider_sentiment == "BUYING" and ins_result.insider_net_value > 500_000:
+                        insider_bonus = 15
+                    elif ins_result.insider_sentiment == "SELLING" and ins_result.insider_net_value < -2_000_000:
+                        insider_bonus = -10
+                except Exception:
+                    pass
             
             # ============================================================
             # 📈 52주 신고가 돌파 BONUS (+20) — 가장 강한 모멘텀 알파
@@ -757,33 +798,34 @@ class DynamicScreener:
             # ============================================================
             pead_bonus = 0
             pead_blacklist = False
-            try:
-                from earnings_analyzer import get_earnings_analyzer
-                _ea2 = get_earnings_analyzer()
-                _er = _ea2.analyze(symbol)
-                if _er is not None:
-                    if isinstance(_er, dict):
-                        _beat2 = (_er.get('beat_surprise', 0) or _er.get('eps_surprise_pct', 0) or
-                                  _er.get('surprise_pct', 0))
-                        _days2 = _er.get('days_since_earnings', 99)
-                    else:
-                        # It is an EarningsSignal dataclass object!
-                        _beat2 = getattr(_er, 'last_eps_surprise', 0.0)
-                        _days2 = getattr(_er, 'days_since_earnings', 99)
-                        
-                    if _beat2 > 5 and _days2 <= 30:
-                        pead_bonus = 15
-                        logger.debug("PEAD_BONUS screener: {} EPS beat {:.0f}%", symbol, _beat2)
-                    elif _beat2 < -15 and _days2 <= 30:
-                        pead_blacklist = True  # Severe PEAD earnings crash blacklist
-                        logger.warning("🚨 [PEAD_SHOCK_BLACKLIST] {} catastrophic recent earnings miss of {:.1f}%! Blacklisting stock.",
-                                       symbol, _beat2)
-                    elif _beat2 < -5 and _days2 <= 30:
-                        pead_bonus = -25  # Severe penalty for recent earnings misses
-                        logger.warning("🚨 [PEAD_PANIC_PENALTY] {} recent earnings miss of {:.1f}%! Applying -25 penalty.", 
-                                       symbol, _beat2)
-            except Exception as e:
-                logger.error("PEAD analyzer failed for {}: {}", symbol, e)
+            if not preliminary:
+                try:
+                    from earnings_analyzer import get_earnings_analyzer
+                    _ea2 = get_earnings_analyzer()
+                    _er = _ea2.analyze(symbol)
+                    if _er is not None:
+                        if isinstance(_er, dict):
+                            _beat2 = (_er.get('beat_surprise', 0) or _er.get('eps_surprise_pct', 0) or
+                                      _er.get('surprise_pct', 0))
+                            _days2 = _er.get('days_since_earnings', 99)
+                        else:
+                            # It is an EarningsSignal dataclass object!
+                            _beat2 = getattr(_er, 'last_eps_surprise', 0.0)
+                            _days2 = getattr(_er, 'days_since_earnings', 99)
+                            
+                        if _beat2 > 5 and _days2 <= 30:
+                            pead_bonus = 15
+                            logger.debug("PEAD_BONUS screener: {} EPS beat {:.0f}%", symbol, _beat2)
+                        elif _beat2 < -15 and _days2 <= 30:
+                            pead_blacklist = True  # Severe PEAD earnings crash blacklist
+                            logger.warning("🚨 [PEAD_SHOCK_BLACKLIST] {} catastrophic recent earnings miss of {:.1f}%! Blacklisting stock.",
+                                           symbol, _beat2)
+                        elif _beat2 < -5 and _days2 <= 30:
+                            pead_bonus = -25  # Severe penalty for recent earnings misses
+                            logger.warning("🚨 [PEAD_PANIC_PENALTY] {} recent earnings miss of {:.1f}%! Applying -25 penalty.", 
+                                           symbol, _beat2)
+                except Exception as e:
+                    logger.error("PEAD analyzer failed for {}: {}", symbol, e)
 
             # ============================================================
             # 🔄 섹터 로테이션 보너스/페널티 (실시간 동적 반영)

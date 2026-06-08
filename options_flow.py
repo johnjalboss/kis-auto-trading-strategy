@@ -29,8 +29,33 @@ import datetime
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict
 import math
+import os
+import threading
 
 from loguru import logger
+
+def _run_with_timeout(func, args=(), kwargs={}, timeout=2.0):
+    """Run a function in a background thread and return its result, or None if it times out."""
+    result = [None]
+    exception = [None]
+    
+    def target():
+        try:
+            result[0] = func(*args, **kwargs)
+        except Exception as e:
+            exception[0] = e
+            
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout)
+    
+    if thread.is_alive():
+        return None
+    if exception[0]:
+        raise exception[0]
+    return result[0]
+
 
 # ──────────────────────────────────────────────────────────
 # Cache constants
@@ -127,13 +152,19 @@ def get_vix_snapshot() -> VixSnapshot:
         return _vix_cache
 
     snap = VixSnapshot()
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        _vix_cache = snap
+        return snap
+
     try:
         ticker = _get_real_ticker("^VIX")
         if ticker is None:
             return snap
 
-        info = ticker.fast_info
-        vix = getattr(info, 'last_price', None) or getattr(info, 'regularMarketPrice', None)
+        info = _run_with_timeout(lambda: ticker.fast_info, timeout=2.0)
+        vix = None
+        if info:
+            vix = getattr(info, 'last_price', None) or getattr(info, 'regularMarketPrice', None)
 
         if vix and vix > 0:
             snap.vix = float(vix)
@@ -192,6 +223,11 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
     """
     snap = OptionsSnapshot(symbol=symbol)
 
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        snap.reason = "options_disabled"
+        _fill_sigma_fallback(snap)
+        return snap
+
     ticker = _get_real_ticker(symbol)
     if ticker is None:
         snap.reason = "no_ticker"
@@ -199,8 +235,10 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     # ── Current price ──
     try:
-        fi = ticker.fast_info
-        price = getattr(fi, 'last_price', 0) or getattr(fi, 'regularMarketPrice', 0)
+        fi = _run_with_timeout(lambda: ticker.fast_info, timeout=2.0)
+        price = 0
+        if fi:
+            price = getattr(fi, 'last_price', 0) or getattr(fi, 'regularMarketPrice', 0)
         snap.price = float(price) if price else 0.0
     except Exception:
         snap.price = 0.0
@@ -211,7 +249,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     # ── Options chain ──
     try:
-        expiries = ticker.options  # tuple of date strings
+        expiries = _run_with_timeout(lambda: ticker.options, timeout=2.0)
     except Exception as e:
         logger.debug("options.options list failed for {}: {}", symbol, e)
         snap.reason = "no_expiries"
@@ -234,7 +272,10 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
     snap.is_expiry_week = snap.days_to_expiry <= 5
 
     try:
-        chain = ticker.option_chain(target_expiry)
+        import pandas as pd
+        chain = _run_with_timeout(lambda: ticker.option_chain(target_expiry), timeout=2.0)
+        if chain is None:
+            raise TimeoutError("options chain download timed out")
         calls = chain.calls
         puts  = chain.puts
     except Exception as e:
@@ -535,6 +576,9 @@ def get_options_score(symbol: str, current_price: float = 0.0) -> Tuple[int, str
     Quick accessor for strategy.py — returns (score, reason).
     Score range: -20 (very bearish signal) to +20 (very bullish signal).
     """
+    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        return 0, "options_disabled"
+
     try:
         snap = get_options_snapshot(symbol)
         # If price changed significantly since cache, invalidate sigma check

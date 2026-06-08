@@ -174,7 +174,16 @@ LEVERAGED_MAX_HOLD_HOURS = int(os.getenv("LEVERAGED_MAX_HOLD_HOURS", "24"))
 # 레버리지 ETF 익절 목표 (일반 종목보다 빠르게)
 LEVERAGED_TAKE_PROFIT_PCT = float(os.getenv("LEVERAGED_TAKE_PROFIT_PCT", "0.02"))  # 2%
 
-# Technical indicators
+# ==============================================
+# FRED Macro Settings
+# ==============================================
+
+# Macro Blind Policy: what to do when FRED API fails or < 7/10 indicators succeed
+# PENALTY (default): score = -25 (partial headwind, still allows cautious trading)
+# BLOCK:             score = -100 (hard block, no new entries during data blackout)
+# NEUTRAL:           score = 0   (ignore macro failure, rely on other signals)
+MACRO_BLIND_POLICY = os.getenv("MACRO_BLIND_POLICY", "PENALTY").upper()
+
 RSI_OVERSOLD = int(os.getenv("RSI_OVERSOLD", "30"))
 RSI_OVERBOUGHT = int(os.getenv("RSI_OVERBOUGHT", "70"))
 MFI_OVERBOUGHT = int(os.getenv("MFI_OVERBOUGHT", "80"))

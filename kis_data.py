@@ -348,14 +348,18 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
     if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true" and symbol.upper() not in macro_whitelist:
         logger.warning("yfinance daily OHLCV fallback bypassed for {} because DISABLE_OPTIONS_FLOW=true", symbol)
         return None
-        
+
+    # KIS 심볼 → yfinance 심볼 변환 (e.g. BRKB → BRK-B)
+    YF_SYMBOL_MAP = {"BRKB": "BRK-B", "BRKB": "BRK-B"}
+    yf_symbol = YF_SYMBOL_MAP.get(symbol.upper(), symbol)
+
     try:
         import yfinance as yf
         # 방어벽: data_proxy에 의해 yf.Ticker가 KISTickerProxy로 패치된 경우 원본 사용
         if hasattr(yf, "_original_yf_Ticker"):
-            ticker = yf._original_yf_Ticker(symbol)
+            ticker = yf._original_yf_Ticker(yf_symbol)
         else:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(yf_symbol)
         period_str = "max"
         if days <= 5: period_str = "5d"
         elif days <= 20: period_str = "1mo"
@@ -365,15 +369,15 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
         elif days <= 500: period_str = "2y"
         elif days <= 1250: period_str = "5y"
         elif days <= 2500: period_str = "10y"
-        
+
         df = ticker.history(period=period_str)
         if df is not None and not df.empty:
             if len(df) > days:
                 df = df.tail(days)
             return df
     except Exception as e:
-        logger.error("yfinance fallback failed for {}: {}", symbol, e)
-        
+        logger.error("yfinance fallback failed for {} (yf_symbol={}): {}", symbol, yf_symbol, e)
+
     return None
 
 
