@@ -246,10 +246,7 @@ class StrategyEngine:
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         current_regime = getattr(self, '_last_regime', '')
 
-        if current_regime in _bear_regimes:
-            _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
-            if symbol not in _allowed_in_bear:
-                return EntrySignal("HOLD", 0, f"BEAR_REGIME_BLOCK: {current_regime} only inverse/defensive allowed", 0)
+        # BEAR_REGIME_BLOCK moved to the end of check_entry to support High-Score Bypass
 
         # 2. Earnings Risk Guard
         try:
@@ -424,6 +421,15 @@ class StrategyEngine:
             pass
 
         confidence = min(100, max(0, confidence))
+
+        # BEAR_REGIME_BLOCK with High-Score (>= 80) Bypass
+        if current_regime in _bear_regimes:
+            _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
+            if symbol not in _allowed_in_bear:
+                if confidence < 80:
+                    return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 80)", current_price)
+                else:
+                    setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 80)"
 
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
