@@ -82,18 +82,19 @@ UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02
 # ==============================================
 
 # Take profit and stop loss — 스윙 트레이딩 기준
-# SL: 4% — ATR이 2-3%인 스윙 종목은 2.5%면 노이즈에 매일 털림
-# TP: 12% — 스윙은 크게 먹어야 손익비 양수 확보
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.12"))   # 12% TP (스윙 표준)
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.04"))        # 4% SL (ATR 노이즈 흡수)
-BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.03"))  # 약세장 3% 타이트
-ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "1.5"))  # 1.5x ATR
+# SL: 5% — 대형주 ATR 2~3%의 2배 = 노이즈 흡수하면서 리스크 통제
+# TP: 12% — R/R 2.4:1 유지 (승률 42% 이상이면 기댓값 양수)
+# BEAR_HARD_STOP: 5% — 약세장에서도 스윙 노이즈 흡수 필요 (3%는 1xATR = 단타 기준)
+TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.12"))       # 12% TP (스윙 표준, 유지)
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.05"))           # 5% SL (2x ATR, 4%→5%)
+BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.05")) # 5% (약세장도 동일, 3%→5%)
+ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.0")) # 2x ATR (1.5→2.0)
 ECON_EVENT_GUARD_ENABLED = False  # Disable daily econ calendar block to trade normally on CPI/PCE days
 
 
-# Trailing Stop — 스윙: 수익 보호를 넉넉하게
-TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.04"))  # 4% 수익부터 트레일링
-TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.02"))         # 고점 -2% 트레일링
+# Trailing Stop — 수익이 충분히 쌓인 후에 트레일링 시작
+TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.06"))  # 6% 수익부터 트레일링 (4%→6%)
+TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.03"))         # 고점 -3% 트레일링 (2%→3%)
 
 # Daily trade limit — 스윙 진입 기회 충분히 허용
 MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "15"))
