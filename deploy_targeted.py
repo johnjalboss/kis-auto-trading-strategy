@@ -9,9 +9,9 @@ KEY = 'id_rsa'
 SERVER = 'ubuntu@141.148.172.12'
 REMOTE_DIR = '/home/ubuntu/kis-auto-trading'
 
-# Only the files that changed this session (v1.6.0 System Optimizations)
 CHANGED_FILES = [
-    'config.py'
+    'config.py',
+    'strategy.py'
 ]
 
 def scp(local, remote):

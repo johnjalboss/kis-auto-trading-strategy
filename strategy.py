@@ -1017,15 +1017,17 @@ class StrategyEngine:
                             price, pnl_pct)
         
         # Dynamic Trailing profit lock: Once up, trail from peak (lock in gains)
-        trail_activate = 0.03
-        trail_dist = 0.025
+        trail_activate = config.TRAILING_TRIGGER_PCT
+        trail_dist = config.TRAILING_STOP_PCT
         
         if "BULL" in current_regime:
-            trail_activate = 0.04   # Give more room before activating trail (+4%)
-            trail_dist = 0.035      # Looser trail for big winners
+            # Let winners run: raise activation trigger and widen trailing distance
+            trail_activate *= 1.33
+            trail_dist *= 1.33
         elif current_regime in bear_regimes or current_regime in choppy_regimes:
-            trail_activate = 0.02   # Activate trail faster (+2%) to lock in profits
-            trail_dist = 0.015      # Tight trail (-1.5%)
+            # Lock in profits quickly: lower activation trigger and tighten trailing distance
+            trail_activate *= 0.67
+            trail_dist *= 0.67
             
         if pos.high_since_entry > 0:
             peak_pnl = (pos.high_since_entry - pos.entry_price) / pos.entry_price
