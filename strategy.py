@@ -280,19 +280,7 @@ class StrategyEngine:
         except Exception:
             pass
 
-        # 5. Market Breadth Guard
-        try:
-            import kis_data as _kd
-            _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
-            if _spy_df is not None and len(_spy_df) >= 22:
-                _spy_close = _spy_df['Close']
-                _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
-                _spy_current = float(_spy_close.iloc[-1])
-                if _spy_current < _spy_sma20 * 0.995:
-                    if symbol not in getattr(config, 'INVERSE_ETFS', set()):
-                        return EntrySignal("HOLD", 0, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f})", 0)
-        except Exception:
-            pass
+        # BREADTH_GUARD moved to the end of check_entry to support High-Score Bypass
 
         # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
@@ -430,6 +418,24 @@ class StrategyEngine:
                     return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 80)", current_price)
                 else:
                     setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 80)"
+
+        # 5. Market Breadth Guard with High-Score (>= 95) Bypass
+        try:
+            import kis_data as _kd
+            _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
+            if _spy_df is not None and len(_spy_df) >= 22:
+                _spy_close = _spy_df['Close']
+                _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
+                _spy_current = float(_spy_close.iloc[-1])
+                if _spy_current < _spy_sma20 * 0.995:
+                    _allowed_in_downtrend = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
+                    if symbol not in _allowed_in_downtrend:
+                        if confidence < 95:
+                            return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 95)", current_price)
+                        else:
+                            setup_reason += f" | BREADTH_BYPASS (Score {confidence} >= 95)"
+        except Exception as e:
+            logger.debug("Breadth guard check failed: {}", e)
 
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
