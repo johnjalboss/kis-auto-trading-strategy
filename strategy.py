@@ -964,6 +964,10 @@ class StrategyEngine:
         hard_stop_price = pos.entry_price * (1 - hard_stop_pct)
         effective_stop = max(stop_price, hard_stop_price)
         
+        # Break-even stop for scale-out position
+        if pos.half_sold:
+            effective_stop = max(effective_stop, pos.entry_price * 1.005)
+        
         if price <= effective_stop:
             reason = f"STOP: ${price:.2f} <= ${effective_stop:.2f} (ATR={pos.atr_at_entry:.2f})"
             if effective_stop == hard_stop_price:
@@ -1008,25 +1012,46 @@ class StrategyEngine:
     
     def _check_take_profit(self, pos: Position, price: float,
                           pnl_pct: float, cfg: PhaseConfig) -> Optional[ExitSignal]:
-        """Take profit check with trailing profit lock"""
-        # Dynamic HMM Regime Scaling for Take Profit
+        """Take profit check with Scale-Out (1.5R half-sell, 3.0R final sell) and regime scaling"""
         current_regime = getattr(self, '_last_regime', '')
         bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
         choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         
         tp_pct = cfg.take_profit_pct
+        tp_mult = 1.0
         if current_regime in bear_regimes:
-            tp_pct *= 0.65       # Fast cash-outs in bear markets
+            tp_mult = 0.65       # Fast cash-outs in bear markets
         elif current_regime in choppy_regimes:
-            tp_pct *= 0.75       # Fast cash-outs in choppy ranges
+            tp_mult = 0.75       # Fast cash-outs in choppy ranges
         elif "BULL" in current_regime:
-            tp_pct *= 1.40       # Let winners run in bull trends!
+            tp_mult = 1.40       # Let winners run in bull trends!
             
-        # Standard TP
-        if pnl_pct >= tp_pct and not pos.half_sold:
-            return ExitSignal("SELL_ALL",
-                            f"DYNAMIC_TP {pnl_pct:+.1%} >= {tp_pct:.1%} (Regime: {current_regime or 'BULL'})",
-                            price, pnl_pct)
+        tp_pct *= tp_mult
+
+        # 1R Risk (Distance to stop loss) calculation
+        entry_stop_price = getattr(pos, 'stop_price', pos.entry_price * 0.95)
+        risk_1r = pos.entry_price - entry_stop_price
+        if risk_1r <= 0:
+            risk_1r = pos.entry_price * 0.05
+            
+        # Scale risk based on regime multiplier
+        scaled_risk_1r = risk_1r * tp_mult
+        
+        # 1.5R and 3.0R targets
+        target_15r = pos.entry_price + (1.5 * scaled_risk_1r)
+        target_30r = pos.entry_price + (3.0 * scaled_risk_1r)
+            
+        # Scale-Out TP Exits
+        if not pos.half_sold:
+            if price >= target_15r:
+                return ExitSignal("SELL_HALF",
+                                f"SCALE_OUT_1.5R: {pnl_pct:+.1%} >= 1.5R target (${target_15r:.2f})",
+                                price, pnl_pct)
+        else:
+            if price >= target_30r:
+                return ExitSignal("SELL_ALL",
+                                f"FINAL_TP_3.0R: {pnl_pct:+.1%} >= 3.0R target (${target_30r:.2f})",
+                                price, pnl_pct)
         
         # Dynamic Trailing profit lock: Once up, trail from peak (lock in gains)
         trail_activate = config.TRAILING_TRIGGER_PCT

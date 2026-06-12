@@ -132,6 +132,15 @@ class DynamicScreener:
             mode = ScreenMode.BREAKOUT
             candidates = self._screen_breakout()
 
+        # Inject Local Smart Money candidates first (yield maximization)
+        try:
+            smart_money_cands = self._gather_smart_money_candidates()
+            if smart_money_cands:
+                logger.info("🔑 Local Smart Money Screener: Found {} candidates. Injecting at top.", len(smart_money_cands))
+                candidates = list(dict.fromkeys(smart_money_cands + candidates))
+        except Exception as sm_err:
+            logger.error("Failed to inject local smart money candidates: {}", sm_err)
+
         # Dynamic Downtrend Ticker Injection (Relative Strength & Hedging)
         try:
             import kis_data as _kd
@@ -259,6 +268,220 @@ class DynamicScreener:
     # Screening Methods (KIS API 기반)
     # ==============================================
     
+    def _gather_smart_money_candidates(self) -> List[str]:
+        """
+        [QUANT EMBEDDED] 스마트 머니 수급 스크리너 엔진 로컬 포팅 버전.
+        - Russell 1000에서 거래량 급증 + 캔들 윗꼬리 필터 + EMA정배열 + 스퀴즈 충족 종목 검출.
+        """
+        import kis_data
+        import concurrent.futures
+        import threading
+        import pandas as pd
+        import numpy as np
+        import config
+
+        # SPY relative strength index 10d pct change
+        spy_pct_10d = 0.0
+        try:
+            spy_df = kis_data.get_daily_ohlcv("SPY", days=20)
+            if spy_df is not None and len(spy_df) >= 11:
+                spy_pct_10d = ((float(spy_df['Close'].iloc[-1]) - float(spy_df['Close'].iloc[-11])) / float(spy_df['Close'].iloc[-11])) * 100
+        except Exception:
+            pass
+
+        # 300 candidates sampled from base universe to avoid API 429
+        import random
+        all_symbols = list(BASE_UNIVERSE)
+        random.shuffle(all_symbols)
+        symbols_to_scan = all_symbols[:config.SCREENER_MAX_CANDIDATES]
+
+        passed_candidates = []
+        _lock = threading.Lock()
+
+        def _scan_symbol_smart(sym: str):
+            try:
+                # [ANTI-OVERLOAD] Oracle VM CPU/Network Shield
+                # Staggered random start delay (0 to 0.4s) to spread CPU spikes and avoid API 429 burst limits
+                import time as _time
+                import random as _rand
+                _time.sleep(_rand.random() * 0.4)
+
+                # 240 days required to compute 200 SMA and weekly indicators
+                df = kis_data.get_daily_ohlcv(sym, days=240)
+                if df is None or len(df) < 50:
+                    return
+
+                # Cache it for score_stock step
+                with _lock:
+                    self._ohlcv_cache[sym] = df
+
+                # 1. Historical data preparation
+                prior_history = df.iloc[:-1]
+                today_row = df.iloc[-1]
+                
+                # Prior average volume (20 trading days)
+                prior_vol_20d = prior_history["Volume"].tail(20)
+                avg_vol_20d = prior_vol_20d.mean()
+                if avg_vol_20d == 0:
+                    return
+                    
+                today_vol = float(today_row["Volume"])
+                volume_ratio = today_vol / avg_vol_20d
+                
+                # Minimum volume ratio filter (Default 2.0x)
+                if volume_ratio < 2.0:
+                    return
+                    
+                today_close = float(today_row["Close"])
+                today_open = float(today_row["Open"])
+                today_high = float(today_row["High"])
+                today_low = float(today_row["Low"])
+                
+                # Price check (minimum 2.0$, max 500$)
+                if not (2.0 <= today_close <= 500.0):
+                    return
+
+                # Price Change (must be +1.5% to +8.0%)
+                yesterday_close = float(prior_history["Close"].iloc[-1])
+                pct_change = ((today_close - yesterday_close) / yesterday_close) * 100
+                if not (1.5 <= pct_change <= 8.0):
+                    return
+
+                # Transaction value check (min $3M)
+                trans_value = today_close * today_vol
+                if trans_value < 3000000:
+                    return
+
+                # Closing range (Close-to-High Ratio: >= 0.60, top 40% of bar)
+                high_low_range = today_high - today_low
+                closing_range = (today_close - today_low) / high_low_range if high_low_range != 0 else 0.5
+                if closing_range < 0.60:
+                    return
+                    
+                # Churning/Distribution Filter:
+                # Reject if volume is high (>=3x) but price progress is flat (<1.5%)
+                if volume_ratio >= 3.0 and pct_change < 1.5:
+                    return
+
+                # Faded Gap-Up Filter:
+                # If gap-up > 3.0% but closed lower than open
+                gap_pct = ((today_open - yesterday_close) / yesterday_close) * 100
+                if gap_pct > 3.0 and today_close < today_open:
+                    return
+
+                # Relative Strength vs SPY (10-day):
+                stock_close_10d = float(df["Close"].iloc[-11]) if len(df) >= 11 else float(df["Close"].iloc[0])
+                stock_pct_10d = ((today_close - stock_close_10d) / stock_close_10d) * 100
+                rs_10d = stock_pct_10d - spy_pct_10d
+                if rs_10d < -5.0:
+                    return
+
+                # 2. Moving Average Calculations (5-EMA, 20-EMA, 200-SMA)
+                full_close = df["Close"]
+                ema5 = full_close.ewm(span=5, adjust=False).mean()
+                ema20 = full_close.ewm(span=20, adjust=False).mean()
+                sma200 = full_close.rolling(window=200).mean()
+                
+                today_ema5 = float(ema5.iloc[-1])
+                today_ema20 = float(ema20.iloc[-1])
+                today_sma200 = float(sma200.iloc[-1]) if len(sma200) >= 200 else today_ema20 * 0.9  # fallback
+
+                # Perfect Trend Alignment Filter (5-EMA > 20-EMA > 200-SMA)
+                if not (today_ema5 > today_ema20 > today_sma200):
+                    return
+                
+                # Close price relative to 20-EMA
+                if today_close <= today_ema20:
+                    return
+                    
+                dist_from_ema20 = ((today_close - today_ema20) / today_ema20) * 100
+                if dist_from_ema20 > 5.0: # max 5% extension from EMA20
+                    return
+                
+                # 3. Consolidation Squeeze Volatility (prior 20 days daily volatility <= 1.8%)
+                prior_close = prior_history["Close"].tail(20)
+                daily_returns = prior_close.pct_change().dropna()
+                prior_volatility = float(daily_returns.std() * 100)
+                if prior_volatility > 1.8:
+                    return
+                
+                # 4. Breakouts & Crosses
+                prior_high_20d = float(prior_history["High"].tail(20).max())
+                is_breakout_20d = today_close > prior_high_20d
+                
+                # 5/20 EMA Golden Cross (within last 3 days)
+                is_golden_cross = False
+                for i in range(-1, -4, -1):
+                    if i >= -len(ema5):
+                        past_ema5 = ema5.iloc[i]
+                        past_ema20 = ema20.iloc[i]
+                        prev_ema5 = ema5.iloc[i-1] if i-1 >= -len(ema5) else past_ema5
+                        prev_ema20 = ema20.iloc[i-1] if i-1 >= -len(ema20) else past_ema20
+                        if past_ema5 > past_ema20 and prev_ema5 <= prev_ema20:
+                            is_golden_cross = True
+                            break
+
+                # 5. Early Influx Scoring (100 points maximum)
+                # A. Volume Breakout (30 pts)
+                vol_pts = 0
+                if 2.0 <= volume_ratio < 3.0:
+                    vol_pts = 15 + (volume_ratio - 2.0) * 15
+                elif 3.0 <= volume_ratio <= 6.0:
+                    vol_pts = 30
+                elif volume_ratio > 6.0:
+                    vol_pts = max(20, 30 - (volume_ratio - 6.0) * 2)
+                    
+                # B. Price Sweet Spot (20 pts)
+                price_pts = 0
+                if 1.5 <= pct_change <= 5.0:
+                    price_pts = 20
+                elif 5.0 < pct_change <= 8.0:
+                    price_pts = 20 - (pct_change - 5.0) * 2
+                else:
+                    price_pts = 10
+                    
+                # C. Squeeze Volatility (25 pts)
+                squeeze_pts = 0
+                if prior_volatility < 1.5:
+                    squeeze_pts = 25
+                elif 1.5 <= prior_volatility < 2.5:
+                    squeeze_pts = 25 - (prior_volatility - 1.5) * 25
+                    
+                # D. Technical Setup (25 pts)
+                tech_pts = 0
+                if dist_from_ema20 <= 3.0:
+                    tech_pts += 15
+                elif 3.0 < dist_from_ema20 <= 8.0:
+                    tech_pts += max(5, 15 - int(dist_from_ema20 - 3.0) * 2)
+                else:
+                    tech_pts += 3
+                    
+                breakout_pts = 0
+                if is_golden_cross:
+                    breakout_pts = 10
+                elif is_breakout_20d:
+                    breakout_pts = 5
+                    
+                tech_pts += breakout_pts
+                tech_pts = min(25, tech_pts)
+                
+                total_score = vol_pts + price_pts + squeeze_pts + tech_pts
+                
+                # Minimum 70 points to pass as high confidence Smart Money target
+                if total_score >= 70:
+                    with _lock:
+                        passed_candidates.append((sym, total_score))
+            except Exception:
+                pass
+
+        # Concurrent scan using 8 threads (VM safe)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            executor.map(_scan_symbol_smart, symbols_to_scan)
+            
+        passed_candidates.sort(key=lambda x: x[1], reverse=True)
+        results = [x[0] for x in passed_candidates]
+        return results
+
     def _gather_squeeze_candidates(self) -> List[str]:
         """
         BB Squeeze + SPY 상대강도 기반 후보 종목 수집 (병렬 처리 v2).

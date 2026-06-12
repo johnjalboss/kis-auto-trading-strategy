@@ -424,8 +424,19 @@ class BotOrchestrator:
                     curr_price = self.trader.get_price(sym)
                     exit_sig = self.strategy.check_exit(sym, curr_price)
                     if exit_sig and exit_sig.action != "HOLD":
-                        logger.warning("? EXIT TRIGGERED: {} -> {} ({})", sym, exit_sig.action, exit_sig.reason)
-                        self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                        logger.warning("🚨 EXIT TRIGGERED: {} -> {} ({})", sym, exit_sig.action, exit_sig.reason)
+                        if exit_sig.action == "SELL_HALF":
+                            sell_qty = max(1, pos.quantity // 2)
+                            if sell_qty >= pos.quantity:
+                                logger.info("Only {} share(s) held for {}. Upgrading SELL_HALF to SELL_ALL.", pos.quantity, sym)
+                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                                self.strategy.remove_position(sym)
+                            else:
+                                self.phase_5_execute_trade(sym, "SELL", sell_qty, exit_sig.price, exit_sig.reason)
+                                self.strategy.mark_half_sold(sym)
+                        else:
+                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                            self.strategy.remove_position(sym)
                 except Exception as e:
                     logger.debug("Exit check failed for {}: {}", sym, e)
 
@@ -1408,7 +1419,18 @@ class BotOrchestrator:
                                         exit_sig = self.strategy.check_exit(sym, curr_price)
                                         if exit_sig and exit_sig.action != "HOLD":
                                             logger.warning(" FAST EXIT TRIGGERED: {} ({})", sym, exit_sig.reason)
-                                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                                            if exit_sig.action == "SELL_HALF":
+                                                sell_qty = max(1, pos.quantity // 2)
+                                                if sell_qty >= pos.quantity:
+                                                    logger.info("Only {} share(s) held for {}. Upgrading SELL_HALF to SELL_ALL.", pos.quantity, sym)
+                                                    self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                                                    self.strategy.remove_position(sym)
+                                                else:
+                                                    self.phase_5_execute_trade(sym, "SELL", sell_qty, exit_sig.price, exit_sig.reason)
+                                                    self.strategy.mark_half_sold(sym)
+                                            else:
+                                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
+                                                self.strategy.remove_position(sym)
                         except Exception as e:
                             logger.debug("Fast exit loop error: {}", e)
                             

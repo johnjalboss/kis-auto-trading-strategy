@@ -173,7 +173,7 @@ class PositionSizer:
             risk_parity = 0.05
             
         # 5. Blend & Calculate Optimal Size
-        optimal = (half_kelly * 0.25 + vol_position * 0.45 + risk_parity * 0.30)
+        optimal = (half_kelly * 0.55 + vol_position * 0.25 + risk_parity * 0.20)
         
         # 6. Apply REGIME-AWARE Portfolio Risk Scaling (The Quant Shield)
         bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
@@ -304,9 +304,9 @@ class PositionSizer:
             optimal *= 1.15
             details.append("ULTRA_HIGH_SHARPE_BONUS")
             
-        # Apply capital utilization boost multiplier (default 1.8x)
+        # Apply capital utilization boost multiplier (default 2.2x)
         # to achieve near 100% capital utilization across slots.
-        capital_scale = float(os.getenv("CAPITAL_UTILIZATION_SCALE", "1.8"))
+        capital_scale = float(os.getenv("CAPITAL_UTILIZATION_SCALE", "2.2"))
         optimal *= capital_scale
         details.append(f"CAPITAL_SCALE (Scaled by {capital_scale}x)")
 
