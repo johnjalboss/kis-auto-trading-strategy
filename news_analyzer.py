@@ -82,6 +82,71 @@ class NewsAnalyzer:
         self._cache: Dict[str, tuple] = {}
         self._cache_ttl = 7200  # 2 hours (Finnhub free plan: 60 calls/min, conserve quota)
     
+    def _judge_with_gemini(self, symbol: str, news_items: List[NewsItem]) -> Optional[tuple]:
+        """
+        Judge news sentiment using Gemini Free Tier API.
+        Returns: (sentiment: str, score: float, reason: str) or None if failed.
+        """
+        import os
+        import json
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.debug("GEMINI_API_KEY not found. Skipping Gemini sentiment analysis.")
+            return None
+            
+        if not news_items:
+            return "NEUTRAL", 0.0, "No news items to judge"
+            
+        # Limit to top 8 news items to minimize prompt size and token usage
+        headlines = [item.title for item in news_items[:8]]
+        
+        prompt = (
+            f"You are an expert financial news sentiment judge. Analyze the short-term market impact of the following news headlines for stock symbol '{symbol}'.\n"
+            "Determine if the overall sentiment is BULLISH (likely to drive price up in the next 1-5 days), BEARISH (likely to drive price down), or NEUTRAL.\n"
+            "Provide your output strictly in JSON format with keys 'sentiment' and 'reason'. The 'sentiment' value must be exactly one of 'BULLISH', 'BEARISH', or 'NEUTRAL'. Keep 'reason' under 120 characters.\n\n"
+            "Headlines:\n"
+            + "\n".join(f"- {h}" for h in headlines) + "\n\n"
+            "Output JSON only (no markdown block, no ```json):"
+        )
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        try:
+            # Short timeout to prevent blocking the trading execution thread
+            resp = requests.post(url, headers=headers, json=payload, timeout=6)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                text = res_json['candidates'][0]['content']['parts'][0]['text']
+                data = json.loads(text.strip())
+                sentiment = data.get("sentiment", "NEUTRAL").upper()
+                reason = data.get("reason", "Analyzed by Gemini")
+                
+                if sentiment not in ["BULLISH", "BEARISH", "NEUTRAL"]:
+                    sentiment = "NEUTRAL"
+                    
+                if sentiment == "BULLISH":
+                    score = 80.0
+                elif sentiment == "BEARISH":
+                    score = -80.0
+                else:
+                    score = 0.0
+                    
+                logger.info("[GEMINI_JUDGE] {} is evaluated as {} because: {}", symbol, sentiment, reason)
+                return sentiment, score, reason
+        except Exception as e:
+            logger.warning("[GEMINI_JUDGE] Failed to judge with Gemini for {}: {}. Falling back to default scoring.", symbol, e)
+            
+        return None
+
     def analyze(self, symbol: str) -> NewsSentiment:
         """Analyze news sentiment for a symbol"""
         # Check cache
@@ -96,7 +161,46 @@ class NewsAnalyzer:
         if not news_items:
             return self._neutral_sentiment(symbol)
         
-        # Calculate sentiment
+        # Try Gemini Sentiment Judge first
+        gemini_result = self._judge_with_gemini(symbol, news_items)
+        if gemini_result:
+            overall, sentiment_score, reason = gemini_result
+            positive_count = sum(1 for item in news_items if item.sentiment == "POSITIVE")
+            negative_count = sum(1 for item in news_items if item.sentiment == "NEGATIVE")
+            
+            # Check for breaking news (last hour)
+            breaking = None
+            has_breaking = False
+            for item in news_items:
+                if (datetime.now() - item.published).seconds < 3600:
+                    has_breaking = True
+                    breaking = item.title
+                    break
+            
+            if overall == "BULLISH":
+                recommendation = f"FAVORABLE (Gemini) - {reason}"
+            elif overall == "BEARISH":
+                recommendation = f"AVOID (Gemini) - {reason}"
+            else:
+                recommendation = f"NEUTRAL (Gemini) - {reason}"
+                
+            result = NewsSentiment(
+                symbol=symbol,
+                overall_sentiment=overall,
+                sentiment_score=sentiment_score,
+                news_count=len(news_items),
+                positive_count=positive_count,
+                negative_count=negative_count,
+                recent_news=news_items[:5],
+                has_breaking_news=has_breaking,
+                breaking_headline=breaking,
+                recommendation=recommendation
+            )
+            
+            self._cache[symbol] = (result, datetime.now())
+            return result
+
+        # Fallback to default keyword-based sentiment scoring
         total_score = 0
         positive_count = 0
         negative_count = 0

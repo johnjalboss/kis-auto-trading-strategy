@@ -114,6 +114,18 @@ class SmartOrderExecutor:
             current_price: Current market price
             urgency: LOW, MEDIUM, HIGH
         """
+        # [Alpha Slicing] 3주 이상의 매수 주문은 3분 간격 3분할 Slicing (TWAP) 기법 적용
+        if side == "BUY" and quantity >= 3:
+            return ExecutionPlan(
+                order_type=OrderType.TWAP,
+                num_slices=3,
+                slice_size=quantity // 3,
+                interval_seconds=180,
+                limit_offset_pct=0.005,  # 0.5% above market to guarantee fill
+                max_participation=0.10,
+                urgency=urgency
+            )
+
         order_value = quantity * current_price
         
         # Small orders (our typical case: 1 share of expensive stock)
@@ -330,45 +342,72 @@ class SmartOrderExecutor:
     
     def _execute_twap(self, order: SmartOrder, price: float, plan: ExecutionPlan):
         """Execute using Time-Weighted Average Price"""
+        import random
         total_filled = 0
         total_cost = 0
         
         for i in range(plan.num_slices):
-            slice_qty = min(plan.slice_size, order.total_quantity - total_filled)
+            # Calculate slice quantity. Ensure last slice gets all remaining quantity.
+            if i == plan.num_slices - 1:
+                slice_qty = order.total_quantity - total_filled
+            else:
+                slice_qty = min(plan.slice_size, order.total_quantity - total_filled)
             
             if slice_qty <= 0:
                 break
             
-            # Simulate slight price movement
-            price_adj = price * (1 + np.random.uniform(-0.001, 0.001))
-            
-            if order.side == "BUY":
-                limit = price_adj * (1 + plan.limit_offset_pct)
-            else:
-                limit = price_adj * (1 + plan.limit_offset_pct)
+            # Use standard random instead of numpy to conserve memory and CPU on Oracle VM
+            price_adj = price * (1 + random.uniform(-0.001, 0.001))
+            limit = price_adj * (1 + plan.limit_offset_pct)
             
             # Execute slice
+            fill_price = limit
+            slice_filled = False
+            
             if self.trader:
                 try:
                     if order.side == "BUY":
                         result = self.trader.buy(order.symbol, slice_qty, limit)
                     else:
-                        # Critical: Force fill on sell slices
                         result = self.trader.sell(order.symbol, slice_qty, limit, ensure_fill=True)
                     
-                    fill_price = result.get('fill_price', limit)
-                except:
-                    fill_price = limit
+                    order_id_from_kis = None
+                    if result:
+                        order_id_from_kis = (getattr(result, 'order_id', None) or 
+                                             getattr(result, 'odno', None) or
+                                             (result.get('odno') if isinstance(result, dict) else None) or
+                                             (result.get('order_id') if isinstance(result, dict) else None))
+                    
+                    if order_id_from_kis:
+                        logger.info("⏳ TWAP Slice {}/{} order placed: {} for {} shares of {}. Waiting 30s for fill...", 
+                                    i+1, plan.num_slices, order_id_from_kis, slice_qty, order.symbol)
+                        is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=30)
+                        
+                        if is_filled:
+                            fill_price = getattr(result, 'price', limit) or limit
+                            total_filled += slice_qty
+                            total_cost += fill_price * slice_qty
+                            slice_filled = True
+                            logger.info("✅ TWAP Slice {}/{} filled at ${:.2f}", i+1, plan.num_slices, fill_price)
+                        else:
+                            logger.warning("❌ TWAP Slice {}/{} did NOT fill. Cancelling order to prevent layout drift...", i+1, plan.num_slices)
+                            exchange_to_use = getattr(result, 'exchange', None) or self.trader._exchange_mapper.get_exchange(order.symbol)
+                            self.trader.cancel_order(order_id_from_kis, order.symbol, slice_qty, exchange_to_use, order.side)
+                    else:
+                        logger.warning("❌ TWAP Slice {}/{} failed: KIS API did not return order ID.", i+1, plan.num_slices)
+                except Exception as e:
+                    logger.error("❌ TWAP Slice {}/{} failed with error: {}", i+1, plan.num_slices, e)
             else:
+                # Simulation mode
                 fill_price = limit
-            
-            total_filled += slice_qty
-            total_cost += fill_price * slice_qty
+                total_filled += slice_qty
+                total_cost += fill_price * slice_qty
+                slice_filled = True
             
             order.child_orders.append({
                 'type': 'TWAP_SLICE',
                 'slice': i + 1,
-                'quantity': slice_qty,
+                'quantity': slice_qty if slice_filled else 0,
                 'price': fill_price,
                 'time': datetime.now().isoformat()
             })
@@ -377,28 +416,31 @@ class SmartOrderExecutor:
             order.filled_quantity = total_filled
             order.updated_at = datetime.now()
             
-            # Wait between slices (in real execution)
-            time.sleep(plan.interval_seconds)
+            # Wait between slices (only if there are remaining slices)
+            if i < plan.num_slices - 1 and total_filled < order.total_quantity:
+                logger.info("⏳ Waiting {}s before placing next TWAP slice...", plan.interval_seconds)
+                time.sleep(plan.interval_seconds)
         
-        # Calculate average
+        # Calculate average fill price based on successfully filled slices
         order.avg_fill_price = total_cost / total_filled if total_filled > 0 else price
         
         if order.side == "BUY":
-            order.slippage_pct = (order.avg_fill_price - price) / price
+            order.slippage_pct = (order.avg_fill_price - price) / price if price > 0 else 0
         else:
-            order.slippage_pct = (price - order.avg_fill_price) / price
+            order.slippage_pct = (price - order.avg_fill_price) / price if price > 0 else 0
         
-        logger.info("TWAP order executed: {} {} {} @ {:.2f} (slippage: {:.2%})",
-                   order.side, total_filled, order.symbol,
+        logger.info("TWAP order execution finished: {} {}/{} {} @ {:.2f} (slippage: {:.2%})",
+                   order.side, total_filled, order.total_quantity, order.symbol,
                    order.avg_fill_price, order.slippage_pct)
         
-        # Send notification after first slice or completion
+        # Send notification upon completion
         if total_filled > 0:
             try:
                 from notification import get_notifier
-                get_notifier().alert_trade(order.side, order.symbol, order.avg_fill_price, "TWAP Execution Completed")
-            except Exception:
-                pass
+                get_notifier().alert_trade(order.side, order.symbol, order.avg_fill_price, 
+                                           f"TWAP Slicing Completed ({total_filled}/{order.total_quantity} shares)")
+            except Exception as e:
+                logger.debug("Failed to send TWAP notification: {}", e)
 
     
     def _execute_iceberg(self, order: SmartOrder, price: float, plan: ExecutionPlan):
