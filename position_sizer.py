@@ -75,8 +75,8 @@ def get_live_performance_metrics(db_path: str = "trades.db") -> Tuple[float, flo
         """
         df = pd.read_sql_query(query, conn)
         
-        if df.empty or len(df) < 5:
-            return default_win_rate, default_avg_win, default_avg_loss, f"DEFAULT_FALLBACK (Insufficient trades: {len(df)})"
+        if df.empty:
+            return default_win_rate, default_avg_win, default_avg_loss, "DEFAULT_FALLBACK (No DB trades)"
             
         # Filter out NaN values to prevent win rate deflation
         pnl_list = df['pnl_pct'].dropna().astype(float).tolist()
@@ -84,15 +84,29 @@ def get_live_performance_metrics(db_path: str = "trades.db") -> Tuple[float, flo
         wins = [x for x in pnl_list if x > 0]
         losses = [x for x in pnl_list if x <= 0]
         
-        win_rate = len(wins) / len(pnl_list)
-        avg_win = np.mean(wins) if wins else default_avg_win
-        avg_loss = abs(np.mean(losses)) if losses else default_avg_loss
+        live_win_rate = len(wins) / len(pnl_list) if pnl_list else default_win_rate
+        live_avg_win = np.mean(wins) if wins else default_avg_win
+        live_avg_loss = abs(np.mean(losses)) if losses else default_avg_loss
         
         # zero division guard
-        if avg_loss == 0:
-            avg_loss = 0.01
+        if live_avg_loss == 0:
+            live_avg_loss = 0.01
             
-        status_msg = f"LIVE_FEEDBACK_ACTIVE (Trades: {len(pnl_list)} | WinRate: {win_rate:.1%} | Win/Loss Ratio: {avg_win/avg_loss:.2f})"
+        num_trades = len(pnl_list)
+        if num_trades < 5:
+            # 베이지안 점진적 학습 기법 (Bayesian Interpolation)
+            # 거래 건수가 늘어남에 따라 디폴트 값에서 실제 실거래 통계치로 20%씩 비중을 자연스럽게 전환
+            weight = num_trades / 5.0
+            win_rate = default_win_rate * (1.0 - weight) + live_win_rate * weight
+            avg_win = default_avg_win * (1.0 - weight) + live_avg_win * weight
+            avg_loss = default_avg_loss * (1.0 - weight) + live_avg_loss * weight
+            status_msg = f"BAYESIAN_FEEDBACK (Trades: {num_trades} | Blend WinRate: {win_rate:.1%})"
+        else:
+            win_rate = live_win_rate
+            avg_win = live_avg_win
+            avg_loss = live_avg_loss
+            status_msg = f"LIVE_FEEDBACK_ACTIVE (Trades: {num_trades} | WinRate: {win_rate:.1%})"
+            
         return win_rate, avg_win, avg_loss, status_msg
         
     except Exception as e:

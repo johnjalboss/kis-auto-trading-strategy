@@ -1095,12 +1095,21 @@ class BotOrchestrator:
                 # [v1.1.8 BUG FIX] Only send alert if order confirmed FILLED (not just placed)
                 # KIS limit orders: rt_cd=0 means "accepted", not "filled"
                 # We wait briefly and check fill status to avoid phantom alerts
-                if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT]:
+                if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT, OrderType.TWAP]:
                     try:
                         from notification import get_notifier
                         notifier = get_notifier()
                         # Check if order was confirmed filled (order.status == FILLED)
                         if order.status == OrderStatus.FILLED:
+                            # Gemini Sentiment Judge 결과 추가 (매수 진입 시 텔레그램 연동)
+                            if action == "BUY":
+                                try:
+                                    from news_analyzer import get_news_analyzer
+                                    sentiment = get_news_analyzer().analyze(symbol)
+                                    if sentiment and sentiment.recommendation:
+                                        reason = f"{reason} | [Gemini] {sentiment.recommendation}"
+                                except Exception as se:
+                                    logger.debug("Failed to append Gemini sentiment to trade alert for {}: {}", symbol, se)
                             notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",

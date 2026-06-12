@@ -1040,6 +1040,20 @@ class StrategyEngine:
         # 1.5R and 3.0R targets
         target_15r = pos.entry_price + (1.5 * scaled_risk_1r)
         target_30r = pos.entry_price + (3.0 * scaled_risk_1r)
+        
+        # [Alpha Dynamic TP Clamping] Ensure 3.0R target represents between 7% and 22% profit
+        max_tp_pct = 0.22
+        min_tp_pct = 0.07
+        target_30r_pct = (target_30r - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
+        
+        if target_30r_pct > max_tp_pct:
+            target_30r = pos.entry_price * (1.0 + max_tp_pct)
+            target_15r = pos.entry_price + (target_30r - pos.entry_price) * 0.5
+            logger.debug("[DYNAMIC_TP] Clamped 30R target for {} from {:.1%} to max limit {:.1%}", pos.symbol, target_30r_pct, max_tp_pct)
+        elif target_30r_pct < min_tp_pct:
+            target_30r = pos.entry_price * (1.0 + min_tp_pct)
+            target_15r = pos.entry_price + (target_30r - pos.entry_price) * 0.5
+            logger.debug("[DYNAMIC_TP] Boosted 30R target for {} from {:.1%} to min threshold {:.1%}", pos.symbol, target_30r_pct, min_tp_pct)
             
         # Scale-Out TP Exits
         if not pos.half_sold:
