@@ -104,7 +104,14 @@ class BotOrchestrator:
             return result
         except Exception as e:
             self.state.modules_failed += 1
-            logger.debug("  -> {} skipped: {}", description, e)
+            # [Fail-Safe Audit] 리스크에 민감한 핵심 매크로 모듈 에러 시 강제 락다운 트리거
+            critical_risk_modules = ["geopolitical", "vix_structure", "hidden_markov_regime", "macro_news_analyzer", "macro"]
+            if description in critical_risk_modules:
+                logger.error("🚨 CRITICAL RISK MODULE FAILED: {}! Engaging Fail-Safe RISK_OFF Lockdown. Error: {}", description, e)
+                self.state.global_risk_level = "RISK_OFF"
+                self.state.max_exposure_pct = 0.2
+            else:
+                logger.warning("⚠️ Non-critical module failed/skipped: {}. Error: {}", description, e)
             return None
 
     # ==========================================
@@ -420,13 +427,14 @@ class BotOrchestrator:
             self._safe_import("liquidity_filter", _liq)
             
         except Exception as e:
-            logger.error("Screener Failed: {}. Using fallback universe.", e)
-            self.state.target_universe = self.FALLBACK_UNIVERSE[:] # Ensure universe is populated even on error
+            logger.error("🚨 Screener Failed: {}. Halting new entries to prevent random purchases.", e)
+            self.state.target_universe = [] # [Fail-Safe] 스크리너 장애 시 임의 매수 방지를 위해 진입 유니버스 완전 동결
+            self.state.screened_symbols = []
         
-        # Fallback: if screener returned 0 stocks, use core watchlist
+        # Fallback: if screener returned 0 stocks, keep it empty to protect portfolio
         if not self.state.target_universe:
-            logger.warning("  -> Screener returned NO results. Using FALLBACK_UNIVERSE.")
-            self.state.target_universe = self.FALLBACK_UNIVERSE[:]
+            logger.warning("⚠️ Screener returned NO results. Halting new entries for safety.")
+            self.state.target_universe = []
             self.state.screened_symbols = []
         else:
             # Already set in try/except, but ensure screened_symbols is updated

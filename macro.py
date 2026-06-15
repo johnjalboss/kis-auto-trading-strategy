@@ -170,7 +170,9 @@ class MacroAnalyzer:
     def analyze(self) -> MacroState:
         """Perform complete macro analysis"""
         if not self._fetch_data():
-            return MacroState(MarketRegime.NEUTRAL, 0.5, 0, [], ["Data unavailable"])
+            # [Quant Fail-Safe] 데이터 부재 시 안전을 위해 강제로 RISK_OFF 및 베팅비율 최소화(10%) 선언
+            logger.error("🚨 Macro data fetch failed. Fail-safe locked to RISK_OFF.")
+            return MacroState(MarketRegime.RISK_OFF, 0.1, -80, [], ["Data unavailable - Fallback to RISK_OFF"])
         
         signals = []
         triggers = []
