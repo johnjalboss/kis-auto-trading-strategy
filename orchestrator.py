@@ -44,8 +44,15 @@ class GlobalState:
     modules_failed: int = 0
     screened_symbols: List[str] = field(default_factory=list)
 
+_orchestrator_instance = None
+
+def get_orchestrator():
+    global _orchestrator_instance
+    return _orchestrator_instance
+
 class BotOrchestrator:
     def __init__(self, trader: Trader, strategy: StrategyEngine, rm: RiskManager, db: TradeDatabase, is_dry_run: bool = False):
+        global _orchestrator_instance
         self.trader = trader
         self.strategy = strategy
         self.rm = rm
@@ -61,6 +68,7 @@ class BotOrchestrator:
         self._daily_upgrade_count = 0
         self._last_trade_date = None
         
+        _orchestrator_instance = self
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
     
     # Core watchlist: Expanded to 150+ quality stocks & ETFs across sectors (2026-05)
@@ -110,6 +118,17 @@ class BotOrchestrator:
                 logger.error("🚨 CRITICAL RISK MODULE FAILED: {}! Engaging Fail-Safe RISK_OFF Lockdown. Error: {}", description, e)
                 self.state.global_risk_level = "RISK_OFF"
                 self.state.max_exposure_pct = 0.2
+                try:
+                    from watchdog import send_tg
+                    send_tg(
+                        f"🚨 <b>시스템 긴급 리스크 락다운 발동!</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"• 장애 모듈: <code>{description}</code>\n"
+                        f"• 에러내용: {str(e)[:150]}\n"
+                        f"• 결과: 강제 <b>RISK_OFF</b> 봉인 (최대 비중 20% 제한)"
+                    )
+                except Exception:
+                    pass
             else:
                 logger.warning("⚠️ Non-critical module failed/skipped: {}. Error: {}", description, e)
             return None
@@ -363,10 +382,35 @@ class BotOrchestrator:
         self._safe_import("macro_news_analyzer", _news)
         
         # 10. Macro Shield (aggregate decision)
+        prev_risk_level = self.state.global_risk_level
         if penalty >= 50:
             self.state.global_risk_level = "RISK_OFF"
             self.state.max_exposure_pct *= 0.2
             logger.warning("  -> MACRO SHIELD ENGAGED: RISK_OFF (penalty={})", penalty)
+            if prev_risk_level != "RISK_OFF":
+                try:
+                    from watchdog import send_tg
+                    send_tg(
+                        f"🚨 <b>매크로 리스크 경보 작동 (RISK_OFF)</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"• 뉴스 감지 페널티: {penalty}점\n"
+                        f"• 결과: 비중 제한 강제 축소 ({self.state.max_exposure_pct:.0%})\n"
+                        f"• 감시 레짐: {self.state.current_regime}"
+                    )
+                except Exception:
+                    pass
+        else:
+            if prev_risk_level == "RISK_OFF":
+                try:
+                    from watchdog import send_tg
+                    send_tg(
+                        f"✅ <b>매크로 리스크 경보 해제 (NORMAL)</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"• 뉴스 감지 페널티: {penalty}점\n"
+                        f"• 결과: 정상 투자 비중 한도 복구"
+                    )
+                except Exception:
+                    pass
             
         self.state.last_macro_refresh = datetime.now()
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 
@@ -430,6 +474,16 @@ class BotOrchestrator:
             logger.error("🚨 Screener Failed: {}. Halting new entries to prevent random purchases.", e)
             self.state.target_universe = [] # [Fail-Safe] 스크리너 장애 시 임의 매수 방지를 위해 진입 유니버스 완전 동결
             self.state.screened_symbols = []
+            try:
+                from watchdog import send_tg
+                send_tg(
+                    f"🚨 <b>스크리너 작동 장애 (진입 완전 동결)</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"• 에러내용: {str(e)[:150]}\n"
+                    f"• 결과: 포트폴리오 보호를 위한 <b>신규 매수 완전 차단</b>"
+                )
+            except Exception:
+                pass
         
         # Fallback: if screener returned 0 stocks, keep it empty to protect portfolio
         if not self.state.target_universe:

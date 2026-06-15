@@ -14,6 +14,11 @@ from loguru import logger
 from typing import List, Dict, Optional
 
 class MacroNewsAnalyzer:
+    # Class-level cache to conserve API quota across dynamic instance creations
+    _cache: Optional[Dict] = None
+    _last_checked: Optional[datetime] = None
+    _cache_ttl = 600  # 10 minutes (Optimized for real-time responsiveness within Free Tier limits)
+
     def __init__(self):
         self.gemini_key = os.getenv("GEMINI_API_KEY", "")
         
@@ -106,12 +111,14 @@ class MacroNewsAnalyzer:
         peace_count = 0
         fed_count = 0
         
-        # 헤드라인 별로 가중치 매칭 수행 (대소문자 구분 없음)
+        # 헤드라인 별로 가중치 매칭 수행 (대소문자 구분 없음 - 키워드별 단 1회만 가중치 적용되도록 중복 방지)
+        matched_words = set()
         for h in headlines:
             h_lower = h.lower()
             for word, weight in WEIGHTS.items():
-                if word in h_lower:
+                if word in h_lower and word not in matched_words:
                     risk_score += weight
+                    matched_words.add(word)
                     # 통계용 카운트
                     if weight >= 10.0:
                         conflict_count += 1
@@ -150,6 +157,13 @@ class MacroNewsAnalyzer:
 
     def analyze(self) -> Dict:
         """Perform macro news sentiment analysis and return penalty and metadata"""
+        # 30-minute class-level cache check
+        if MacroNewsAnalyzer._cache and MacroNewsAnalyzer._last_checked:
+            elapsed = (datetime.now() - MacroNewsAnalyzer._last_checked).total_seconds()
+            if elapsed < MacroNewsAnalyzer._cache_ttl:
+                logger.debug("[MACRO_NEWS] Returning cached macro news analysis (Age: {:.1f}s)", elapsed)
+                return MacroNewsAnalyzer._cache
+
         raw_news = self._fetch_general_news()
         if not raw_news:
             logger.info("[MACRO_NEWS] No general news found. Returning default neutral.")
@@ -161,15 +175,19 @@ class MacroNewsAnalyzer:
             }
             
         headlines = [item.get('headline', '') for item in raw_news if item.get('headline', '')]
-        headlines = headlines[:15] # Top 15 headlines
+        headlines = headlines[:40] # Expanded to Top 40 headlines to ensure no critical macro announcements are missed
         
         # Try Gemini first
-        gemini_result = self._analyze_with_gemini(headlines)
-        if gemini_result:
-            return gemini_result
+        result = self._analyze_with_gemini(headlines)
+        if not result:
+            # Fallback to rule-based
+            result = self._analyze_rule_based(headlines)
             
-        # Fallback to rule-based
-        return self._analyze_rule_based(headlines)
+        # Update class-level cache
+        MacroNewsAnalyzer._cache = result
+        MacroNewsAnalyzer._last_checked = datetime.now()
+        
+        return result
 
 if __name__ == "__main__":
     from dotenv import load_dotenv

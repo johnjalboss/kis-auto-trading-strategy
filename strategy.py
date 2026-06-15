@@ -686,6 +686,17 @@ class StrategyEngine:
             return ExitSignal("HOLD", "No position", 0)
         
         pos = self._positions[symbol]
+        
+        # [Quant-Shield] Catastrophic Black-Swan News Exit (파산, 상장폐지 등 실시간 돌발 뉴스 감지 시 강제청산)
+        try:
+            from news_analyzer import get_news_analyzer
+            news_res = get_news_analyzer().analyze(symbol)
+            if news_res and getattr(news_res, 'has_catastrophic_risk', False):
+                reason = getattr(news_res, 'catastrophic_reason', 'Catastrophic event detected')
+                logger.error("🚨 [BLACK_SWAN_SHIELD] CATASTROPHIC RISK DETECTED FOR {}! Reason: {}. Triggering IMMEDIATE EMERGENCY EXIT!", symbol, reason)
+                return ExitSignal("SELL", f"EMERGENCY_EXIT - {reason}", 100.0)
+        except Exception as ex:
+            logger.debug("Black-swan news exit check failed: {}", ex)
         df = self.fetch_data(symbol)
         if df is None:
             return ExitSignal("HOLD", "No data", 0)
