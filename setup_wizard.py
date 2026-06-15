@@ -89,6 +89,7 @@ class SetupWizardApp:
         self.var_tg_token = tk.StringVar()
         self.var_tg_chat_id = tk.StringVar()
         self.var_finnhub_key = tk.StringVar()
+        self.var_gemini_key = tk.StringVar()
         
         self.var_mode = tk.StringVar(value="LOCAL") # LOCAL or SERVER
         self.var_server_host = tk.StringVar()
@@ -125,6 +126,7 @@ class SetupWizardApp:
                         elif k == "TELEGRAM_TOKEN": self.var_tg_token.set(v)
                         elif k == "TELEGRAM_CHAT_ID": self.var_tg_chat_id.set(v)
                         elif k == "FINNHUB_API_KEY": self.var_finnhub_key.set(v)
+                        elif k == "GEMINI_API_KEY": self.var_gemini_key.set(v)
                         elif k == "INITIAL_CAPITAL": self.var_capital.set(v)
                         elif k == "MAX_POSITIONS": self.var_max_pos.set(v)
                         elif k == "SCREENER_MAX_CANDIDATES": self.var_screener_max_candidates.set(v)
@@ -218,6 +220,9 @@ class SetupWizardApp:
         
         # 핀허브 API 키 (yfinance 차단방지 Fallback)
         self.create_input_row(container, "Finnhub API KEY (선택)", self.var_finnhub_key, placeholder="yfinance 차단 우회용 Finnhub API Key를 입력하세요 (선택)", show="*")
+        
+        # 제미나이 API 키 (뉴스/이벤트 AI 판별용)
+        self.create_input_row(container, "Gemini API KEY (선택)", self.var_gemini_key, placeholder="뉴스/이벤트 AI 판별용 Gemini API Key를 입력하세요 (선택)", show="*")
         
         # 계좌번호
         account_frame = tk.Frame(container, bg=SURFACE_COLOR)
@@ -507,6 +512,9 @@ KIS_SANDBOX={'true' if self.var_is_sandbox.get() else 'false'}
 
 # 🔑 Finnhub API Key (yfinance Fallback)
 FINNHUB_API_KEY={self.var_finnhub_key.get().strip()}
+
+# 🔑 Gemini API Key (뉴스/이벤트 AI 판별)
+GEMINI_API_KEY={self.var_gemini_key.get().strip()}
 
 # 📢 텔레그램 알림봇 설정
 TELEGRAM_TOKEN={self.var_tg_token.get().strip()}

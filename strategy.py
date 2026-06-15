@@ -275,8 +275,22 @@ class StrategyEngine:
             from insider_tracker import get_insider_tracker
             insider = get_insider_tracker()
             ins_result = insider.analyze(symbol)
-            if ins_result.insider_sentiment == "SELLING" and (ins_result.insider_net_pct < -0.10 or ins_result.insider_net_value < -20_000_000):
-                return EntrySignal("HOLD", 0, f"INSIDER_GUARD: Massive insider dumping detected ({ins_result.insider_net_pct:.3f}% of MC, Net: ${ins_result.insider_net_value/1e6:.1f}M)", 0)
+            if ins_result.insider_sentiment == "SELLING":
+                # Market-cap-tiered threshold: infer MC from net_value/net_pct, then apply per-tier %
+                _net_val = ins_result.insider_net_value   # negative for selling
+                _net_pct = ins_result.insider_net_pct     # already as % of MC (e.g., -0.034)
+                _implied_mc = abs(_net_val) / (abs(_net_pct) / 100.0) if _net_pct != 0 else 10_000_000_000
+                # Stricter threshold for small caps; lenient for mega-caps (routine option exercises)
+                if _implied_mc >= 100_000_000_000:   # ≥$100B mega-cap
+                    _block_threshold = -0.20          # Need >0.20% of MC dumped to block
+                elif _implied_mc >= 10_000_000_000:  # $10-100B large-cap
+                    _block_threshold = -0.12          # >0.12% of MC
+                elif _implied_mc >= 2_000_000_000:   # $2-10B mid-cap
+                    _block_threshold = -0.08          # >0.08% of MC
+                else:                                 # <$2B small-cap
+                    _block_threshold = -0.05          # >0.05% of MC
+                if _net_pct < _block_threshold:
+                    return EntrySignal("HOLD", 0, f"INSIDER_GUARD: MC-tiered dump | {_net_pct:.3f}% of ~${_implied_mc/1e9:.0f}B MC (threshold: {_block_threshold:.2f}%) Net: ${_net_val/1e6:.1f}M", 0)
         except Exception:
             pass
 
@@ -1041,19 +1055,28 @@ class StrategyEngine:
         target_15r = pos.entry_price + (1.5 * scaled_risk_1r)
         target_30r = pos.entry_price + (3.0 * scaled_risk_1r)
         
-        # [Alpha Dynamic TP Clamping] Ensure 3.0R target represents between 7% and 22% profit
-        max_tp_pct = 0.22
-        min_tp_pct = 0.07
+        # [ATR-Adaptive TP] Min/Max TP derived from each stock's own volatility at entry
+        # High-vol stocks (ATR 5%+) get higher TP targets; low-vol stocks (ATR 1-2%) get lower targets
+        max_tp_pct = 0.22  # Hard cap: never target >22% (take money and run)
+        atr_at_entry = getattr(pos, 'atr_at_entry', 0.0)
+        if atr_at_entry > 0.0 and pos.entry_price > 0.0:
+            atr_pct = atr_at_entry / pos.entry_price
+            # Min TP = 1.5x ATR: meaningful target relative to the stock's natural daily range
+            # Floor at 2% (avoid noise), cap at 12% (stay realistic for swing trades)
+            min_tp_pct = max(0.02, min(0.12, 1.5 * atr_pct))
+        else:
+            min_tp_pct = 0.04  # Fallback if ATR not stored
         target_30r_pct = (target_30r - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
         
         if target_30r_pct > max_tp_pct:
             target_30r = pos.entry_price * (1.0 + max_tp_pct)
             target_15r = pos.entry_price + (target_30r - pos.entry_price) * 0.5
-            logger.debug("[DYNAMIC_TP] Clamped 30R target for {} from {:.1%} to max limit {:.1%}", pos.symbol, target_30r_pct, max_tp_pct)
+            logger.debug("[DYNAMIC_TP] Clamped 30R for {} {:.1%} → max {:.1%}", pos.symbol, target_30r_pct, max_tp_pct)
         elif target_30r_pct < min_tp_pct:
             target_30r = pos.entry_price * (1.0 + min_tp_pct)
             target_15r = pos.entry_price + (target_30r - pos.entry_price) * 0.5
-            logger.debug("[DYNAMIC_TP] Boosted 30R target for {} from {:.1%} to min threshold {:.1%}", pos.symbol, target_30r_pct, min_tp_pct)
+            atr_pct_log = (atr_at_entry / pos.entry_price) if atr_at_entry > 0 and pos.entry_price > 0 else 0
+            logger.debug("[ATR_TP] {} | ATR={:.1%} → MinTP={:.1%} (raw 30R was {:.1%})", pos.symbol, atr_pct_log, min_tp_pct, target_30r_pct)
             
         # Scale-Out TP Exits
         if not pos.half_sold:

@@ -324,6 +324,36 @@ class BotOrchestrator:
             scenario = f"Loss {result.worst_case_loss_pct:.1f}%" if result else "N/A"
             logger.info("  -> stress_test.py: worst={}", scenario)
         self._safe_import("stress_test", _stress)
+        # 10. Macro News Sentiment with Quant Feedback Loop (VIX scaling)
+        def _news():
+            nonlocal penalty
+            try:
+                from macro_news_analyzer import MacroNewsAnalyzer
+                mna = MacroNewsAnalyzer()
+                news_result = mna.analyze()
+                raw_penalty = news_result.get("penalty", 0)
+                
+                # [Quant Feedback Loop] 뉴스 영향력을 실제 시장 가격 지표 반응으로 2차 필터링 및 보정
+                # 진짜 영향력 있는 뉴스라면 이미 VIX나 SPY 가격 움직임에 반영되었을 것임
+                vix_factor = 1.0
+                try:
+                    vix_price = self.trader.get_price("^VIX")
+                    if vix_price > 0:
+                        # VIX가 20 이상으로 높으면 공포 증폭(페널티 1.3배), 15 이하로 극도로 안정적이면 노이즈 처리(페널티 0.6배)
+                        if vix_price > 20.0:
+                            vix_factor = 1.3
+                        elif vix_price < 15.0:
+                            vix_factor = 0.6
+                except Exception:
+                    pass
+                
+                adjusted_penalty = int(raw_penalty * vix_factor)
+                logger.info("  -> macro_news_analyzer.py: Level={}, Penalty={}(raw={}), Identified={}",
+                            news_result.get("risk_level"), adjusted_penalty, raw_penalty, news_result.get("events_identified"))
+                penalty += adjusted_penalty
+            except Exception as ne:
+                logger.debug("Macro news sentiment analysis failed: {}", ne)
+        self._safe_import("macro_news_analyzer", _news)
         
         # 10. Macro Shield (aggregate decision)
         if penalty >= 50:
