@@ -60,7 +60,7 @@ def _run_with_timeout(func, args=(), kwargs={}, timeout=2.0):
 # ──────────────────────────────────────────────────────────
 # Cache constants
 # ──────────────────────────────────────────────────────────
-_OPTIONS_TTL   = 1800   # 30 min — options data is slow to change
+_OPTIONS_TTL   = 14400  # 4 hours — standard options OI only updates once daily, safe from IP bans
 _VIX_TTL       = 600    # 10 min — VIX updates each minute
 _MAX_CACHE_SIZE = 30    # evict oldest when > 30 symbols cached
 _FALLBACK_IV    = 0.25  # assume 25% IV when data unavailable
@@ -152,9 +152,10 @@ def get_vix_snapshot() -> VixSnapshot:
         return _vix_cache
 
     snap = VixSnapshot()
-    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
-        _vix_cache = snap
-        return snap
+    # Volatility Fetching: Bypassing DISABLE_OPTIONS_FLOW check for VIX since it is cached 
+    # for 10 minutes and does not download options chain, making it completely safe from IP bans.
+    # This ensures VIX crash guards and volatility score adjustments remain active.
+    # (If VIX fetch fails, it gracefully falls back to default 20.0 NORMAL regime)
 
     try:
         ticker = _get_real_ticker("^VIX")

@@ -345,8 +345,8 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
     logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
     import os
     macro_whitelist = {"^VIX", "^GSPC", "^DJI", "^IXIC", "^TNX", "^IRX", "BTC-USD", "CL=F", "UUP", "GLD", "TLT", "SPY", "QQQ", "DIA", "IWM", "BRK-B", "BRKB"}
-    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true" and symbol.upper() not in macro_whitelist:
-        logger.warning("yfinance daily OHLCV fallback bypassed for {} because DISABLE_OPTIONS_FLOW=true", symbol)
+    if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true" and symbol.upper() not in macro_whitelist:
+        logger.warning("yfinance daily OHLCV fallback bypassed for {} because DISABLE_YFINANCE_FALLBACK=true", symbol)
         return None
 
     # KIS 심볼 → yfinance 심볼 변환 (e.g. BRKB → BRK-B)
@@ -472,7 +472,7 @@ def get_intraday_ohlcv(symbol: str, exchange: str = None,
     logger.warning("Could not fetch intraday OHLCV for {} via KIS API, falling back to yfinance", symbol)
     import os
     macro_whitelist = {"^VIX", "^GSPC", "^DJI", "^IXIC", "^TNX", "^IRX", "BTC-USD", "CL=F", "UUP", "GLD", "TLT", "SPY", "QQQ", "DIA", "IWM", "BRK-B", "BRKB"}
-    if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true" and symbol.upper() not in macro_whitelist:
+    if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true" and symbol.upper() not in macro_whitelist:
         return None
         
     try:

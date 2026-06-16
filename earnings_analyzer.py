@@ -283,7 +283,7 @@ class EarningsAnalyzer:
 
         # 2. yfinance Fallback
         import os
-        if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
+        if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true":
             return []
             
         try:
