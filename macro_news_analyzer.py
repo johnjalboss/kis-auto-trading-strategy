@@ -21,7 +21,21 @@ class MacroNewsAnalyzer:
 
     def __init__(self):
         self.gemini_key = os.getenv("GEMINI_API_KEY", "")
+        self.multiplier = self._load_config()
         
+    def _load_config(self) -> float:
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), "macro_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    val = float(data.get("news_sensitivity_multiplier", 1.0))
+                    logger.info("[MACRO_NEWS] Loaded news_sensitivity_multiplier: {}", val)
+                    return val
+        except Exception as e:
+            logger.warning("[MACRO_NEWS] Failed to load macro_config.json: {}", e)
+        return 1.0
+
     def _fetch_general_news(self) -> List[Dict]:
         """Fetch general market news from Finnhub API"""
         try:
@@ -42,18 +56,22 @@ class MacroNewsAnalyzer:
             
         prompt = (
             "You are a world-class macroeconomic analyst and geopolitical risk monitor.\n"
-            "Analyze the following recent global financial and political headlines.\n"
-            "Evaluate:\n"
-            "1. Geopolitical risk level (e.g., escalating war/tensions vs. ceasefires/peace treaties like an Iran peace agreement).\n"
-            "2. Central bank policy risk (e.g., upcoming FOMC meetings, hawkish rate hikes vs. dovish cuts).\n"
-            "3. Macro economic shocks (inflation, currency crises, energy supply cuts).\n\n"
+            "Analyze the following recent global financial and political headlines by dynamically clustering them into major topics.\n"
+            "Evaluate the economic transmission path of each major topic, focusing on:\n"
+            "1. Supply chain & trade route disruption (e.g., Strait of Hormuz, Red Sea, major port shut downs/strikes).\n"
+            "2. Critical energy/commodity shock (e.g., crude oil, natural gas, lithium, coal supply bottlenecks).\n"
+            "3. High-tech component bottleneck (e.g., Taiwan Strait tensions affecting semiconductor supply).\n"
+            "4. Central bank monetary policy shock (inflation spikes, hawkish FOMC rate decisions).\n\n"
+            "Note:\n"
+            "- Fully discount long-standing, pre-priced-in conflicts like the Russia-Ukraine war unless a dramatic expansion occurs (give it minimal risk weight like 0 to 5).\n"
+            "- Highly penalize sudden disruptions that directly jeopardize global energy hubs or vital supply trade routes.\n\n"
             "Headlines:\n"
             + "\n".join(f"- {h}" for h in headlines) + "\n\n"
             "Provide your assessment in strict JSON format with the following keys:\n"
             "- 'risk_level': one of 'LOW', 'ELEVATED', 'HIGH', 'EXTREME'.\n"
-            "- 'penalty': an integer between -20 and 50 representing the impact on the trading bot's macro risk score (negative for peace/bullish, positive for tensions/bearish).\n"
-            "- 'events_identified': a list of major identified events (e.g., ['Upcoming FOMC', 'Iran Peace Agreement']).\n"
-            "- 'reason': a short summary under 120 characters.\n\n"
+            "- 'penalty': an integer between -20 and 50 representing the impact on the trading bot's macro risk score.\n"
+            "- 'events_identified': a list of major identified events/topics (e.g., ['Hormuz Shipping Threat', 'Fed Hawkish Shift']).\n"
+            "- 'reason': a short summary explaining the logic behind the penalty (under 120 characters).\n\n"
             "Output JSON only (no markdown block, no ```json):"
         )
         
@@ -88,10 +106,18 @@ class MacroNewsAnalyzer:
         # 퀀트 가중치 사전 정의 (단어별 영향력 점수 세분화)
         # 긍정 수치는 리스크 증가(페널티 상승), 부정 수치는 리스크 감소(페널티 하락/시장 안정)
         WEIGHTS = {
-            # 지정학적 갈등 (공포 요인)
-            'war': 15.0, 'conflict': 8.0, 'bomb': 12.0, 'missile': 12.0, 
-            'airstrike': 10.0, 'invasion': 15.0, 'sanction': 8.0, 'tariff': 10.0, 
-            'escalat': 7.0, 'attack': 8.0, 'tension': 5.0, 'military': 6.0,
+            # 지정학적 갈등 (공포 및 실질 위협 요인 분리)
+            # 고위험 중동/물류 요충지 (에너지/물류 쇼크 연계)
+            'iran': 15.0, 'israel': 15.0, 'lebanon': 12.0, 'hezbollah': 12.0, 
+            'hormuz': 18.0, 'red sea': 10.0, 'gaza': 8.0, 'yemen': 8.0, 'houthi': 8.0,
+            
+            # 선반영된 지정학적 갈등 (우크라이나/러시아 등 저위험)
+            'russia': 3.0, 'ukraine': 3.0, 'putin': 3.0,
+            
+            # 기타 지정학 단어
+            'war': 8.0, 'conflict': 5.0, 'bomb': 8.0, 'missile': 8.0, 
+            'airstrike': 7.0, 'invasion': 10.0, 'sanction': 6.0, 'tariff': 8.0, 
+            'escalat': 5.0, 'attack': 6.0, 'tension': 4.0, 'military': 4.0,
             
             # 평화 / 완화 (안정 요인)
             'ceasefire': -20.0, 'peace agreement': -20.0, 'peace treaty': -25.0, 
@@ -183,6 +209,15 @@ class MacroNewsAnalyzer:
             # Fallback to rule-based
             result = self._analyze_rule_based(headlines)
             
+        # Apply self-tuning sensitivity multiplier
+        raw_penalty = result.get("penalty", 0)
+        adjusted_penalty = int(raw_penalty * self.multiplier)
+        adjusted_penalty = max(-20, min(50, adjusted_penalty))
+        
+        result["penalty"] = adjusted_penalty
+        result["raw_penalty"] = raw_penalty
+        result["sensitivity_multiplier"] = self.multiplier
+        
         # Update class-level cache
         MacroNewsAnalyzer._cache = result
         MacroNewsAnalyzer._last_checked = datetime.now()

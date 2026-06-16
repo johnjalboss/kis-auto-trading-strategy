@@ -389,6 +389,18 @@ class BotOrchestrator:
             logger.warning("  -> MACRO SHIELD ENGAGED: RISK_OFF (penalty={})", penalty)
             if prev_risk_level != "RISK_OFF":
                 try:
+                    spy_price = self.trader.get_price("SPY")
+                    self.db.record_macro_decision(
+                        risk_level="RISK_OFF",
+                        penalty=penalty,
+                        reason=f"Orchestrator penalty threshold hit: {penalty}",
+                        spy_price=spy_price if spy_price > 0 else None
+                    )
+                    logger.info("[MACRO_SHIELD] Recorded RISK_OFF decision to DB. SPY: {}", spy_price)
+                except Exception as db_err:
+                    logger.warning("[MACRO_SHIELD] Failed to record macro decision: {}", db_err)
+
+                try:
                     from watchdog import send_tg
                     send_tg(
                         f"🚨 <b>매크로 리스크 경보 작동 (RISK_OFF)</b>\n"
@@ -974,6 +986,13 @@ class BotOrchestrator:
                                     qty = 1
                                     logger.info("UPGRADE Sizer override for {}: 1 share allowed via minor limit violation", best_buy_signal.symbol)
 
+                                # Enforce minimum position value of $50 to avoid high transaction friction relative to position size
+                                if qty > 0:
+                                    position_value = qty * best_buy_signal.entry_price
+                                    if position_value < 50.0:
+                                        logger.info("UPGRADE SKIP: position value ${:.2f} too small (min $50)", position_value)
+                                        qty = 0
+
                                 if qty > 0:
                                     self.phase_5_execute_trade(best_buy_signal.symbol, "BUY", qty,
                                                               best_buy_signal.entry_price,
@@ -1373,6 +1392,129 @@ class BotOrchestrator:
 
         logger.info("Phase 6 Complete.")
 
+    def _run_weekly_macro_tuning(self):
+        """Runs post-mortem resolution on unresolved macro decisions and auto-tunes news sensitivity multiplier."""
+        logger.info("⚙️ Starting Weekly Autonomous Macro Feedback & Self-Tuning...")
+        
+        # 1. Resolve pending feedbacks
+        try:
+            unresolved = self.db.get_unresolved_macro_feedbacks()
+            logger.info("Found {} unresolved macro feedbacks.", len(unresolved))
+        except Exception as e:
+            logger.error("Failed to fetch unresolved feedbacks: {}", e)
+            return
+        
+        import yfinance as yf
+        resolved_count = 0
+        for f in unresolved:
+            f_id = f["id"]
+            created_at_str = f["created_at"]
+            try:
+                if isinstance(created_at_str, str):
+                    created_at = datetime.strptime(created_at_str.split(".")[0], "%Y-%m-%d %H:%M:%S")
+                else:
+                    created_at = created_at_str
+            except Exception as pe:
+                logger.warning("Failed to parse created_at for feedback {}: {}", f_id, pe)
+                continue
+                
+            target_date = created_at + timedelta(days=3)
+            spy_exit_price = None
+            start_str = target_date.strftime("%Y-%m-%d")
+            try:
+                end_str = (target_date + timedelta(days=4)).strftime("%Y-%m-%d")
+                df = yf.download("SPY", start=start_str, end=end_str, progress=False)
+                if not df.empty:
+                    if "Close" in df.columns:
+                        spy_exit_price = float(df["Close"].iloc[0])
+            except Exception as yf_err:
+                logger.warning("yfinance fetch failed for date {}: {}", start_str, yf_err)
+                
+            if spy_exit_price is None:
+                logger.warning("Could not retrieve SPY price for date {}. Skipping resolution for feedback {}.", start_str, f_id)
+                continue
+                
+            spy_entry_price = f.get("spy_entry_price")
+            if not spy_entry_price or spy_entry_price <= 0:
+                accuracy = "UNKNOWN"
+                price_change = 0
+            else:
+                price_change = (spy_exit_price - spy_entry_price) / spy_entry_price
+                if price_change <= 0.005:
+                    accuracy = "CORRECT"
+                else:
+                    accuracy = "FALSE_POSITIVE"
+                    
+            try:
+                self.db.resolve_macro_feedback(f_id, spy_exit_price, accuracy)
+                logger.info("Resolved feedback {}: Entry={}, Exit={}, Change={:.2%}, Outcome={}",
+                            f_id, spy_entry_price, spy_exit_price, price_change, accuracy)
+                resolved_count += 1
+            except Exception as res_err:
+                logger.error("Failed to update feedback resolution in DB: {}", res_err)
+                
+        logger.info("Resolution complete. Resolved {} cases.", resolved_count)
+        
+        # 2. Sensitivity Auto-Tuning
+        try:
+            recent = self.db.get_recent_resolved_feedbacks(days=30)
+        except Exception as e:
+            logger.error("Failed to get recent resolved feedbacks: {}", e)
+            return
+
+        if not recent:
+            logger.info("No resolved feedback data within the last 30 days. Skipping sensitivity tuning.")
+            return
+            
+        total = len(recent)
+        correct_count = sum(1 for r in recent if r["accuracy"] == "CORRECT")
+        fp_count = sum(1 for r in recent if r["accuracy"] == "FALSE_POSITIVE")
+        
+        correct_rate = correct_count / total
+        fp_rate = fp_count / total
+        
+        import json
+        import os
+        config_path = os.path.join(os.path.dirname(__file__), "macro_config.json")
+        current_multiplier = 1.0
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f_cfg:
+                    cfg = json.load(f_cfg)
+                    current_multiplier = cfg.get("news_sensitivity_multiplier", 1.0)
+            except Exception as cfg_err:
+                logger.warning("Failed to read macro_config.json: {}", cfg_err)
+                
+        new_multiplier = current_multiplier
+        if fp_rate > 0.6:
+            new_multiplier = current_multiplier * 0.85
+        elif correct_rate > 0.8:
+            new_multiplier = current_multiplier * 1.15
+            
+        new_multiplier = max(0.5, min(2.0, new_multiplier))
+        
+        try:
+            with open(config_path, "w", encoding="utf-8") as f_cfg:
+                json.dump({"news_sensitivity_multiplier": new_multiplier}, f_cfg, indent=4)
+            logger.info("Auto-tuned news sensitivity multiplier: {:.4f} -> {:.4f} (Correct: {:.1%}, FP: {:.1%})",
+                        current_multiplier, new_multiplier, correct_rate, fp_rate)
+        except Exception as save_err:
+            logger.error("Failed to save auto-tuned multiplier to macro_config.json: {}", save_err)
+            
+        try:
+            from watchdog import send_tg
+            msg = (
+                f"⚙️ <b>매크로 감도 자가 튜닝 리포트</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"• 분석 대상 (최근 30일): {total}건\n"
+                f"• 방어 성공 (CORRECT): {correct_count}건 ({correct_rate:.1%})\n"
+                f"• 오작동 방어 (FALSE_POSITIVE): {fp_count}건 ({fp_rate:.1%})\n"
+                f"• 감도 승수 조정: {current_multiplier:.4f} ➔ <b>{new_multiplier:.4f}</b>"
+            )
+            send_tg(msg)
+        except Exception as tg_err:
+            logger.debug("Failed to send tuning TG alert: {}", tg_err)
+
     # ==========================================
     # 24/7 AUTONOMOUS MAIN LOOP
     # ==========================================
@@ -1444,6 +1586,15 @@ class BotOrchestrator:
                             os.execvp(python_exe, ['python', 'main.py'] + sys.argv[1:])
                 except Exception as ue:
                     logger.debug("24/7 무중단 업데이트 스킵: {}", ue)
+                
+                # ✦ 매주 일요일 자율 피드백 루프 및 자가 튜닝 스케줄러 (일요일에 1주 1회 실행)
+                if now.weekday() == 6:  # Sunday
+                    if not hasattr(self, '_last_weekly_tuning_date') or self._last_weekly_tuning_date != now.date():
+                        self._last_weekly_tuning_date = now.date()
+                        try:
+                            self._run_weekly_tuning()
+                        except Exception as te:
+                            logger.error("Error during weekly tuning: {}", te)
                 
                 is_open = scheduler.is_market_open()
                 
@@ -1564,4 +1715,117 @@ class BotOrchestrator:
             except Exception:
                 pass
             raise
+
+    def _run_weekly_tuning(self):
+        """매주 일요일 자율 피드백 루프 및 자가 튜닝을 실행합니다."""
+        logger.info("⚙️ [Weekly Tuning] 시작합니다...")
+        try:
+            # 1. 7일간의 거래 성과 분석 및 통계 생성
+            from database import get_db
+            import pandas as pd
+            import numpy as np
+            
+            with get_db() as db:
+                cursor = db.cursor()
+                cursor.execute("""
+                    SELECT ticker, entry_price, exit_price, qty, entry_time, exit_time, profit, profit_rate
+                    FROM trades
+                    WHERE status = 'CLOSED' AND exit_time >= datetime('now', '-7 days')
+                """)
+                rows = cursor.fetchall()
+                
+            if not rows:
+                logger.info("⚙️ [Weekly Tuning] 최근 7일간 완료된 거래가 없어 튜닝을 스킵합니다.")
+                return
+                
+            df = pd.DataFrame(rows, columns=['ticker', 'entry_price', 'exit_price', 'qty', 'entry_time', 'exit_time', 'profit', 'profit_rate'])
+            
+            # 2. 성과 메트릭 계산
+            total_trades = len(df)
+            winning_trades = len(df[df['profit'] > 0])
+            win_rate = winning_trades / total_trades if total_trades > 0 else 0
+            avg_profit_rate = df['profit_rate'].mean()
+            total_profit = df['profit'].sum()
+            
+            logger.info("⚙️ [Weekly Tuning] 최근 7일 성과 요약: 거래수={}, 승률={:.1%}, 평균수익률={:.2%}, 총수익={:.0f}원", 
+                        total_trades, win_rate, avg_profit_rate, total_profit)
+            
+            # 3. .env 파일의 파라미터 조정을 위한 의사결정
+            from dotenv import load_dotenv
+            import os
+            
+            load_dotenv(override=True)
+            current_tp_mult = float(os.getenv('ATR_TP_MULT', '1.5'))
+            
+            new_tp_mult = current_tp_mult
+            reason = ""
+            
+            if win_rate < 0.40:
+                new_tp_mult = max(1.0, current_tp_mult - 0.2)
+                reason = f"최근 7일 승률이 저조하여 ({win_rate:.1%}) ATR_TP_MULT를 {current_tp_mult}에서 {new_tp_mult:.1f}로 낮춰 익절 확률을 높립니다."
+            elif win_rate > 0.65 and avg_profit_rate < 0.01:
+                new_tp_mult = min(2.5, current_tp_mult + 0.2)
+                reason = f"최근 7일 승률이 양호하여 ({win_rate:.1%}) ATR_TP_MULT를 {current_tp_mult}에서 {new_tp_mult:.1f}로 높여 수익 극대화를 시도합니다."
+            
+            if new_tp_mult != current_tp_mult:
+                logger.warning("⚙️ [Weekly Tuning] Parameter Tuning Triggered: {}", reason)
+                
+                env_path = 'config.env' if os.path.exists('config.env') else '.env'
+                if os.path.exists(env_path):
+                    with open(env_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    updated = False
+                    for i, line in enumerate(lines):
+                        if line.strip().startswith('ATR_TP_MULT='):
+                            lines[i] = f"ATR_TP_MULT={new_tp_mult:.1f}\n"
+                            updated = True
+                            break
+                    
+                    if not updated:
+                        lines.append(f"\nATR_TP_MULT={new_tp_mult:.1f}\n")
+                    
+                    with open(env_path, 'w', encoding='utf-8') as f:
+                        f.writelines(lines)
+                        
+                    logger.info("⚙️ [Weekly Tuning] {} 업데이트 완료.", env_path)
+                    
+                    try:
+                        from notification import get_notifier
+                        msg = (
+                            f"⚙️ <b>주간 자율 피드백 및 파라미터 자동 튜닝 리포트</b>\n\n"
+                            f"• 기간: 최근 7일\n"
+                            f"• 총 거래 횟수: {total_trades}회\n"
+                            f"• 승률: {win_rate:.1%}\n"
+                            f"• 평균 수익률: {avg_profit_rate:.2%}\n"
+                            f"• 총 손익: {total_profit:,.0f}원\n\n"
+                            f"🔧 <b>조정 내역:</b>\n"
+                            f"• ATR_TP_MULT: {current_tp_mult} -> {new_tp_mult:.1f}\n"
+                            f"• 사유: {reason}"
+                        )
+                        get_notifier().send_message(msg)
+                    except Exception as ne:
+                        logger.error("Failed to send weekly tuning notification: {}", ne)
+                else:
+                    logger.error("⚙️ [Weekly Tuning] 환경 설정 파일을 찾을 수 없습니다.")
+            else:
+                logger.info("⚙️ [Weekly Tuning] 파라미터 조정 조건에 부합하지 않아 기존 설정을 유지합니다.")
+                try:
+                    from notification import get_notifier
+                    msg = (
+                        f"⚙️ <b>주간 자율 피드백 리포트 (유지)</b>\n\n"
+                        f"• 기간: 최근 7일\n"
+                        f"• 총 거래 횟수: {total_trades}회\n"
+                        f"• 승률: {win_rate:.1%}\n"
+                        f"• 평균 수익률: {avg_profit_rate:.2%}\n"
+                        f"• 총 손익: {total_profit:,.0f}원\n\n"
+                        f"🔧 현재 파라미터 설정(ATR_TP_MULT={current_tp_mult})을 유지합니다."
+                    )
+                    get_notifier().send_message(msg)
+                except Exception as ne:
+                    logger.error("Failed to send weekly tuning notification: {}", ne)
+                    
+        except Exception as e:
+            logger.exception("⚙️ [Weekly Tuning] 실행 중 오류 발생")
+
 

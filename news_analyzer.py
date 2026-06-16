@@ -45,6 +45,10 @@ class NewsSentiment:
     breaking_headline: Optional[str]
     
     recommendation: str
+    
+    # ── [Quant-Shield] Catastrophic Black-Swan Risk Fields ──
+    has_catastrophic_risk: bool = False
+    catastrophic_reason: Optional[str] = None
 
 
 # Sentiment keywords
@@ -80,12 +84,12 @@ class NewsAnalyzer:
     
     def __init__(self):
         self._cache: Dict[str, tuple] = {}
-        self._cache_ttl = 7200  # 2 hours (Finnhub free plan: 60 calls/min, conserve quota)
+        self._cache_ttl = 1800  # 30 minutes (Optimized for faster black-swan detection within Free Tier limits)
     
     def _judge_with_gemini(self, symbol: str, news_items: List[NewsItem]) -> Optional[tuple]:
         """
         Judge news sentiment using Gemini Free Tier API.
-        Returns: (sentiment: str, score: float, reason: str) or None if failed.
+        Returns: (sentiment: str, score: float, has_catastrophic: bool, catastrophic_reason: str, reason: str) or None if failed.
         """
         import os
         import json
@@ -95,15 +99,23 @@ class NewsAnalyzer:
             return None
             
         if not news_items:
-            return "NEUTRAL", 0.0, "No news items to judge"
+            return "NEUTRAL", 0.0, False, None, "No news items to judge"
             
         # Limit to top 8 news items to minimize prompt size and token usage
         headlines = [item.title for item in news_items[:8]]
         
         prompt = (
             f"You are an expert financial news sentiment judge. Analyze the short-term market impact of the following news headlines for stock symbol '{symbol}'.\n"
-            "Determine if the overall sentiment is BULLISH (likely to drive price up in the next 1-5 days), BEARISH (likely to drive price down), or NEUTRAL.\n"
-            "Provide your output strictly in JSON format with keys 'sentiment' and 'reason'. The 'sentiment' value must be exactly one of 'BULLISH', 'BEARISH', or 'NEUTRAL'. Keep 'reason' under 120 characters.\n\n"
+            "Evaluate:\n"
+            "1. Overall sentiment: BULLISH (price up in 1-5 days), BEARISH (price down), or NEUTRAL.\n"
+            "2. Quant score: An integer score from -100 (extremely bearish/disastrous) to +100 (extremely bullish/stellar).\n"
+            "3. Catastrophic Risk: Identify if there is a fatal event threatening corporate survival. Look specifically for bankruptcy (Chapter 11), delisting, major fraud, insolvency, or criminal indictment of executives.\n\n"
+            "Provide your output strictly in JSON format with keys:\n"
+            "- 'sentiment': exactly one of 'BULLISH', 'BEARISH', 'NEUTRAL'\n"
+            "- 'sentiment_score': integer between -100 and 100\n"
+            "- 'has_catastrophic_risk': boolean (true if fatal event is detected, false otherwise)\n"
+            "- 'catastrophic_reason': string (description of the fatal risk, null if none)\n"
+            "- 'reason': short summary under 100 characters.\n\n"
             "Headlines:\n"
             + "\n".join(f"- {h}" for h in headlines) + "\n\n"
             "Output JSON only (no markdown block, no ```json):"
@@ -128,20 +140,17 @@ class NewsAnalyzer:
                 text = res_json['candidates'][0]['content']['parts'][0]['text']
                 data = json.loads(text.strip())
                 sentiment = data.get("sentiment", "NEUTRAL").upper()
+                score = float(data.get("sentiment_score", 0.0))
+                has_catastrophic = bool(data.get("has_catastrophic_risk", False))
+                catastrophic_reason = data.get("catastrophic_reason", None)
                 reason = data.get("reason", "Analyzed by Gemini")
                 
                 if sentiment not in ["BULLISH", "BEARISH", "NEUTRAL"]:
                     sentiment = "NEUTRAL"
                     
-                if sentiment == "BULLISH":
-                    score = 80.0
-                elif sentiment == "BEARISH":
-                    score = -80.0
-                else:
-                    score = 0.0
-                    
-                logger.info("[GEMINI_JUDGE] {} is evaluated as {} because: {}", symbol, sentiment, reason)
-                return sentiment, score, reason
+                logger.info("[GEMINI_JUDGE] {} | Sentiment: {} (Score: {}), Catastrophic Risk: {} ({}), Reason: {}", 
+                            symbol, sentiment, score, has_catastrophic, catastrophic_reason, reason)
+                return sentiment, score, has_catastrophic, catastrophic_reason, reason
         except Exception as e:
             logger.warning("[GEMINI_JUDGE] Failed to judge with Gemini for {}: {}. Falling back to default scoring.", symbol, e)
             
@@ -164,7 +173,7 @@ class NewsAnalyzer:
         # Try Gemini Sentiment Judge first
         gemini_result = self._judge_with_gemini(symbol, news_items)
         if gemini_result:
-            overall, sentiment_score, reason = gemini_result
+            overall, sentiment_score, has_catastrophic, catastrophic_reason, reason = gemini_result
             positive_count = sum(1 for item in news_items if item.sentiment == "POSITIVE")
             negative_count = sum(1 for item in news_items if item.sentiment == "NEGATIVE")
             
@@ -177,7 +186,9 @@ class NewsAnalyzer:
                     breaking = item.title
                     break
             
-            if overall == "BULLISH":
+            if has_catastrophic:
+                recommendation = f"🚨 EMERGENCY CATASTROPHIC RISK: {catastrophic_reason}"
+            elif overall == "BULLISH":
                 recommendation = f"FAVORABLE (Gemini) - {reason}"
             elif overall == "BEARISH":
                 recommendation = f"AVOID (Gemini) - {reason}"
@@ -194,13 +205,15 @@ class NewsAnalyzer:
                 recent_news=news_items[:5],
                 has_breaking_news=has_breaking,
                 breaking_headline=breaking,
-                recommendation=recommendation
+                recommendation=recommendation,
+                has_catastrophic_risk=has_catastrophic,
+                catastrophic_reason=catastrophic_reason
             )
             
             self._cache[symbol] = (result, datetime.now())
             return result
 
-        # Fallback to default keyword-based sentiment scoring
+        # Fallback to default keyword-based sentiment scoring & catastrophic filtering
         total_score = 0
         positive_count = 0
         negative_count = 0
@@ -216,8 +229,25 @@ class NewsAnalyzer:
         # Normalize score
         sentiment_score = max(-100, min(100, total_score))
         
+        # 룰 기반 파멸적 리스크 필터링 (Bankruptcy, Delisting 등)
+        catastrophic_keywords = ['bankruptcy', 'chapter 11', 'delisting', 'delisted', 'insolvency', 'insolvent', 'accounting fraud', 'indictment', 'liquidation', 'receivership']
+        has_catastrophic = False
+        catastrophic_reason = None
+        for item in news_items:
+            h_lower = item.title.lower()
+            for kw in catastrophic_keywords:
+                if kw in h_lower:
+                    has_catastrophic = True
+                    catastrophic_reason = f"Rule-based detection: '{kw}' found in headline: '{item.title}'"
+                    break
+            if has_catastrophic:
+                break
+        
         # Determine overall sentiment
-        if sentiment_score > 30:
+        if has_catastrophic:
+            overall = "BEARISH"
+            sentiment_score = -100.0  # Force maximum panic
+        elif sentiment_score > 30:
             overall = "BULLISH"
         elif sentiment_score < -30:
             overall = "BEARISH"
@@ -234,7 +264,9 @@ class NewsAnalyzer:
                 break
         
         # Generate recommendation
-        if has_breaking and abs(sentiment_score) > 50:
+        if has_catastrophic:
+            recommendation = f"🚨 EMERGENCY CATASTROPHIC RISK: {catastrophic_reason}"
+        elif has_breaking and abs(sentiment_score) > 50:
             recommendation = "WAIT for volatility to settle"
         elif sentiment_score > 50:
             recommendation = "FAVORABLE - News supports long entry"
@@ -253,7 +285,9 @@ class NewsAnalyzer:
             recent_news=news_items[:5],
             has_breaking_news=has_breaking,
             breaking_headline=breaking,
-            recommendation=recommendation
+            recommendation=recommendation,
+            has_catastrophic_risk=has_catastrophic,
+            catastrophic_reason=catastrophic_reason
         )
         
         # Cache result

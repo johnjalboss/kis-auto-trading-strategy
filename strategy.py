@@ -982,7 +982,7 @@ class StrategyEngine:
         # Bear market = tight 3% stop (was 5%  this was killing the R:R)
         # Bull/Neutral = 5% stop as before
         if current_regime in bear_regimes:
-            hard_stop_pct = getattr(config, 'BEAR_HARD_STOP_PCT', 0.03)  # 3%
+            hard_stop_pct = getattr(config, 'BEAR_HARD_STOP_PCT', 0.04)  # 4%
         else:
             hard_stop_pct = 0.05  # 5%
         
@@ -1131,7 +1131,7 @@ class StrategyEngine:
         pnl_pct = (price - pos.entry_price) / pos.entry_price
         
         # MACD bearish cross
-        if ind.macd.cross_down and pnl_pct > 0:
+        if ind.macd.cross_down and pnl_pct >= 0.03:
             return ExitSignal("SELL_ALL", "MACD bearish cross", price, pnl_pct)
         
         # Extreme overbought — only exit if we actually have profit to protect

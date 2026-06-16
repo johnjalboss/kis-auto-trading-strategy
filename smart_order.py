@@ -254,7 +254,8 @@ class SmartOrderExecutor:
         if self.trader:
             try:
                 if order.side == "BUY":
-                    result = self.trader.buy(order.symbol, order.total_quantity, limit)
+                    # [Quant-Execution] Enable ensure_fill=True for BUY orders to prevent missing entries
+                    result = self.trader.buy(order.symbol, order.total_quantity, limit, ensure_fill=True)
                 else:
                     # Critical: Force fill on all sell orders to prevent phantom positions
                     result = self.trader.sell(order.symbol, order.total_quantity, limit, ensure_fill=True)
@@ -279,10 +280,31 @@ class SmartOrderExecutor:
                         exchange_to_use = getattr(result, 'exchange', None) or self.trader._exchange_mapper.get_exchange(order.symbol)
                         
                         if order.side == "BUY":
-                            logger.warning("Cancelling unfilled BUY order to prevent phantom position.")
+                            logger.warning("Cancelling unfilled BUY order, initiating aggressive buy chase to secure entry.")
                             self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "BUY")
-                            order.status = OrderStatus.CANCELLED
-                            order.reason = "Unfilled after 30 seconds (cancelled)"
+                            time.sleep(2)
+                            
+                            # Resubmit at +5.0% (pseudo-market price to lock in entry)
+                            chase_price = round(price * 1.05, 2)
+                            logger.warning("Aggressive chase BUY for {} at pseudo-market price: ${:.2f}", order.symbol, chase_price)
+                            chase_result = self.trader.buy(order.symbol, order.total_quantity, limit_price=chase_price, ensure_fill=False)
+                            chase_order_id = getattr(chase_result, 'order_id', None) or getattr(chase_result, 'odno', None)
+                            
+                            if chase_order_id:
+                                is_chase_filled = self.trader.wait_for_fill(chase_order_id, order.symbol, max_wait=15)
+                                if is_chase_filled:
+                                    order.status = OrderStatus.FILLED
+                                    order.filled_quantity = order.total_quantity
+                                    order.avg_fill_price = chase_price
+                                    logger.success("✅ Aggressive chase BUY filled for {} at ${:.2f}", order.symbol, chase_price)
+                                else:
+                                    logger.error("🚨 CRITICAL: Aggressive chase BUY order {} also unfilled!", chase_order_id)
+                                    order.status = OrderStatus.FAILED
+                                    order.reason = "Chase BUY unfilled (requires manual intervention)"
+                            else:
+                                logger.error("🚨 CRITICAL: Aggressive chase BUY order failed to place!")
+                                order.status = OrderStatus.FAILED
+                                order.reason = "Chase BUY placement failed"
                         else:
                             logger.warning("Cancelling unfilled SELL order, initiating aggressive market chase.")
                             self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "SELL")
