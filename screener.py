@@ -289,11 +289,25 @@ class DynamicScreener:
         except Exception:
             pass
 
-        # 300 candidates sampled from base universe to avoid API 429
-        import random
+        # Rolling Round-Robin scanning of the entire universe across multiple cycles to avoid KIS/Finnhub API 429
+        if not hasattr(self, '_screener_offset'):
+            self._screener_offset = 0
+            
         all_symbols = list(BASE_UNIVERSE)
-        random.shuffle(all_symbols)
-        symbols_to_scan = all_symbols[:config.SCREENER_MAX_CANDIDATES]
+        total_count = len(all_symbols)
+        max_cands = getattr(config, 'SCREENER_MAX_CANDIDATES', 330)
+        
+        start_idx = self._screener_offset % total_count if total_count > 0 else 0
+        end_idx = start_idx + max_cands
+        
+        if end_idx > total_count:
+            symbols_to_scan = all_symbols[start_idx:] + all_symbols[:(end_idx % total_count)]
+        else:
+            symbols_to_scan = all_symbols[start_idx:end_idx]
+            
+        self._screener_offset = (start_idx + max_cands) % total_count if total_count > 0 else 0
+        logger.info("📐 Screener Rolling Scan: offset {} to {}, scanning {} symbols out of {} total universe", 
+                    start_idx, end_idx % total_count if end_idx > total_count else end_idx, len(symbols_to_scan), total_count)
 
         passed_candidates = []
         _lock = threading.Lock()
@@ -341,10 +355,10 @@ class DynamicScreener:
                 if not (2.0 <= today_close <= 500.0):
                     return
 
-                # Price Change (must be +1.5% to +8.0%)
+                # Price Change (must be +1.5% to +15.0% to capture explosive breakout leaders)
                 yesterday_close = float(prior_history["Close"].iloc[-1])
                 pct_change = ((today_close - yesterday_close) / yesterday_close) * 100
-                if not (1.5 <= pct_change <= 8.0):
+                if not (1.5 <= pct_change <= 15.0):
                     return
 
                 # Transaction value check (min $3M)
@@ -386,8 +400,12 @@ class DynamicScreener:
                 today_ema20 = float(ema20.iloc[-1])
                 today_sma200 = float(sma200.iloc[-1]) if len(sma200) >= 200 else today_ema20 * 0.9  # fallback
 
-                # Perfect Trend Alignment Filter (5-EMA > 20-EMA > 200-SMA)
-                if not (today_ema5 > today_ema20 > today_sma200):
+                # [Quant-Regime Tuning] Perfect Trend alignment constraint relaxed for Early Breakout Alpha
+                # Traditional: today_ema5 > today_ema20 > today_sma200
+                # Eased: Require perfect alignment OR active bull breakout (ema5 > ema20 AND close > sma200)
+                is_aligned = today_ema5 > today_ema20 > today_sma200
+                is_early_breakout = (today_ema5 > today_ema20) and (today_close > today_sma200)
+                if not (is_aligned or is_early_breakout):
                     return
                 
                 # Close price relative to 20-EMA

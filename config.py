@@ -238,7 +238,11 @@ SCREENED_MIN_SCORE = int(os.getenv("SCREENED_MIN_SCORE", "60"))  # 스크리너 
 MIN_STOCK_PRICE = float(os.getenv("MIN_STOCK_PRICE", "5.0"))
 
 # 최대 스크리닝 후보 종목 수 (Russell 1000 대비)
-SCREENER_MAX_CANDIDATES = int(os.getenv("SCREENER_MAX_CANDIDATES", "300"))
+SCREENER_MAX_CANDIDATES = int(os.getenv("SCREENER_MAX_CANDIDATES", "330"))
+
+# 스크리너 캐시 주기 (분 단위) — 15분 주기로 단축하여 기회포착 극대화
+SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "15"))
+
 
 # ==============================================
 # Validation

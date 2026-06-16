@@ -441,13 +441,14 @@ class BotOrchestrator:
         logger.info("[PHASE 3] Running Universe Screener (5 modules)")
         logger.info("=" * 60)
         
-        # ---- 45-minute screener result cache ----
+        # ---- Dynamic screener result cache ----
         now = datetime.now()
+        cache_seconds = getattr(config, 'SCREENER_CACHE_MINUTES', 15) * 60
         if (self.state.last_screen_refresh is not None and
-                (now - self.state.last_screen_refresh).total_seconds() < 2700 and  # 45 min
+                (now - self.state.last_screen_refresh).total_seconds() < cache_seconds and
                 self.state.target_universe):
-            logger.info("  -> Screener result cached ({} symbols). Skipping re-scan.",
-                        len(self.state.target_universe))
+            logger.info("  -> Screener result cached ({} symbols, cache: {}s). Skipping re-scan.",
+                        len(self.state.target_universe), cache_seconds)
             return
         
         try:
