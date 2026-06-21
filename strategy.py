@@ -296,6 +296,22 @@ class StrategyEngine:
 
         # BREADTH_GUARD moved to the end of check_entry to support High-Score Bypass
 
+        # 5. Theme Radar Portfolio Risk Guard (최대 동일 테마 2개 한도 제한)
+        try:
+            from theme_radar_adapter import ThemeRadarAdapter
+            adapter = ThemeRadarAdapter()
+            recs = adapter.get_recommendations()
+            if symbol in recs:
+                target_theme = recs[symbol]["theme_id"]
+                theme_count = 0
+                for pos_symbol in self._positions:
+                    if pos_symbol in recs and recs[pos_symbol]["theme_id"] == target_theme:
+                        theme_count += 1
+                if theme_count >= 2:
+                    return EntrySignal("HOLD", 0, f"THEME_GUARD: Max 2 positions for theme '{recs[symbol]['theme_name']}' reached", 0)
+        except Exception as e:
+            logger.error("Theme portfolio risk guard error: {}", e)
+
         # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
         if df_daily is None or len(df_daily) < 50:
