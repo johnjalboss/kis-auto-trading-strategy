@@ -141,6 +141,18 @@ class DynamicScreener:
         except Exception as sm_err:
             logger.error("Failed to inject local smart money candidates: {}", sm_err)
 
+        # 🎯 Inject Theme Radar recommended candidates (Top picks)
+        try:
+            from theme_radar_adapter import ThemeRadarAdapter
+            adapter = ThemeRadarAdapter()
+            recs = adapter.get_recommendations()
+            if recs:
+                theme_cands = list(recs.keys())
+                logger.info("🎯 Theme Radar: Found {} recommended candidates. Injecting at top.", len(theme_cands))
+                candidates = list(dict.fromkeys(theme_cands + candidates))
+        except Exception as tr_err:
+            logger.error("Failed to inject theme radar candidates: {}", tr_err)
+
         # Dynamic Downtrend Ticker Injection (Relative Strength & Hedging)
         try:
             import kis_data as _kd
@@ -1106,10 +1118,24 @@ class DynamicScreener:
             except Exception:
                 pass
 
+            # Theme Radar Bonus
+            theme_radar_bonus = 0
+            try:
+                from theme_radar_adapter import ThemeRadarAdapter
+                adapter = ThemeRadarAdapter()
+                recs = adapter.get_recommendations()
+                if symbol in recs:
+                    # 탑픽 추천 종목이면 가중치 부여 (Leader Pick = +25, Setup Pick = +15)
+                    theme_radar_bonus = 25 if recs[symbol]["pick_type"] == "LEADER" else 15
+                    logger.info("🎯 [THEME_RADAR_BONUS] {} is a Theme Radar {}! Bonus: +{}", 
+                                symbol, recs[symbol]["pick_type"], theme_radar_bonus)
+            except Exception as tr_err:
+                logger.debug("Failed to calculate Theme Radar bonus for {}: {}", symbol, tr_err)
+
             # Clamp total score between 0 and 100
             total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
                        tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
-                       high52w_bonus + pead_bonus + sector_bonus))
+                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus))
             
             # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
             if news_blacklist or pead_blacklist:

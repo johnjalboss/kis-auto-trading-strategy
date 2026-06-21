@@ -1157,8 +1157,24 @@ class StrategyEngine:
                     quantity: int, atr: float):
         """Add new position"""
         cfg = self.get_phase_config()
-        #  ATR 0  5%   (DAWN    )
-        stop_price = entry_price - (atr * cfg.stop_loss_atr) if atr > 0 else entry_price * 0.95
+        
+        # 🎯 테마 레이더의 변동성 기반 동적 손절가(stop_loss) 적용 시도
+        stop_price = None
+        try:
+            from theme_radar_adapter import ThemeRadarAdapter
+            adapter = ThemeRadarAdapter()
+            recs = adapter.get_recommendations()
+            if symbol in recs:
+                stop_pct = recs[symbol]["stop_pct"]
+                stop_price = entry_price * (1 - stop_pct / 100)
+                logger.info("🎯 [THEME_RADAR_STOP] Applied dynamic stop-loss for {}: {}% (${:.2f})", 
+                            symbol, stop_pct, stop_price)
+        except Exception as e:
+            logger.debug("Failed to fetch Theme Radar stop loss: {}", e)
+
+        # Fallback to standard ATR stop if not matched in Theme Radar
+        if stop_price is None:
+            stop_price = entry_price - (atr * cfg.stop_loss_atr) if atr > 0 else entry_price * 0.95
         
         self._positions[symbol] = Position(
             symbol=symbol,
