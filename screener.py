@@ -1125,8 +1125,8 @@ class DynamicScreener:
                 adapter = ThemeRadarAdapter()
                 recs = adapter.get_recommendations()
                 if symbol in recs:
-                    # 탑픽 추천 종목이면 가중치 부여 (Leader Pick = +25, Setup Pick = +15)
-                    theme_radar_bonus = 25 if recs[symbol]["pick_type"] == "LEADER" else 15
+                    # 탑픽 추천 종목이면 가중치 부여 (Leader Pick = +15, Setup Pick = +8)
+                    theme_radar_bonus = 15 if recs[symbol]["pick_type"] == "LEADER" else 8
                     logger.info("🎯 [THEME_RADAR_BONUS] {} is a Theme Radar {}! Bonus: +{}", 
                                 symbol, recs[symbol]["pick_type"], theme_radar_bonus)
             except Exception as tr_err:
