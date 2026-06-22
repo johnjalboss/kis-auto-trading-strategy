@@ -134,6 +134,40 @@ class AntiFrагility:
             score += 10
         
         return min(100, score)
+    
+    def get_antifragility_score(self) -> float:
+        """
+        Compute antifragility score (-100 to 100).
+        Lower score (< -50) indicates fragile state requiring size reduction.
+        """
+        try:
+            import yfinance as yf
+            vix_df = yf.Ticker("^VIX").history(period="5d")
+            vix = vix_df["Close"].iloc[-1] if not vix_df.empty else 15.0
+            
+            spy_df = yf.Ticker("SPY").history(period="10d")
+            if not spy_df.empty:
+                spy_max = spy_df["High"].max()
+                spy_curr = spy_df["Close"].iloc[-1]
+                drawdown = (spy_max - spy_curr) / spy_max * 100
+            else:
+                drawdown = 0.0
+                
+            score = 0.0
+            if vix > 35:
+                score -= 60.0
+            elif vix > 25:
+                score -= 30.0
+                
+            if drawdown > 8.0:
+                score -= 55.0
+            elif drawdown > 5.0:
+                score -= 25.0
+                
+            return score
+        except Exception as e:
+            logger.warning("Error in get_antifragility_score: {}", e)
+            return 0.0
 
 
 def get_antifragility(portfolio: float = 100000) -> AntiFrагility:

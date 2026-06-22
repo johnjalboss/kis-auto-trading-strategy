@@ -96,6 +96,63 @@ class HedgeManager:
             return 'fear'
         else:
             return 'normal'
+            
+    def check_hedge_needed(self, positions: List) -> str | None:
+        """
+        Check if portfolio hedges need rebalancing.
+        Returns a string recommendation or None.
+        """
+        try:
+            total_val = self.portfolio_value
+            if total_val <= 0:
+                return None
+                
+            # Map positions to get current hedge values
+            current_gold = 0.0
+            current_bonds = 0.0
+            current_vix = 0.0
+            
+            for p in positions:
+                symbol = getattr(p, 'symbol', '')
+                qty = getattr(p, 'quantity', getattr(p, 'qty', 0))
+                price = getattr(p, 'current_price', 0.0)
+                val = qty * price
+                
+                if symbol == 'GLD':
+                    current_gold += val
+                elif symbol == 'TLT':
+                    current_bonds += val
+                elif symbol in ['UVXY', 'VIXY']:
+                    current_vix += val
+                    
+            self.update_hedge('GOLD', current_gold)
+            self.update_hedge('BONDS', current_bonds)
+            self.update_hedge('VIX', current_vix)
+            
+            # Determine regime based on VIX
+            import yfinance as yf
+            vix_df = yf.Ticker("^VIX").history(period="1d")
+            vix = vix_df["Close"].iloc[-1] if not vix_df.empty else 15.0
+            
+            if vix > 30:
+                regime = "CRASH"
+            elif vix > 22:
+                regime = "FEAR"
+            else:
+                regime = "BULL"
+                
+            allocations = self.get_allocation(regime)
+            recs = []
+            for a in allocations:
+                if a.action != "HOLD" and abs(a.rebalance_amount) > 200:
+                    recs.append(f"{a.action} {a.instrument} (${a.rebalance_amount:.2f})")
+                    
+            if recs:
+                return ", ".join(recs)
+            return None
+        except Exception as e:
+            logger.warning("Error in check_hedge_needed: {}", e)
+            return None
 
 
 def get_hedge_manager(value: float = 100000) -> HedgeManager:

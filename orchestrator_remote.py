@@ -726,7 +726,9 @@ class BotOrchestrator:
         # 8. Hedge Manager
         def _hedge():
             from hedge_manager import get_hedge_manager
-            hm = get_hedge_manager()
+            bp = self.trader.get_buying_power()
+            total_equity = bp + sum(p.market_value for p in self.trader.get_positions())
+            hm = get_hedge_manager(total_equity)
             hedge_rec = hm.check_hedge_needed(self.trader.get_positions())
             if hedge_rec:
                 logger.info("  -> hedge_manager: {}", hedge_rec)

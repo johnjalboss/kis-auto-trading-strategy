@@ -1149,7 +1149,9 @@ class BotOrchestrator:
         # 8. Hedge Manager
         def _hedge():
             from hedge_manager import get_hedge_manager
-            hm = get_hedge_manager()
+            bp = self.trader.get_buying_power()
+            total_equity = bp + sum(p.market_value for p in self.trader.get_positions())
+            hm = get_hedge_manager(total_equity)
             hedge_rec = hm.check_hedge_needed(self.trader.get_positions())
             if hedge_rec:
                 logger.info("  -> hedge_manager: {}", hedge_rec)
@@ -1573,6 +1575,13 @@ class BotOrchestrator:
                     pass
                 
                 now = datetime.now()
+                
+                # Check and recover emergency state if active
+                try:
+                    if hasattr(self, '_emergency') and self._emergency:
+                        self._emergency.check_recovery()
+                except Exception as erec:
+                    logger.debug("Emergency recovery check failed: {}", erec)
                 
                 # ✦ 24/7 무중단 자동 패치 체크 (4시간 주기 원격 전략 자동 업데이트 동기화 및 자체 재기동)
                 try:

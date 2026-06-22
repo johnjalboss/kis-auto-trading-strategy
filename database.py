@@ -130,6 +130,19 @@ class TradeDatabase:
                     PRIMARY KEY (report_type, report_date)
                 );
                 
+                CREATE TABLE IF NOT EXISTS macro_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    risk_level TEXT NOT NULL,
+                    penalty INTEGER NOT NULL,
+                    reason TEXT,
+                    resolved INTEGER DEFAULT 0,
+                    spy_entry_price REAL,
+                    spy_exit_price REAL,
+                    accuracy TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at TIMESTAMP
+                );
+                
                 CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(entry_time);
                 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
             """)
@@ -386,6 +399,47 @@ class TradeDatabase:
                 (report_type, report_date.isoformat())
             )
         logger.info("Marked report {} sent for {}", report_type, report_date)
+
+    # ==============================================
+    # Macro Feedback Loops (Self-Feedback Audit)
+    # ==============================================
+
+    def record_macro_decision(self, risk_level: str, penalty: int, reason: str, spy_price: float = None) -> int:
+        """Record macro lockdown decision for future self-feedback audit"""
+        with self._get_conn() as conn:
+            cursor = conn.execute("""
+                INSERT INTO macro_feedback (risk_level, penalty, reason, spy_entry_price, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (risk_level, penalty, reason, spy_price, datetime.now()))
+            return cursor.lastrowid
+
+    def get_unresolved_macro_feedbacks(self) -> List[dict]:
+        """Fetch macro decisions that are pending resolution (unresolved) and at least 3 days old"""
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM macro_feedback 
+                WHERE resolved = 0 AND datetime(created_at) < datetime('now', '-3 days')
+            """).fetchall()
+        return [dict(row) for row in rows]
+
+    def resolve_macro_feedback(self, feedback_id: int, spy_exit_price: float, accuracy: str):
+        """Update macro decision outcome after post-mortem evaluation"""
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE macro_feedback
+                SET resolved = 1, spy_exit_price = ?, accuracy = ?, resolved_at = ?
+                WHERE id = ?
+            """, (spy_exit_price, accuracy, datetime.now(), feedback_id))
+
+    def get_recent_resolved_feedbacks(self, days: int = 30) -> List[dict]:
+        """Fetch resolved macro feedbacks within recent days"""
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM macro_feedback 
+                WHERE resolved = 1 AND datetime(resolved_at) >= ?
+            """, (cutoff,)).fetchall()
+        return [dict(row) for row in rows]
 
 
 # Global instance

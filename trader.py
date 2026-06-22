@@ -651,11 +651,16 @@ class Trader:
     # Order Execution
     # ==============================================
     
-    def buy(self, symbol: str, quantity: int, limit_price: float = None) -> OrderResult:
-        """Buy stock with limit order"""
+    def buy(self, symbol: str, quantity: int, limit_price: float = None, ensure_fill: bool = False) -> OrderResult:
+        """Buy stock with limit order, optionally chasing price if unfilled"""
         if limit_price is None:
             price = self.get_price(symbol)
-            limit_price = round(price * 1.002, 2)  # Slightly above market
+            # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
+            spread = self.get_spread(symbol)
+            markup = max(0.001, min(0.015, spread * 1.5))
+            limit_price = round(price * (1.0 + markup), 2)
+            logger.info("BUY {} | Price: ${:.2f}, Spread: {:.2%}, Markup: {:.2%}, Limit: ${:.2f}",
+                        symbol, price, spread, markup, limit_price)
             
         exchange = self._exchange_mapper.get_exchange(symbol)
         
@@ -704,7 +709,26 @@ class Trader:
                         logger.success("BUY order placed: {} (ID: {}, exchange: {})", symbol, order_id, try_exchange)
                         # Cache successful exchange
                         self._exchange_mapper.SYMBOL_EXCHANGE[symbol.upper()] = try_exchange
-                        return OrderResult(True, order_id, symbol, "BUY", quantity, limit_price)
+                        result = OrderResult(True, order_id, symbol, "BUY", quantity, limit_price)
+                        
+                        if ensure_fill:
+                            # Wait 15 seconds for fill
+                            time.sleep(15)
+                            orders = self.get_unfilled_orders()
+                            unfilled = next((o for o in orders if o["order_id"] == order_id), None)
+                            
+                            if unfilled:
+                                logger.warning("BUY Order {} ({}) UNFILLED after 15s. Chasing market!", order_id, symbol)
+                                # Cancel the old order
+                                self.cancel_order(order_id, symbol, unfilled["quantity"], try_exchange, "BUY")
+                                time.sleep(2)
+                                
+                                # Resubmit at +1.0% (aggressive chase)
+                                chase_price = round(limit_price * 1.01, 2)
+                                logger.warning("Resubmitting BUY for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
+                                return self.buy(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                        
+                        return result
                     else:
                         msg = data.get("msg1", "Error")
                         logger.error("BUY failed on {}: {}", try_exchange, msg)
@@ -727,7 +751,12 @@ class Trader:
         """Sell stock with limit order, optionally chasing price if unfilled"""
         if limit_price is None:
             price = self.get_price(symbol)
-            limit_price = round(price * 0.998, 2)  # Slightly below market
+            # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
+            spread = self.get_spread(symbol)
+            markdown = max(0.001, min(0.015, spread * 1.5))
+            limit_price = round(price * (1.0 - markdown), 2)
+            logger.info("SELL {} | Price: ${:.2f}, Spread: {:.2%}, Markdown: {:.2%}, Limit: ${:.2f}",
+                        symbol, price, spread, markdown, limit_price)
             
         exchange = self._exchange_mapper.get_exchange(symbol)
         

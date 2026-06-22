@@ -92,6 +92,13 @@ class CostModel:
             breakeven_move_pct=total_pct
         )
     
+    def estimate_cost(self, symbol: str, qty: int, price: float) -> float:
+        """Estimate trading cost (commission + slippage)"""
+        value = qty * price
+        # Default to mid cap slippage if cap size is unknown
+        cost_info = self.calculate_entry_cost(value, 'mid')
+        return cost_info.total_cost
+    
     def adjust_target(self, 
                       raw_target_pct: float,
                       cap_size: str = 'large') -> float:

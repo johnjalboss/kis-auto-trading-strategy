@@ -141,6 +141,28 @@ def _proxy_download(tickers, *args, **kwargs):
                 _cache[cache_key] = (df.copy(), now)
                 return df
 
+            # [FAIL-SAFE REDUNDANCY] 복수 티커 다운로드 실패 시 개별 분해 복구 및 재조립 적용
+            if (df is None or df.empty) and isinstance(tickers, list) and len(tickers) > 1:
+                logger.warning(f"⚠️ Multiple tickers download failed for {tickers}. Decomposing to individual fallbacks...")
+                sub_dfs = {}
+                for t in tickers:
+                    tdf = _proxy_download(t, *args, **kwargs)
+                    if tdf is not None and not tdf.empty:
+                        sub_dfs[t] = tdf.copy()
+                
+                if sub_dfs:
+                    try:
+                        # yfinance 복수 다운로드의 MultiIndex 컬럼 형식(Metric, Ticker)을 에뮬레이션
+                        for t, tdf in sub_dfs.items():
+                            if not isinstance(tdf.columns, pd.MultiIndex):
+                                tdf.columns = pd.MultiIndex.from_product([tdf.columns, [t]])
+                        merged_df = pd.concat(list(sub_dfs.values()), axis=1)
+                        _cache[cache_key] = (merged_df.copy(), now)
+                        logger.info(f"✅ Successfully reconstructed MultiIndex DataFrame for {tickers} from fallbacks.")
+                        return merged_df
+                    except Exception as ce:
+                        logger.error(f"Failed to concat individual fallbacks for {tickers}: {ce}")
+
             # --- yfinance download FAILED -> Attempt recovery for macro tickers ---
             symbol = tickers[0] if isinstance(tickers, list) else tickers
             if isinstance(symbol, str):

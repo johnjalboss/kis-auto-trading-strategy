@@ -168,7 +168,7 @@ def check_circuit_breaker(trader, rm) -> bool:
             # Estimate P&L from positions
             total_cost = sum(p.avg_price * p.quantity for p in positions)
             if total_cost > 0:
-                loss_pct = (total_value - bp - total_cost) / total_cost
+                loss_pct = (total_value - bp - total_cost) / total_value
                 result = es.check_portfolio_loss(loss_pct)
                 return result is not None and result.is_active
     except Exception as e:
