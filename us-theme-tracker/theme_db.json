@@ -1,0 +1,3065 @@
+{
+  "version": "3.0",
+  "themes": {
+    "nand_memory": {
+      "name_ko": "NAND 플래시 메모리",
+      "name_en": "NAND Flash Memory",
+      "description": "NAND 플래시 메모리 설계·제조 전문 기업",
+      "keywords": [
+        "nand flash",
+        "flash memory",
+        "flash storage",
+        "nand technology",
+        "solid state drive",
+        "ssd",
+        "flash-based",
+        "nand-based"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "consulting",
+        "real estate",
+        "cloud software",
+        "streaming",
+        "drug",
+        "aerospace",
+        "turbine",
+        "solar",
+        "wind",
+        "nuclear",
+        "gene",
+        "weapon"
+      ],
+      "premapped_tickers": [
+        "MU",
+        "WDC",
+        "SNDK",
+        "KIOXIA"
+      ]
+    },
+    "dram_memory": {
+      "name_ko": "DRAM 메모리",
+      "name_en": "DRAM / HBM Memory",
+      "description": "DRAM / HBM 메모리 설계·제조 전문 기업",
+      "keywords": [
+        "dram",
+        "high bandwidth memory",
+        "hbm",
+        "dynamic random access",
+        "memory module",
+        "rdimm",
+        "lpddr"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "software platform",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "MU",
+        "RMBS"
+      ]
+    },
+    "custom_ai_chips": {
+      "name_ko": "AI 반도체 / ASIC / GPU",
+      "name_en": "Custom AI Chips (ASIC / GPU / NPU)",
+      "description": "AI 학습·추론용 GPU, ASIC, NPU 설계 전문 기업",
+      "keywords": [
+        "gpu",
+        "graphics processing unit",
+        "neural processing",
+        "ai accelerator",
+        "asic for ai",
+        "tensor",
+        "deep learning chip",
+        "data center gpu",
+        "ai chip",
+        "ai semiconductor",
+        "inference chip",
+        "training chip",
+        "cerebras",
+        "artificial intelligence chip"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "gene",
+        "solar",
+        "wind",
+        "nuclear",
+        "weapon",
+        "food",
+        "retail"
+      ],
+      "premapped_tickers": [
+        "NVDA",
+        "AVGO",
+        "AMD",
+        "INTC",
+        "MRVL",
+        "CBRS",
+        "CEVA",
+        "QCOM",
+        "ARM",
+        "TSM"
+      ]
+    },
+    "fpga_chips": {
+      "name_ko": "FPGA / 프로그래머블 로직 칩",
+      "name_en": "FPGA & Programmable Logic",
+      "description": "FPGA 및 프로그래머블 로직 반도체 기업",
+      "keywords": [
+        "fpga",
+        "field programmable",
+        "programmable logic",
+        "cpld",
+        "soc fpga",
+        "reconfigurable"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "wind"
+      ],
+      "premapped_tickers": [
+        "LSCC",
+        "MCHP",
+        "ACLX"
+      ]
+    },
+    "analog_mixed_signal": {
+      "name_ko": "아날로그 / 혼성신호 반도체",
+      "name_en": "Analog & Mixed-Signal Semiconductors",
+      "description": "아날로그, 혼성신호, 임베디드 처리 반도체 기업. TI, ADI, MCHP 등",
+      "keywords": [
+        "analog semiconductor",
+        "analog integrated circuit",
+        "mixed-signal",
+        "data converter",
+        "adc",
+        "dac",
+        "operational amplifier",
+        "signal processing chip",
+        "microcontroller",
+        "embedded processor",
+        "power management ic",
+        "pmics",
+        "analog devices"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "wind",
+        "streaming",
+        "cloud platform"
+      ],
+      "premapped_tickers": [
+        "TXN",
+        "ADI",
+        "MCHP",
+        "MPWR",
+        "SIMO",
+        "DIOD"
+      ]
+    },
+    "rf_mobile_chips": {
+      "name_ko": "RF / 모바일 통신 반도체",
+      "name_en": "RF & Mobile Communication Chips",
+      "description": "RF 프론트엔드, 5G 모뎀, 모바일 통신용 반도체",
+      "keywords": [
+        "rf semiconductor",
+        "radio frequency chip",
+        "5g modem",
+        "rf front end",
+        "pa module",
+        "filter chip",
+        "lte modem",
+        "wifi chip",
+        "bluetooth chip",
+        "wireless connectivity chip",
+        "rf amplifier"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "wind",
+        "software platform"
+      ],
+      "premapped_tickers": [
+        "SWKS",
+        "QRVO",
+        "SLAB",
+        "MTSI"
+      ]
+    },
+    "power_semiconductors": {
+      "name_ko": "전력 반도체 (SiC/GaN)",
+      "name_en": "Power Semiconductors (SiC / GaN)",
+      "description": "실리콘카바이드(SiC), 질화갈륨(GaN) 기반 전력 반도체",
+      "keywords": [
+        "silicon carbide",
+        "sic",
+        "gallium nitride",
+        "gan",
+        "power mosfet",
+        "igbt",
+        "wide bandgap",
+        "power device",
+        "power transistor"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar panel",
+        "wind turbine"
+      ],
+      "premapped_tickers": [
+        "ON",
+        "WOLF",
+        "AEHR",
+        "STG"
+      ]
+    },
+    "optical_interconnects": {
+      "name_ko": "광인터커넥트 / 실리콘 포토닉스",
+      "name_en": "Optical Interconnects & Silicon Photonics",
+      "description": "광트랜시버, 실리콘 포토닉스, 광섬유 네트워크 부품",
+      "keywords": [
+        "optical transceiver",
+        "silicon photonics",
+        "coherent optical",
+        "photonic",
+        "fiber optic component",
+        "optical module",
+        "laser diode",
+        "indium phosphide",
+        "datacom optics",
+        "400g",
+        "800g transceiver"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "wind"
+      ],
+      "premapped_tickers": [
+        "COHR",
+        "LITE",
+        "CIEN",
+        "AAOI",
+        "LWLG",
+        "AXTI"
+      ]
+    },
+    "ai_networking_switches": {
+      "name_ko": "AI 데이터센터 네트워크 장비",
+      "name_en": "AI Datacenter Networking & Switches",
+      "description": "AI 클러스터용 이더넷 스위치, 인피니밴드, 스마트NIC 등",
+      "keywords": [
+        "ethernet switch",
+        "network switch",
+        "infiniband",
+        "smartnic",
+        "data center networking",
+        "roce",
+        "low latency network",
+        "backend network",
+        "ai cluster network",
+        "spine leaf",
+        "400g ethernet"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "ANET",
+        "IDCC"
+      ]
+    },
+    "enterprise_networking": {
+      "name_ko": "기업용 네트워크 장비",
+      "name_en": "Enterprise Networking Equipment",
+      "description": "기업 캠퍼스/WAN 라우터, 스위치, 보안 어플라이언스",
+      "keywords": [
+        "enterprise network",
+        "routing",
+        "campus network",
+        "wan optimization",
+        "network router",
+        "enterprise switch",
+        "sd-wan",
+        "wireless access point",
+        "wifi infrastructure",
+        "network management"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "ai chip",
+        "gpu"
+      ],
+      "premapped_tickers": [
+        "CSCO",
+        "JNPR",
+        "EXTR",
+        "NTGR",
+        "CALX"
+      ]
+    },
+    "semiconductor_test_equipment": {
+      "name_ko": "반도체 테스트 장비",
+      "name_en": "Semiconductor Test & Measurement Equipment",
+      "description": "반도체 웨이퍼/패키지 테스트 장비 (ATE, 프로브카드 등)",
+      "keywords": [
+        "automatic test equipment",
+        "ate",
+        "semiconductor tester",
+        "probe card",
+        "wafer test",
+        "ic tester",
+        "semiconductor test",
+        "mixed signal test",
+        "rf tester",
+        "memory tester"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "TER",
+        "COHU",
+        "FORM",
+        "ONTO",
+        "ICAD",
+        "NVMI"
+      ]
+    },
+    "lithography_equipment": {
+      "name_ko": "반도체 노광 장비 (EUV/DUV)",
+      "name_en": "Lithography Equipment (EUV / DUV)",
+      "description": "EUV, DUV 노광 장비 및 포토마스크 기업",
+      "keywords": [
+        "lithography",
+        "euv",
+        "duv",
+        "extreme ultraviolet",
+        "photomask",
+        "reticle",
+        "scanner",
+        "stepper",
+        "immersion lithography"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug"
+      ],
+      "premapped_tickers": [
+        "ASML",
+        "CAMT",
+        "PLAB",
+        "ACLS"
+      ]
+    },
+    "etching_deposition_equipment": {
+      "name_ko": "반도체 식각/증착 장비",
+      "name_en": "Etch, Deposition & CMP Equipment",
+      "description": "플라즈마 식각, CVD/ALD 증착, CMP 장비 및 소재",
+      "keywords": [
+        "plasma etch",
+        "chemical vapor deposition",
+        "cvd",
+        "atomic layer deposition",
+        "ald",
+        "physical vapor deposition",
+        "pvd",
+        "cmp",
+        "chemical mechanical planarization",
+        "semiconductor equipment",
+        "dry etch",
+        "deposition equipment"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar panel"
+      ],
+      "premapped_tickers": [
+        "LRCX",
+        "AMAT",
+        "KLAC",
+        "VECO",
+        "ACMR",
+        "NVMI",
+        "ACLS"
+      ]
+    },
+    "semiconductor_wafers": {
+      "name_ko": "반도체 웨이퍼 / 특수소재",
+      "name_en": "Semiconductor Wafers & Specialty Materials",
+      "description": "실리콘 웨이퍼, 특수 화학물질, 포토레지스트, 슬러리 등 반도체 소재",
+      "keywords": [
+        "semiconductor wafer",
+        "silicon wafer",
+        "photoresist",
+        "cmp slurry",
+        "specialty gas",
+        "precursor",
+        "semiconductor material",
+        "electronic grade",
+        "epitaxial",
+        "substrate material"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug"
+      ],
+      "premapped_tickers": [
+        "ENTG",
+        "AMKR",
+        "CCMP"
+      ]
+    },
+    "chip_packaging_osat": {
+      "name_ko": "반도체 패키징 / OSAT",
+      "name_en": "Chip Packaging & OSAT Services",
+      "description": "반도체 후공정 패키징, 테스트 외주 서비스 (OSAT)",
+      "keywords": [
+        "semiconductor packaging",
+        "osat",
+        "outsourced assembly",
+        "advanced packaging",
+        "chiplet",
+        "2.5d packaging",
+        "3d packaging",
+        "wafer level packaging",
+        "flip chip",
+        "wire bonding packaging"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug"
+      ],
+      "premapped_tickers": [
+        "AMKR",
+        "ASX",
+        "BESI"
+      ]
+    },
+    "contract_foundry": {
+      "name_ko": "반도체 파운드리 (위탁생산)",
+      "name_en": "Contract Chip Foundry",
+      "description": "반도체 위탁 제조 파운드리",
+      "keywords": [
+        "foundry",
+        "semiconductor manufacturing",
+        "wafer fabrication",
+        "contract manufacturing semiconductor",
+        "pure play foundry",
+        "advanced node"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "software"
+      ],
+      "premapped_tickers": [
+        "TSM",
+        "UMC",
+        "GFS"
+      ]
+    },
+    "eda_ip_software": {
+      "name_ko": "EDA 소프트웨어 / 반도체 IP",
+      "name_en": "EDA Software & Semiconductor IP",
+      "description": "칩 설계 자동화(EDA) 소프트웨어, 반도체 IP 라이선싱",
+      "keywords": [
+        "electronic design automation",
+        "eda",
+        "chip design software",
+        "semiconductor ip",
+        "vlsi design",
+        "rtl synthesis",
+        "place and route",
+        "simulation software",
+        "verification software",
+        "arm ip",
+        "risc-v"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "CDNS",
+        "SNPS",
+        "ANSYS",
+        "ARM"
+      ]
+    },
+    "quantum_computing": {
+      "name_ko": "양자 컴퓨터",
+      "name_en": "Quantum Computing",
+      "description": "양자 컴퓨팅 하드웨어 및 소프트웨어",
+      "keywords": [
+        "quantum computer",
+        "qubit",
+        "quantum processor",
+        "superconducting qubit",
+        "ion trap",
+        "quantum annealing",
+        "quantum algorithm",
+        "quantum software",
+        "quantum hardware"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "consulting",
+        "storage device"
+      ],
+      "premapped_tickers": [
+        "IONQ",
+        "RGTI",
+        "QBTS",
+        "QUBT",
+        "QNT"
+      ]
+    },
+    "server_manufacturers": {
+      "name_ko": "서버 및 HPC 제조사",
+      "name_en": "Server & HPC Manufacturers",
+      "description": "AI 서버, 고성능 컴퓨팅(HPC) 서버 설계·제조사",
+      "keywords": [
+        "server manufacturer",
+        "rack server",
+        "blade server",
+        "hpc server",
+        "high performance computing server",
+        "server systems",
+        "gpu server",
+        "ai server",
+        "compute server"
+      ],
+      "negative_keywords": [
+        "banking",
+        "insurance",
+        "real estate",
+        "drug",
+        "solar",
+        "cloud software",
+        "networking switch"
+      ],
+      "premapped_tickers": [
+        "DELL",
+        "SMCI",
+        "HPE",
+        "NTAP",
+        "PENG"
+      ]
+    },
+    "hyperscale_cloud": {
+      "name_ko": "하이퍼스케일 클라우드 (빅3)",
+      "name_en": "Hyperscale Cloud Platforms",
+      "description": "AWS, Azure, GCP 등 메이저 클라우드 플랫폼",
+      "keywords": [
+        "cloud computing platform",
+        "aws",
+        "azure",
+        "google cloud",
+        "infrastructure as a service",
+        "iaas",
+        "platform as a service",
+        "paas",
+        "cloud services provider"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "nuclear",
+        "cdn only",
+        "edge only"
+      ],
+      "premapped_tickers": [
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "ORCL",
+        "IBM"
+      ]
+    },
+    "gpu_cloud_infrastructure": {
+      "name_ko": "GPU 클라우드 / AI 인프라 임대",
+      "name_en": "GPU Cloud & AI Infrastructure-as-a-Service",
+      "description": "GPU 클러스터 전문 임대, AI 전용 데이터센터 운영",
+      "keywords": [
+        "gpu cloud",
+        "ai infrastructure",
+        "gpu-as-a-service",
+        "ai compute cloud",
+        "h100 cluster",
+        "nvidia gpu cloud",
+        "gpu rental",
+        "ai training cloud"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "CRWV"
+      ]
+    },
+    "generative_ai_platforms": {
+      "name_ko": "생성형 AI / LLM 플랫폼",
+      "name_en": "Generative AI & LLM Platforms",
+      "description": "ChatGPT류 생성형 AI, LLM 기반 플랫폼 및 에이전트",
+      "keywords": [
+        "large language model",
+        "llm",
+        "generative ai",
+        "gpt",
+        "foundation model",
+        "chatbot ai",
+        "ai assistant",
+        "text generation",
+        "image generation ai",
+        "multimodal ai",
+        "openai",
+        "anthropic"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "chip manufacturer"
+      ],
+      "premapped_tickers": [
+        "AAPL",
+        "META",
+        "MSFT",
+        "GOOGL",
+        "APP"
+      ]
+    },
+    "ai_software_enterprise": {
+      "name_ko": "기업용 AI 소프트웨어",
+      "name_en": "Enterprise AI Software & Platforms",
+      "description": "기업 업무에 AI를 적용한 SaaS 및 데이터 분석 플랫폼",
+      "keywords": [
+        "artificial intelligence platform",
+        "ai software",
+        "machine learning platform",
+        "enterprise ai",
+        "predictive analytics",
+        "ai analytics",
+        "decision intelligence",
+        "ai workflow",
+        "ai-powered software"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "PLTR",
+        "AI",
+        "SOUN",
+        "AMBA",
+        "BBAI"
+      ]
+    },
+    "next_gen_cybersecurity": {
+      "name_ko": "차세대 보안 (SASE/제로트러스트)",
+      "name_en": "Next-Gen Cybersecurity (SASE / Zero-Trust)",
+      "description": "클라우드 보안, SASE, 제로트러스트, EDR, XDR 플랫폼",
+      "keywords": [
+        "cybersecurity",
+        "zero trust",
+        "sase",
+        "endpoint detection",
+        "edr",
+        "xdr",
+        "cloud security",
+        "network security",
+        "identity security",
+        "threat intelligence",
+        "firewall",
+        "intrusion detection"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "manufacturing"
+      ],
+      "premapped_tickers": [
+        "CRWD",
+        "PANW",
+        "FTNT",
+        "ZS",
+        "OKTA",
+        "NET",
+        "S",
+        "QLYS",
+        "NABL",
+        "RPD"
+      ]
+    },
+    "devops_observability": {
+      "name_ko": "DevOps / 클라우드 모니터링",
+      "name_en": "DevOps, Observability & Cloud Monitoring",
+      "description": "개발운영 자동화, 클라우드 모니터링, APM, 로그 분석",
+      "keywords": [
+        "devops",
+        "observability",
+        "application performance monitoring",
+        "apm",
+        "log management",
+        "infrastructure monitoring",
+        "cloud monitoring",
+        "site reliability",
+        "continuous integration",
+        "ci/cd"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind"
+      ],
+      "premapped_tickers": [
+        "DDOG",
+        "DT",
+        "NR",
+        "ESTC",
+        "SUMO"
+      ]
+    },
+    "cdn_edge_networking": {
+      "name_ko": "CDN / 엣지 컴퓨팅",
+      "name_en": "CDN & Edge Networking",
+      "description": "콘텐츠 전송 네트워크(CDN), 엣지 컴퓨팅 플랫폼",
+      "keywords": [
+        "content delivery network",
+        "cdn",
+        "edge computing",
+        "ddos protection",
+        "web performance",
+        "edge cloud",
+        "distributed network"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "NET",
+        "FSLY",
+        "AKAM",
+        "LLNW"
+      ]
+    },
+    "crm_enterprise_saas": {
+      "name_ko": "CRM / 기업용 SaaS",
+      "name_en": "CRM & Enterprise SaaS",
+      "description": "세일즈포스 CRM, 마케팅 자동화, HR SaaS, ERP 클라우드",
+      "keywords": [
+        "customer relationship management",
+        "crm",
+        "sales automation",
+        "marketing automation",
+        "human capital management",
+        "hcm",
+        "enterprise resource planning",
+        "erp cloud",
+        "saas platform",
+        "cloud application"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip",
+        "cybersecurity",
+        "networking"
+      ],
+      "premapped_tickers": [
+        "CRM",
+        "HUBS",
+        "SAP",
+        "WDAY",
+        "NOW",
+        "INTU",
+        "ZM",
+        "TEAM",
+        "MDB",
+        "TWLO"
+      ]
+    },
+    "vector_databases": {
+      "name_ko": "벡터 DB / AI 데이터 플랫폼",
+      "name_en": "Vector Databases & AI Data Platforms",
+      "description": "AI 임베딩 벡터 DB, 실시간 데이터 플랫폼",
+      "keywords": [
+        "vector database",
+        "embedding database",
+        "ai data platform",
+        "real-time data",
+        "data lakehouse",
+        "streaming data platform",
+        "data warehouse cloud"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "SNOW",
+        "DBX",
+        "CLDR"
+      ]
+    },
+    "digital_twin": {
+      "name_ko": "디지털 트윈 / 산업 시뮬레이션",
+      "name_en": "Digital Twin & Industrial Simulation",
+      "description": "산업 설비의 디지털 복제 및 시뮬레이션 플랫폼",
+      "keywords": [
+        "digital twin",
+        "industrial simulation",
+        "3d simulation",
+        "physics simulation",
+        "product lifecycle management",
+        "plm software",
+        "cae software"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "ANSS",
+        "PTC",
+        "CDNS"
+      ]
+    },
+    "five_g_telecom_equipment": {
+      "name_ko": "5G 기지국 / 통신장비",
+      "name_en": "5G RAN & Telecom Infrastructure Equipment",
+      "description": "5G 기지국, RAN, 코어 네트워크, O-RAN 장비",
+      "keywords": [
+        "5g",
+        "radio access network",
+        "ran",
+        "base station",
+        "telecom infrastructure",
+        "oran",
+        "open ran",
+        "small cell",
+        "massive mimo",
+        "network densification",
+        "backhaul equipment"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "software application",
+        "cloud"
+      ],
+      "premapped_tickers": [
+        "ERIC",
+        "NOK",
+        "VIAV",
+        "KEYS"
+      ]
+    },
+    "cable_broadband": {
+      "name_ko": "케이블 / 위성 인터넷",
+      "name_en": "Cable & Broadband Internet Services",
+      "description": "케이블TV, 위성 인터넷 서비스 운영사",
+      "keywords": [
+        "cable television",
+        "broadband internet",
+        "cable operator",
+        "mso",
+        "internet service provider",
+        "isp",
+        "coaxial cable",
+        "docsis"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "CHTR",
+        "CMCSA",
+        "CABO"
+      ]
+    },
+    "telecom_carriers": {
+      "name_ko": "통신사 / 이동통신",
+      "name_en": "Wireless & Wireline Telecom Carriers",
+      "description": "이동통신, 유선통신 서비스 운영사",
+      "keywords": [
+        "wireless carrier",
+        "mobile network operator",
+        "mno",
+        "telecommunications service",
+        "cellular network",
+        "wireline",
+        "fixed line",
+        "mvno",
+        "spectrum auction"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip",
+        "equipment manufacturer"
+      ],
+      "premapped_tickers": [
+        "T",
+        "VZ",
+        "TMUS",
+        "LUMN",
+        "USM"
+      ]
+    },
+    "smr_nuclear": {
+      "name_ko": "소형 모듈 원자로 (SMR)",
+      "name_en": "Small Modular Reactors (SMR)",
+      "description": "소형 모듈형 원자로 기술 개발 기업",
+      "keywords": [
+        "small modular reactor",
+        "smr",
+        "advanced nuclear",
+        "microreactor",
+        "nuscale",
+        "oklo",
+        "kairos",
+        "nuclear fission reactor",
+        "fission power plant"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "mining"
+      ],
+      "premapped_tickers": [
+        "SMR",
+        "OKLO",
+        "BWXT"
+      ]
+    },
+    "uranium_mining": {
+      "name_ko": "우라늄 광산 / 핵연료",
+      "name_en": "Uranium Mining & Nuclear Fuel",
+      "description": "우라늄 채굴, 농축, 핵연료 공급 기업",
+      "keywords": [
+        "uranium",
+        "nuclear fuel",
+        "uranium enrichment",
+        "nuclear enrichment",
+        "yellowcake",
+        "uranium mining",
+        "u3o8",
+        "uranium concentrate"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "software"
+      ],
+      "premapped_tickers": [
+        "CCJ",
+        "LEU",
+        "UEC",
+        "UUUU",
+        "NXE",
+        "URG",
+        "DNN"
+      ]
+    },
+    "nuclear_utilities": {
+      "name_ko": "원자력 발전 유틸리티",
+      "name_en": "Nuclear Power Utilities",
+      "description": "원자력 발전소를 운영하는 전력 유틸리티 기업",
+      "keywords": [
+        "nuclear power plant",
+        "nuclear energy",
+        "nuclear generation",
+        "reactor operator",
+        "nuclear utility"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "smr developer",
+        "uranium mining"
+      ],
+      "premapped_tickers": [
+        "CEG",
+        "VST",
+        "EXC",
+        "PEG",
+        "D",
+        "SO"
+      ]
+    },
+    "power_generation_equipment": {
+      "name_ko": "발전 설비 제조 (터빈/풍력)",
+      "name_en": "Power Generation Equipment (Gas Turbines / Wind Turbines)",
+      "description": "가스터빈, 풍력터빈, 발전기 등 발전 설비 제조사",
+      "keywords": [
+        "gas turbine",
+        "wind turbine",
+        "power turbine",
+        "generator manufacturer",
+        "turbine manufacturer",
+        "steam turbine",
+        "power equipment",
+        "grid equipment manufacturer"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar panel",
+        "utility operator",
+        "real estate"
+      ],
+      "premapped_tickers": [
+        "GEV"
+      ]
+    },
+    "power_grid_transformers": {
+      "name_ko": "송배전망 / 변압기 / 전력 인프라",
+      "name_en": "Power Grid Infrastructure & Transformers",
+      "description": "변압기, 스위치기어, 전력 배전 장비 및 그리드 인프라 구축",
+      "keywords": [
+        "power transformer",
+        "grid transformer",
+        "switchgear",
+        "electrical distribution",
+        "grid infrastructure",
+        "power distribution",
+        "high voltage equipment",
+        "substation",
+        "grid upgrade",
+        "transmission equipment",
+        "medium voltage",
+        "high voltage transformer",
+        "gas insulated switchgear",
+        "electrical grid",
+        "utility transformer",
+        "distribution transformer"
+      ],
+      "negative_keywords": [
+        "wafer",
+        "rental service",
+        "solar panel",
+        "semiconductor",
+        "server",
+        "power management integrated",
+        "cloud",
+        "data center",
+        "power management ic",
+        "banking",
+        "networking",
+        "real estate",
+        "integrated circuit",
+        "wind turbine",
+        "chip",
+        "utility operator",
+        "drug",
+        "computing"
+      ],
+      "premapped_tickers": [
+        "ETN",
+        "PWR",
+        "EMR",
+        "HUBB",
+        "WCC",
+        "POWL",
+        "GNRC"
+      ]
+    },
+    "datacenter_liquid_cooling": {
+      "name_ko": "데이터센터 액체 냉각",
+      "name_en": "Datacenter Liquid Cooling & Thermal Management",
+      "description": "AI 서버 발열 관리를 위한 액침냉각, 직접액체냉각(DLC) 솔루션",
+      "keywords": [
+        "liquid cooling",
+        "immersion cooling",
+        "direct liquid cooling",
+        "thermal management",
+        "datacenter cooling",
+        "heat exchanger datacenter",
+        "cold plate cooling"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "nuclear"
+      ],
+      "premapped_tickers": [
+        "VRT",
+        "CARR",
+        "MOD",
+        "AAON"
+      ]
+    },
+    "datacenter_reits": {
+      "name_ko": "데이터센터 리츠 / 코로케이션",
+      "name_en": "Datacenter REITs & Colocation",
+      "description": "데이터센터 코로케이션 시설을 운영하는 리츠",
+      "keywords": [
+        "data center reit",
+        "colocation",
+        "data center campus",
+        "carrier-neutral data center",
+        "interconnection hub"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "EQIX",
+        "DLR",
+        "IRM"
+      ]
+    },
+    "solar_panels": {
+      "name_ko": "태양광 패널 / 셀 제조",
+      "name_en": "Solar Panels & Cells",
+      "description": "태양광 모듈, 셀, 웨이퍼, 트래커 제조 및 시공",
+      "keywords": [
+        "solar panel",
+        "photovoltaic",
+        "solar module",
+        "solar cell",
+        "solar wafer",
+        "solar tracker",
+        "pv module",
+        "thin film solar"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "nuclear",
+        "wind only",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "FSLR",
+        "NXT",
+        "RUN",
+        "SHLS",
+        "ARRY",
+        "NOVA"
+      ]
+    },
+    "solar_inverters": {
+      "name_ko": "태양광 인버터",
+      "name_en": "Solar Inverters & Microinverters",
+      "description": "태양광 인버터, 마이크로인버터, 에너지 관리 시스템",
+      "keywords": [
+        "solar inverter",
+        "microinverter",
+        "power optimizer",
+        "solar energy system",
+        "home energy storage",
+        "enphase",
+        "solaredge"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "nuclear"
+      ],
+      "premapped_tickers": [
+        "ENPH",
+        "SEDG",
+        "SMA",
+        "FSLR"
+      ]
+    },
+    "wind_energy": {
+      "name_ko": "풍력 에너지 개발 / 운영",
+      "name_en": "Wind Energy Developers & Operators",
+      "description": "육상/해상 풍력 발전단지 개발 및 운영사",
+      "keywords": [
+        "wind energy",
+        "wind power",
+        "wind farm",
+        "offshore wind",
+        "onshore wind",
+        "wind developer",
+        "renewable energy wind"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar only",
+        "nuclear",
+        "chip",
+        "turbine manufacturer"
+      ],
+      "premapped_tickers": [
+        "NEE",
+        "CWEN",
+        "AES",
+        "RUN"
+      ]
+    },
+    "hydrogen_fuel_cells": {
+      "name_ko": "수소 연료전지 / 그린수소",
+      "name_en": "Hydrogen & Fuel Cells",
+      "description": "수소 생산, 연료전지, 전해조 기업",
+      "keywords": [
+        "hydrogen fuel cell",
+        "fuel cell",
+        "green hydrogen",
+        "electrolyzer",
+        "proton exchange membrane",
+        "solid oxide fuel cell",
+        "hydrogen production"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "conventional auto"
+      ],
+      "premapped_tickers": [
+        "BE",
+        "PLUG",
+        "FCEL"
+      ]
+    },
+    "grid_scale_batteries": {
+      "name_ko": "대용량 에너지 저장 (ESS/BESS)",
+      "name_en": "Grid-Scale Energy Storage (BESS)",
+      "description": "전력망 규모 배터리 에너지 저장 시스템",
+      "keywords": [
+        "energy storage system",
+        "ess",
+        "battery energy storage",
+        "bess",
+        "grid storage",
+        "utility scale battery",
+        "virtual power plant"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "ev battery",
+        "consumer battery"
+      ],
+      "premapped_tickers": [
+        "FLNC",
+        "EOSE"
+      ]
+    },
+    "solid_state_batteries": {
+      "name_ko": "전고체 배터리",
+      "name_en": "Solid-State Batteries",
+      "description": "전고체 배터리 개발 기업 (EV용 차세대 배터리)",
+      "keywords": [
+        "solid state battery",
+        "all-solid-state",
+        "solid electrolyte",
+        "lithium metal battery",
+        "solid-state lithium"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "SLDP",
+        "QNVO",
+        "SES"
+      ]
+    },
+    "lng_natural_gas": {
+      "name_ko": "LNG / 천연가스 수출",
+      "name_en": "LNG & Natural Gas Export",
+      "description": "액화천연가스(LNG) 생산, 액화, 수출 터미널 운영",
+      "keywords": [
+        "liquefied natural gas",
+        "lng",
+        "natural gas export",
+        "lng terminal",
+        "gas liquefaction",
+        "lng tanker",
+        "lng facility"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind"
+      ],
+      "premapped_tickers": [
+        "LNG",
+        "CQP",
+        "TELL",
+        "NFE",
+        "GLNG"
+      ]
+    },
+    "pipeline_midstream": {
+      "name_ko": "파이프라인 / 미드스트림",
+      "name_en": "Oil & Gas Pipelines & Midstream",
+      "description": "원유 및 천연가스 파이프라인, 저장, 처리 시설 운영",
+      "keywords": [
+        "pipeline",
+        "midstream",
+        "natural gas pipeline",
+        "crude oil pipeline",
+        "gathering system",
+        "gas processing",
+        "storage terminal",
+        "mlp"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "upstream exploration"
+      ],
+      "premapped_tickers": [
+        "ET",
+        "EPD",
+        "KMI",
+        "WMB",
+        "PAA",
+        "MPLX",
+        "TRGP"
+      ]
+    },
+    "oil_gas_exploration": {
+      "name_ko": "석유 / 가스 탐사개발 (E&P)",
+      "name_en": "Oil & Gas Exploration & Production",
+      "description": "원유 및 천연가스 탐사, 개발, 생산 기업",
+      "keywords": [
+        "oil exploration",
+        "gas exploration",
+        "upstream oil",
+        "upstream gas",
+        "crude oil production",
+        "natural gas production",
+        "e&p",
+        "shale",
+        "permian",
+        "offshore drilling",
+        "oil field"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "wind",
+        "pipeline",
+        "refining"
+      ],
+      "premapped_tickers": [
+        "XOM",
+        "CVX",
+        "COP",
+        "EOG",
+        "PXD",
+        "DVN",
+        "MRO"
+      ]
+    },
+    "payments_fintech": {
+      "name_ko": "결제 / 핀테크",
+      "name_en": "Payments & Fintech",
+      "description": "신용카드 네트워크, 디지털 결제, 결제 처리 서비스",
+      "keywords": [
+        "payment processing",
+        "payment network",
+        "digital payment",
+        "credit card network",
+        "merchant processing",
+        "point of sale",
+        "payment gateway",
+        "money transfer",
+        "remittance"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "V",
+        "MA",
+        "PYPL",
+        "SQ",
+        "FI",
+        "GPN",
+        "WEX",
+        "FLYW"
+      ]
+    },
+    "bnpl_lending_fintech": {
+      "name_ko": "BNPL / 대안 대출 핀테크",
+      "name_en": "Buy Now Pay Later & Alternative Lending",
+      "description": "후불결제(BNPL), AI 기반 대출 심사, 디지털 렌딩",
+      "keywords": [
+        "buy now pay later",
+        "bnpl",
+        "point-of-sale lending",
+        "consumer lending fintech",
+        "credit underwriting ai",
+        "personal loan platform",
+        "installment loan"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "AFRM",
+        "SEZL",
+        "UPST",
+        "LPRO"
+      ]
+    },
+    "trading_brokerage": {
+      "name_ko": "온라인 증권 / 트레이딩 플랫폼",
+      "name_en": "Online Brokerage & Trading Platforms",
+      "description": "리테일 온라인 증권, 암호화폐 거래소, 금융 데이터 서비스",
+      "keywords": [
+        "online brokerage",
+        "retail brokerage",
+        "stock trading platform",
+        "financial exchange",
+        "trading platform",
+        "market data",
+        "financial data"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "HOOD",
+        "SCHW",
+        "IBKR",
+        "MKTX",
+        "MSCI",
+        "SPGI",
+        "ICE"
+      ]
+    },
+    "bitcoin_proxies": {
+      "name_ko": "비트코인 보유 기업 / 크립토 프록시",
+      "name_en": "Bitcoin Treasury & Crypto Proxies",
+      "description": "비트코인을 주요 자산으로 보유하거나 암호화폐 거래소를 운영하는 기업",
+      "keywords": [
+        "bitcoin treasury",
+        "bitcoin holdings",
+        "cryptocurrency exchange",
+        "digital asset platform",
+        "crypto brokerage"
+      ],
+      "negative_keywords": [
+        "mining hardware",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "MSTR",
+        "COIN",
+        "STRC",
+        "STRF",
+        "STRD",
+        "STRK"
+      ]
+    },
+    "crypto_miners": {
+      "name_ko": "암호화폐 채굴",
+      "name_en": "Crypto Mining Companies",
+      "description": "비트코인 등 암호화폐 채굴 전문 기업",
+      "keywords": [
+        "bitcoin mining",
+        "cryptocurrency mining",
+        "crypto miner",
+        "mining operation",
+        "asic miner",
+        "mining facility",
+        "hash rate"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "bitcoin holdings only"
+      ],
+      "premapped_tickers": [
+        "MARA",
+        "RIOT",
+        "WULF",
+        "CLSK",
+        "HUT",
+        "CIFR",
+        "BTBT",
+        "GLXY"
+      ]
+    },
+    "streaming_media_ott": {
+      "name_ko": "스트리밍 미디어 / OTT",
+      "name_en": "Streaming Media & OTT Platforms",
+      "description": "구독형 비디오/음악 스트리밍 서비스 플랫폼",
+      "keywords": [
+        "streaming service",
+        "video streaming",
+        "ott platform",
+        "subscription video",
+        "svod",
+        "music streaming",
+        "content platform",
+        "original content production"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "NFLX",
+        "ROKU",
+        "SPOT",
+        "DIS",
+        "PARA",
+        "WBD"
+      ]
+    },
+    "social_media_platforms": {
+      "name_ko": "소셜 미디어 플랫폼",
+      "name_en": "Social Media Platforms",
+      "description": "소셜 네트워크, 영상 공유, 커뮤니티 플랫폼",
+      "keywords": [
+        "social network",
+        "social media",
+        "user generated content",
+        "short video",
+        "photo sharing",
+        "social platform",
+        "community platform"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "META",
+        "SNAP",
+        "PINS",
+        "RDDT",
+        "BMBL"
+      ]
+    },
+    "digital_advertising_adtech": {
+      "name_ko": "디지털 광고 / 애드테크",
+      "name_en": "Digital Advertising & AdTech",
+      "description": "프로그래매틱 광고, DSP/SSP, 광고 측정 플랫폼",
+      "keywords": [
+        "programmatic advertising",
+        "digital advertising",
+        "demand side platform",
+        "supply side platform",
+        "dsp",
+        "ssp",
+        "ad exchange",
+        "ad tech",
+        "connected tv advertising",
+        "ctv advertising"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "TTD",
+        "PUBM",
+        "MGNI",
+        "IAS",
+        "GOOGL",
+        "META",
+        "APP"
+      ]
+    },
+    "ecommerce_marketplace": {
+      "name_ko": "이커머스 / 온라인 마켓플레이스",
+      "name_en": "E-commerce Marketplaces",
+      "description": "온라인 쇼핑 마켓플레이스, 이커머스 플랫폼",
+      "keywords": [
+        "e-commerce",
+        "online marketplace",
+        "online retail platform",
+        "shopping platform",
+        "marketplace seller",
+        "dropshipping platform"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip",
+        "cloud infrastructure"
+      ],
+      "premapped_tickers": [
+        "SHOP",
+        "EBAY",
+        "ETSY",
+        "MELI",
+        "PDD",
+        "TEMU"
+      ]
+    },
+    "food_delivery_rideshare": {
+      "name_ko": "음식 배달 / 모빌리티 플랫폼",
+      "name_en": "Food Delivery & Rideshare",
+      "description": "음식 배달, 라이드헤일링, 긱 이코노미 플랫폼",
+      "keywords": [
+        "food delivery",
+        "ride hailing",
+        "ride sharing",
+        "gig economy platform",
+        "on-demand delivery",
+        "restaurant delivery",
+        "meal delivery"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "DASH",
+        "UBER",
+        "LYFT",
+        "CART"
+      ]
+    },
+    "online_travel": {
+      "name_ko": "온라인 여행 / 숙박 플랫폼",
+      "name_en": "Online Travel & Accommodation",
+      "description": "항공권, 호텔 예약, 숙박 공유 플랫폼",
+      "keywords": [
+        "online travel agency",
+        "hotel booking",
+        "vacation rental",
+        "home sharing",
+        "travel platform",
+        "flight booking",
+        "online travel"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "BKNG",
+        "EXPE",
+        "ABNB",
+        "TRIP"
+      ]
+    },
+    "online_gaming_esports": {
+      "name_ko": "온라인 게임 / e스포츠",
+      "name_en": "Online Gaming & Esports",
+      "description": "PC/모바일 게임 개발, e스포츠 대회 플랫폼",
+      "keywords": [
+        "online game",
+        "video game developer",
+        "gaming platform",
+        "esports",
+        "mobile game",
+        "game studio",
+        "interactive entertainment"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "RBLX",
+        "U",
+        "EA",
+        "TTWO",
+        "ATVI",
+        "PLTK"
+      ]
+    },
+    "sports_betting": {
+      "name_ko": "스포츠 베팅 / 온라인 카지노",
+      "name_en": "Sports Betting & iGaming",
+      "description": "온라인 스포츠 베팅, 카지노, 로터리 기업",
+      "keywords": [
+        "sports betting",
+        "online gambling",
+        "igaming",
+        "sportsbook",
+        "online casino",
+        "daily fantasy sports"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "DKNG",
+        "FLUT",
+        "RSI",
+        "BTR"
+      ]
+    },
+    "glp1_weight_loss": {
+      "name_ko": "비만치료제 (GLP-1 / 글루카곤)",
+      "name_en": "GLP-1 & Weight Loss Therapies",
+      "description": "세마글루티드 등 GLP-1 계열 비만/당뇨 치료제",
+      "keywords": [
+        "glp-1",
+        "semaglutide",
+        "tirzepatide",
+        "weight loss drug",
+        "obesity treatment",
+        "glucagon-like peptide",
+        "liraglutide",
+        "anti-obesity"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "LLY",
+        "NVO",
+        "VKTX",
+        "ZFOX",
+        "TERN",
+        "ALT",
+        "AMGN"
+      ]
+    },
+    "crispr_gene_editing": {
+      "name_ko": "유전자 편집 (CRISPR)",
+      "name_en": "Gene Editing (CRISPR / Base Editing)",
+      "description": "CRISPR-Cas9, 염기편집, 프라임편집 기반 치료제 개발",
+      "keywords": [
+        "crispr",
+        "gene editing",
+        "base editing",
+        "prime editing",
+        "cas9",
+        "zinc finger nuclease",
+        "talen gene",
+        "gene correction"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "CRSP",
+        "EDIT",
+        "NTLA",
+        "BEAM",
+        "PRIME"
+      ]
+    },
+    "mrna_therapies": {
+      "name_ko": "mRNA 치료제 / 백신",
+      "name_en": "mRNA Therapies & Vaccines",
+      "description": "mRNA 플랫폼 기반 백신 및 치료제",
+      "keywords": [
+        "mrna",
+        "messenger rna",
+        "mrna vaccine",
+        "mrna therapy",
+        "lipid nanoparticle",
+        "lnp delivery"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "MRNA",
+        "BNTX",
+        "CVAC"
+      ]
+    },
+    "cart_immunotherapy": {
+      "name_ko": "CAR-T / 세포 면역치료",
+      "name_en": "CAR-T Cell & Immunotherapy",
+      "description": "CAR-T 세포치료, NK세포, TCR 기반 항암 치료제",
+      "keywords": [
+        "car-t",
+        "car t cell",
+        "cell therapy",
+        "t cell immunotherapy",
+        "chimeric antigen receptor",
+        "nk cell therapy",
+        "adoptive cell therapy"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "GILD",
+        "BMY",
+        "BLUE",
+        "FATE",
+        "IOVANCE"
+      ]
+    },
+    "liquid_biopsy": {
+      "name_ko": "액체생검 / 조기암 진단",
+      "name_en": "Liquid Biopsy & Early Cancer Detection",
+      "description": "혈액 내 ctDNA 분석 기반 조기 암 진단 기술",
+      "keywords": [
+        "liquid biopsy",
+        "circulating tumor dna",
+        "ctdna",
+        "cell-free dna",
+        "cfdna",
+        "early cancer detection",
+        "multi-cancer early detection",
+        "mced"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "EXAS",
+        "GRAIL",
+        "GHDX",
+        "NTRA"
+      ]
+    },
+    "genomics_sequencing": {
+      "name_ko": "유전체 시퀀싱 / 정밀의학",
+      "name_en": "Genomics Sequencing & Precision Medicine",
+      "description": "DNA 시퀀서, NGS 플랫폼, 유전체 분석 서비스",
+      "keywords": [
+        "genomic sequencing",
+        "next generation sequencing",
+        "ngs",
+        "dna sequencer",
+        "whole genome",
+        "single cell sequencing",
+        "sequencing platform"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "ILMN",
+        "PACB",
+        "BRKR",
+        "TWST"
+      ]
+    },
+    "alzheimers_neuro": {
+      "name_ko": "알츠하이머 / 신경계 치료제",
+      "name_en": "Alzheimer's & Neurology Therapies",
+      "description": "알츠하이머, 파킨슨, ALS 등 신경계 질환 치료제",
+      "keywords": [
+        "alzheimer",
+        "amyloid",
+        "tau protein",
+        "neurodegeneration",
+        "parkinson",
+        "als",
+        "neurology drug",
+        "lewy body",
+        "multiple sclerosis"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "BIIB",
+        "PRTA",
+        "AVXS",
+        "ALNY",
+        "IONS"
+      ]
+    },
+    "oncology_targeted": {
+      "name_ko": "표적항암제 / 항암 바이오텍",
+      "name_en": "Oncology & Targeted Cancer Drugs",
+      "description": "표적항암제, 항체-약물접합체(ADC), 항암 소분자 개발사",
+      "keywords": [
+        "oncology",
+        "cancer drug",
+        "targeted therapy",
+        "antibody drug conjugate",
+        "adc",
+        "kinase inhibitor",
+        "checkpoint inhibitor",
+        "tumor",
+        "anti-cancer"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip",
+        "car-t"
+      ],
+      "premapped_tickers": [
+        "ABBV",
+        "BMY",
+        "REGN",
+        "SGEN",
+        "RHHBY",
+        "IMVT"
+      ]
+    },
+    "medical_devices_general": {
+      "name_ko": "의료기기 (범용)",
+      "name_en": "Medical Devices & MedTech",
+      "description": "범용 의료기기, 심장, 정형외과, 혈당 모니터링 장치",
+      "keywords": [
+        "medical device",
+        "implantable device",
+        "orthopedic implant",
+        "cardiac device",
+        "diabetes device",
+        "glucose monitor",
+        "wound care",
+        "vascular device",
+        "catheter"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip",
+        "software only"
+      ],
+      "premapped_tickers": [
+        "MDT",
+        "ABT",
+        "SYK",
+        "BSX",
+        "BDX",
+        "ZBH",
+        "DXCM",
+        "INSP"
+      ]
+    },
+    "diagnostics_lab_instruments": {
+      "name_ko": "진단검사 / 실험실 기기",
+      "name_en": "Diagnostics & Lab Instruments",
+      "description": "임상 진단, 분석 기기, CRO, 과학 측정 장비",
+      "keywords": [
+        "laboratory instrument",
+        "diagnostic equipment",
+        "analytical instrument",
+        "mass spectrometry",
+        "chromatography",
+        "clinical diagnostics",
+        "in vitro diagnostic",
+        "ivd",
+        "pcr test"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "DHR",
+        "TMO",
+        "A",
+        "BRKR",
+        "WAT",
+        "MTD",
+        "IQST"
+      ]
+    },
+    "contract_research_cro": {
+      "name_ko": "임상시험 수탁 (CRO)",
+      "name_en": "Contract Research Organizations (CRO)",
+      "description": "제약·바이오 기업의 임상시험 수탁 전문 서비스",
+      "keywords": [
+        "contract research organization",
+        "cro",
+        "clinical research",
+        "clinical trial services",
+        "drug development services",
+        "regulatory submission",
+        "pharmacovigilance"
+      ],
+      "negative_keywords": [
+        "banking",
+        "solar",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "IQV",
+        "CRL",
+        "MEDP",
+        "ICLR"
+      ]
+    },
+    "surgical_robotics": {
+      "name_ko": "수술 로봇",
+      "name_en": "Surgical Robotics",
+      "description": "수술 보조 로봇 시스템 개발 및 제조",
+      "keywords": [
+        "surgical robot",
+        "robotic surgery",
+        "minimally invasive robot",
+        "laparoscopic robot",
+        "da vinci surgical system",
+        "intuitive surgical",
+        "robotic surgical system",
+        "ion robotic"
+      ],
+      "negative_keywords": [
+        "wafer",
+        "semiconductor",
+        "banking",
+        "wafer cleaning",
+        "deposition",
+        "etch",
+        "solar",
+        "drug"
+      ],
+      "premapped_tickers": [
+        "ISRG",
+        "MASI",
+        "AUVI",
+        "RBOT",
+        "MMSI"
+      ]
+    },
+    "medical_aesthetics": {
+      "name_ko": "의료 미용",
+      "name_en": "Medical Aesthetics",
+      "description": "보톡스, 필러, 레이저, 에너지 기반 미용 의료기기",
+      "keywords": [
+        "medical aesthetics",
+        "botulinum toxin",
+        "botox",
+        "dermal filler",
+        "aesthetic laser",
+        "body contouring",
+        "cool sculpting",
+        "energy-based device",
+        "aesthetic device"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "ABBV",
+        "SIGA",
+        "IPSC",
+        "CUTR"
+      ]
+    },
+    "telehealth": {
+      "name_ko": "원격의료 / 디지털 헬스케어",
+      "name_en": "Telehealth & Digital Healthcare",
+      "description": "원격 진료, 디지털 헬스 플랫폼, 원격 환자 모니터링",
+      "keywords": [
+        "telehealth",
+        "telemedicine",
+        "virtual care",
+        "digital health",
+        "remote patient monitoring",
+        "online pharmacy",
+        "digital therapeutics"
+      ],
+      "negative_keywords": [
+        "banking",
+        "chip",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "TDOC",
+        "HIMS",
+        "AMWL",
+        "ACCD"
+      ]
+    },
+    "microbiome_health": {
+      "name_ko": "마이크로바이옴 / 장내 미생물 치료",
+      "name_en": "Microbiome & Gut Health Therapeutics",
+      "description": "장내 마이크로바이옴 기반 치료제 및 헬스케어",
+      "keywords": [
+        "microbiome",
+        "gut bacteria",
+        "probiotic therapy",
+        "fecal transplant",
+        "microbiome therapeutics",
+        "gut health"
+      ],
+      "negative_keywords": [
+        "banking",
+        "chip",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "SERES",
+        "BAYRY",
+        "MCRB",
+        "REGN",
+        "VRTX"
+      ]
+    },
+    "commercial_space_launch": {
+      "name_ko": "우주 발사체 / 위성 발사 서비스",
+      "name_en": "Commercial Space Launch Services",
+      "description": "민간 로켓 발사 서비스 및 우주 발사체 제조",
+      "keywords": [
+        "rocket launch",
+        "launch vehicle",
+        "launch services",
+        "space launch",
+        "reusable rocket",
+        "small satellite launch",
+        "rideshare launch"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "RKLB",
+        "SPCE"
+      ]
+    },
+    "satellite_communication": {
+      "name_ko": "위성 통신 / 지구관측",
+      "name_en": "Satellite Communication & Earth Observation",
+      "description": "저궤도 위성 통신, 위성 인터넷, 지구관측 위성 서비스",
+      "keywords": [
+        "satellite communication",
+        "satellite internet",
+        "low earth orbit",
+        "leo constellation",
+        "earth observation satellite",
+        "remote sensing satellite",
+        "satellite broadband"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "ASTS",
+        "PL",
+        "GSAT",
+        "VSAT",
+        "LUNR"
+      ]
+    },
+    "uav_defense_drones": {
+      "name_ko": "군용 드론 / UAV",
+      "name_en": "Military UAVs & Defense Drones",
+      "description": "군용 무인 항공기(UAV), 드론 무기 시스템, 대드론 방어",
+      "keywords": [
+        "unmanned aerial vehicle",
+        "uav",
+        "military drone",
+        "attack drone",
+        "reconnaissance drone",
+        "loitering munition",
+        "counter drone",
+        "drone defense"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "commercial delivery drone",
+        "evtol"
+      ],
+      "premapped_tickers": [
+        "KTOS",
+        "AVAV",
+        "ONDS"
+      ]
+    },
+    "defense_primes": {
+      "name_ko": "방산 대형 계약업체",
+      "name_en": "Defense Prime Contractors",
+      "description": "미국 국방부 주요 계약업체 (전투기, 함정, 미사일 등)",
+      "keywords": [
+        "defense contractor",
+        "military aircraft",
+        "defense system",
+        "combat aircraft",
+        "ballistic missile",
+        "defense electronics",
+        "government defense contract"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "RTX",
+        "BA",
+        "LMT",
+        "NOC",
+        "GD",
+        "HWM",
+        "LDOS",
+        "KTOS",
+        "MRCY",
+        "KRMN",
+        "PSN",
+        "AXON"
+      ]
+    },
+    "hypersonic_tech": {
+      "name_ko": "극초음속 무기 / 기술",
+      "name_en": "Hypersonic Weapons & Technology",
+      "description": "마하 5+ 극초음속 미사일, 활공체 기술",
+      "keywords": [
+        "hypersonic",
+        "hypersonic missile",
+        "hypersonic glide vehicle",
+        "mach 5",
+        "scramjet",
+        "hypersonic weapon"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "RTX",
+        "LMT",
+        "NOC",
+        "RAAX"
+      ]
+    },
+    "evtol_flying_cars": {
+      "name_ko": "eVTOL / 도심항공모빌리티",
+      "name_en": "eVTOL & Urban Air Mobility (UAM)",
+      "description": "전기 수직이착륙 항공기, 플라잉카, UAM 서비스",
+      "keywords": [
+        "evtol",
+        "electric vertical takeoff",
+        "urban air mobility",
+        "uam",
+        "air taxi",
+        "flying car",
+        "advanced air mobility",
+        "aam"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "JOBY",
+        "ACHR",
+        "LILM",
+        "ACHR",
+        "VTOL"
+      ]
+    },
+    "humanoid_robotics": {
+      "name_ko": "휴머노이드 로봇 / 산업 AI",
+      "name_en": "Humanoid Robotics & Embodied AI",
+      "description": "사람 형태 로봇, 범용 로봇, 구현 AI 시스템",
+      "keywords": [
+        "humanoid robot",
+        "embodied ai",
+        "general purpose robot",
+        "bipedal robot",
+        "robot manipulation",
+        "physical ai"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "TSLA",
+        "ABB",
+        "FANUY",
+        "ISRG"
+      ]
+    },
+    "warehouse_automation": {
+      "name_ko": "물류창고 / 공장 자동화",
+      "name_en": "Warehouse & Factory Automation",
+      "description": "창고 자동화 로봇, AMR, 물류 자동화 솔루션",
+      "keywords": [
+        "warehouse automation",
+        "autonomous mobile robot",
+        "amr",
+        "picking robot",
+        "conveyor system",
+        "automated warehouse",
+        "logistics robot",
+        "fulfillment automation"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "KNSA",
+        "STRC",
+        "ESAB"
+      ]
+    },
+    "autonomous_driving": {
+      "name_ko": "자율주행 / LiDAR",
+      "name_en": "Autonomous Driving & LiDAR",
+      "description": "자율주행 소프트웨어, LiDAR, 레이더 센서 기술",
+      "keywords": [
+        "autonomous driving",
+        "self-driving",
+        "lidar",
+        "autonomous vehicle software",
+        "robotaxi",
+        "adas",
+        "advanced driver assistance",
+        "radar sensor automotive"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "MOBILEYE",
+        "LAZR",
+        "OUST",
+        "LIDR",
+        "MBLY"
+      ]
+    },
+    "auto_manufacturers": {
+      "name_ko": "자동차 제조",
+      "name_en": "Auto Manufacturers",
+      "description": "전기차 및 내연기관 자동차 제조사",
+      "keywords": [
+        "electric vehicle",
+        "automobile manufacturer",
+        "car manufacturer",
+        "ev maker",
+        "automotive oem",
+        "vehicle production"
+      ],
+      "negative_keywords": [
+        "gpu",
+        "data center chip",
+        "neural network chip",
+        "semiconductor company",
+        "banking",
+        "graphics processing unit",
+        "solar",
+        "fabless",
+        "drug",
+        "chip",
+        "chip designer",
+        "ai accelerator"
+      ],
+      "premapped_tickers": [
+        "TSLA",
+        "GM",
+        "F",
+        "RIVN",
+        "LCID",
+        "NIO",
+        "XPEV",
+        "LI"
+      ]
+    },
+    "three_d_printing": {
+      "name_ko": "3D 프린팅 / 적층제조",
+      "name_en": "3D Printing & Additive Manufacturing",
+      "description": "산업용 3D 프린터, 금속 적층제조 장비 및 소재",
+      "keywords": [
+        "3d printing",
+        "additive manufacturing",
+        "stereolithography",
+        "selective laser sintering",
+        "metal 3d printing",
+        "3d printer",
+        "rapid prototyping"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "DDD",
+        "SSYS",
+        "DM",
+        "XONE",
+        "MTLS"
+      ]
+    },
+    "industrial_automation": {
+      "name_ko": "산업 자동화 / 공장 제어",
+      "name_en": "Industrial Automation & Process Control",
+      "description": "PLC, DCS, 산업용 로봇, 모션 제어 장비",
+      "keywords": [
+        "industrial automation",
+        "programmable logic controller",
+        "plc",
+        "distributed control system",
+        "dcs",
+        "industrial robot",
+        "motion control",
+        "factory automation",
+        "process control"
+      ],
+      "negative_keywords": [
+        "lithography",
+        "semiconductor equipment",
+        "wafer fabrication equipment",
+        "etch equipment",
+        "banking",
+        "cvd equipment",
+        "pvd equipment",
+        "solar",
+        "drug",
+        "chip manufacturing equipment"
+      ],
+      "premapped_tickers": [
+        "ROK",
+        "HON",
+        "EMR",
+        "SIEGY",
+        "BECN"
+      ]
+    },
+    "specialty_chemicals": {
+      "name_ko": "특수 화학 / 산업용 가스",
+      "name_en": "Specialty Chemicals & Industrial Gases",
+      "description": "특수 화학 물질, 산업용 가스, 코팅제 제조",
+      "keywords": [
+        "specialty chemical",
+        "industrial gas",
+        "adhesive",
+        "coating chemical",
+        "polymer",
+        "composite material",
+        "advanced material",
+        "chemical compound",
+        "air separation"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug distributor",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "LIN",
+        "APD",
+        "EMN",
+        "IFF",
+        "CC",
+        "HUN"
+      ]
+    },
+    "construction_materials": {
+      "name_ko": "건설자재 / 시멘트",
+      "name_en": "Construction Materials & Aggregates",
+      "description": "시멘트, 콘크리트 골재, 건설 재료 생산 기업",
+      "keywords": [
+        "construction material",
+        "aggregates quarry",
+        "crushed stone",
+        "sand and gravel",
+        "building aggregates",
+        "construction aggregates",
+        "cement",
+        "ready-mix concrete",
+        "asphalt",
+        "quarry",
+        "building products",
+        "roofing material"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "VMC",
+        "MLM",
+        "CRH",
+        "SUM",
+        "USLM"
+      ]
+    },
+    "copper_mining": {
+      "name_ko": "구리 광산 / 제련",
+      "name_en": "Copper Mining & Smelting",
+      "description": "구리 광산 개발 및 제련 기업",
+      "keywords": [
+        "copper mining",
+        "copper production",
+        "copper smelting",
+        "copper concentrate",
+        "porphyry copper"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "FCX",
+        "SCCO",
+        "CMMC",
+        "CPMC",
+        "HBM"
+      ]
+    },
+    "lithium_mining": {
+      "name_ko": "리튬 광산 / 배터리소재",
+      "name_en": "Lithium Mining & Battery Materials",
+      "description": "리튬 채굴, 정제, 배터리 소재 공급 기업",
+      "keywords": [
+        "lithium mining",
+        "lithium production",
+        "lithium carbonate",
+        "lithium hydroxide",
+        "lithium brine",
+        "battery material",
+        "cathode material"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "ALB",
+        "SQM",
+        "LIVENT",
+        "LTHM",
+        "PLL",
+        "LAC"
+      ]
+    },
+    "rare_earth_elements": {
+      "name_ko": "희토류 / 자석소재",
+      "name_en": "Rare Earth Elements & Critical Minerals",
+      "description": "희토류 광물 채굴, 정제, 영구자석 제조",
+      "keywords": [
+        "rare earth",
+        "rare earth element",
+        "neodymium",
+        "permanent magnet",
+        "critical mineral",
+        "rare metal",
+        "dysprosium"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "MP",
+        "LYSCF",
+        "NOVONIX"
+      ]
+    },
+    "steel_metals": {
+      "name_ko": "철강 / 금속",
+      "name_en": "Steel & Metal Manufacturing",
+      "description": "철강, 알루미늄, 특수금속 생산 기업",
+      "keywords": [
+        "steel manufacturer",
+        "steel production",
+        "flat rolled steel",
+        "steel mill",
+        "aluminum production",
+        "metal fabrication",
+        "specialty steel"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "NUE",
+        "CLF",
+        "STLD",
+        "X",
+        "CMC",
+        "RS"
+      ]
+    },
+    "carbon_capture": {
+      "name_ko": "탄소 포집 / 저장 (CCS)",
+      "name_en": "Carbon Capture & Storage (CCS)",
+      "description": "탄소 포집·활용·저장 기술 및 직접공기포집(DAC)",
+      "keywords": [
+        "carbon capture",
+        "carbon sequestration",
+        "direct air capture",
+        "dac",
+        "ccs",
+        "carbon removal",
+        "co2 capture"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "HLTH",
+        "CTRA"
+      ]
+    },
+    "water_infrastructure": {
+      "name_ko": "수자원 / 수처리",
+      "name_en": "Water Infrastructure & Treatment",
+      "description": "수처리, 상수도, 폐수처리 인프라 기업",
+      "keywords": [
+        "water treatment",
+        "water utility",
+        "wastewater treatment",
+        "water infrastructure",
+        "desalination",
+        "water purification",
+        "clean water"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar",
+        "chip",
+        "private equity",
+        "asset management",
+        "investment management",
+        "holding company"
+      ],
+      "premapped_tickers": [
+        "AWK",
+        "XYL",
+        "PRMW",
+        "CWTS"
+      ]
+    },
+    "solid_waste_recycling": {
+      "name_ko": "폐기물 처리 / 재활용",
+      "name_en": "Solid Waste & Recycling",
+      "description": "쓰레기 수거, 매립, 재활용 서비스 기업",
+      "keywords": [
+        "waste management",
+        "recycling",
+        "solid waste",
+        "landfill",
+        "waste collection",
+        "environmental services",
+        "hazardous waste"
+      ],
+      "negative_keywords": [
+        "banking",
+        "drug",
+        "solar"
+      ],
+      "premapped_tickers": [
+        "WM",
+        "RSG",
+        "CWST",
+        "SRCL"
+      ]
+    },
+    "regional_banks": {
+      "name_ko": "지역 은행",
+      "name_en": "Regional Banks",
+      "description": "미국 지역 상업은행, 저축은행",
+      "keywords": [
+        "regional bank",
+        "community bank",
+        "commercial bank",
+        "savings bank",
+        "banking services",
+        "commercial lending",
+        "retail banking"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug",
+        "insurance"
+      ],
+      "premapped_tickers": []
+    },
+    "insurance": {
+      "name_ko": "보험",
+      "name_en": "Insurance",
+      "description": "생명, 손해, 재보험, 전문 보험 기업",
+      "keywords": [
+        "insurance",
+        "life insurance",
+        "property and casualty",
+        "reinsurance",
+        "underwriting",
+        "insurance company",
+        "annuity"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug",
+        "bank"
+      ],
+      "premapped_tickers": []
+    },
+    "asset_management": {
+      "name_ko": "자산운용 / 투자",
+      "name_en": "Asset Management & Investment",
+      "description": "뮤추얼펀드, ETF, 헤지펀드, 사모펀드 운용사",
+      "keywords": [
+        "asset management",
+        "investment management",
+        "fund manager",
+        "mutual fund",
+        "etf provider",
+        "hedge fund",
+        "private equity",
+        "wealth management"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug"
+      ],
+      "premapped_tickers": []
+    },
+    "reits_real_estate": {
+      "name_ko": "부동산 리츠",
+      "name_en": "Real Estate Investment Trusts",
+      "description": "오피스, 리테일, 주거, 산업시설 리츠",
+      "keywords": [
+        "real estate investment trust",
+        "reit",
+        "net lease",
+        "office reit",
+        "retail reit",
+        "residential reit",
+        "industrial reit",
+        "triple net lease",
+        "cap rate",
+        "property acquisitions",
+        "rental income portfolio",
+        "real estate portfolio",
+        "leasing real property"
+      ],
+      "negative_keywords": [
+        "loan portfolio",
+        "semiconductor",
+        "lending",
+        "datacenter reit",
+        "intellectual property",
+        "credit portfolio",
+        "financial services",
+        "investment bank",
+        "solar",
+        "bank",
+        "chip",
+        "patent portfolio",
+        "drug",
+        "commercial banking",
+        "ip portfolio"
+      ],
+      "premapped_tickers": []
+    },
+    "restaurants_food": {
+      "name_ko": "외식 / 식음료 프랜차이즈",
+      "name_en": "Restaurants & Food Service",
+      "description": "패스트푸드, 레스토랑 체인, 식음료 서비스",
+      "keywords": [
+        "restaurant",
+        "food service",
+        "fast food",
+        "quick service",
+        "casual dining",
+        "franchised restaurant",
+        "food chain"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug",
+        "bank"
+      ],
+      "premapped_tickers": []
+    },
+    "retail_stores": {
+      "name_ko": "소매 / 백화점 / 편의점",
+      "name_en": "Retail Stores",
+      "description": "오프라인 소매점, 백화점, 할인마트, 편의점",
+      "keywords": [
+        "retail store",
+        "department store",
+        "discount retailer",
+        "convenience store",
+        "supermarket",
+        "grocery chain"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug",
+        "online only"
+      ],
+      "premapped_tickers": []
+    },
+    "pharmaceuticals_traditional": {
+      "name_ko": "전통 제약 / 대형 바이오",
+      "name_en": "Traditional Pharmaceuticals & Big Pharma",
+      "description": "블록버스터 의약품을 보유한 대형 제약사",
+      "keywords": [
+        "pharmaceutical",
+        "drug manufacturer",
+        "branded drug",
+        "generic drug",
+        "prescription drug",
+        "specialty pharmaceutical",
+        "biopharmaceutical"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "bank",
+        "real estate",
+        "mrna only",
+        "crispr only"
+      ],
+      "premapped_tickers": [
+        "PFE",
+        "JNJ",
+        "MRK",
+        "AZN",
+        "NVS",
+        "RHHBY"
+      ]
+    },
+    "apparel_footwear": {
+      "name_ko": "의류 / 신발",
+      "name_en": "Apparel & Footwear",
+      "description": "의류, 신발, 스포츠웨어 브랜드 및 제조사",
+      "keywords": [
+        "apparel",
+        "footwear",
+        "clothing brand",
+        "fashion brand",
+        "sportswear",
+        "athletic wear",
+        "shoe manufacturer"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "drug",
+        "bank"
+      ],
+      "premapped_tickers": [
+        "NKE",
+        "LULU",
+        "VFC",
+        "PVH",
+        "CROX",
+        "SKX"
+      ]
+    },
+    "air_freight_logistics": {
+      "name_ko": "항공화물 / 물류",
+      "name_en": "Air Freight & Logistics",
+      "description": "항공 화물, 물류, 택배, 공급망 관리 서비스",
+      "keywords": [
+        "air freight",
+        "logistics",
+        "freight forwarding",
+        "supply chain",
+        "express delivery",
+        "cargo airline",
+        "parcel delivery"
+      ],
+      "negative_keywords": [
+        "machine learning",
+        "networking equipment",
+        "auction",
+        "integrated circuit",
+        "drug",
+        "surplus assets",
+        "semiconductor",
+        "saas",
+        "cloud",
+        "liquidation",
+        "bank",
+        "software",
+        "artificial intelligence",
+        "data analytics",
+        "space-based",
+        "cybersecurity",
+        "platform",
+        "solar",
+        "satellite",
+        "chip"
+      ],
+      "premapped_tickers": [
+        "FDX",
+        "UPS",
+        "CHRW",
+        "XPO",
+        "EXPD",
+        "ECHO"
+      ]
+    },
+    "cannabis": {
+      "name_ko": "대마초 / 의료용 마리화나",
+      "name_en": "Cannabis & Medical Marijuana",
+      "description": "대마초 재배, 가공, 판매 기업 (의료용 및 기호용)",
+      "keywords": [
+        "cannabis",
+        "marijuana",
+        "hemp",
+        "cbd",
+        "thc",
+        "dispensary",
+        "cannabis producer",
+        "licensed producer"
+      ],
+      "negative_keywords": [
+        "solar",
+        "chip",
+        "bank"
+      ],
+      "premapped_tickers": [
+        "CGC",
+        "TLRY",
+        "CRON",
+        "ACB",
+        "SNDL",
+        "CURLF"
+      ]
+    }
+  }
+}
