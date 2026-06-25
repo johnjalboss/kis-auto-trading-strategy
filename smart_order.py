@@ -47,7 +47,6 @@ class SmartOrder:
     order_type: OrderType
     limit_price: Optional[float]
     status: OrderStatus
-    reason: str = ""
     
     # Execution details
     child_orders: List[dict]
@@ -57,6 +56,8 @@ class SmartOrder:
     # Timing
     created_at: datetime
     updated_at: datetime
+    
+    reason: str = ""
 
 
 @dataclass
