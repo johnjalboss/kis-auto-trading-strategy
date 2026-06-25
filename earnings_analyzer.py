@@ -93,9 +93,12 @@ class EarningsAnalyzer:
         self._cache: Dict[str, EarningsSignal] = {}
     
     def analyze(self, symbol: str) -> EarningsSignal:
-        """Analyze earnings for a symbol with cache protection"""
+        """Analyze earnings for a symbol with cache protection (1-hour TTL)"""
+        now = datetime.now()
         if symbol in self._cache:
-            return self._cache[symbol]
+            result, timestamp = self._cache[symbol]
+            if (now - timestamp).total_seconds() < 3600:
+                return result
         details = []
         score = 0
         
@@ -233,7 +236,7 @@ class EarningsAnalyzer:
             has_earnings_shock=has_earnings_shock,
             earnings_shock_reason=earnings_shock_reason
         )
-        self._cache[symbol] = result
+        self._cache[symbol] = (result, now)
         return result
 
     def _check_earnings_shock_with_gemini(self, symbol: str, news_items: list) -> tuple:
@@ -333,9 +336,9 @@ class EarningsAnalyzer:
             close_90d_ago = float(df['Close'].iloc[-min(60, len(df))])
             close_1y_ago = float(df['Close'].iloc[0])
             
-            # Calculate growth proxies from price data
-            eps_growth_proxy = (last_close / close_1y_ago - 1) if close_1y_ago > 0 else 0
-            rev_growth_proxy = eps_growth_proxy * 0.6  # Revenue grows slower than EPS
+            # Return neutral values to avoid using price return as a proxy for earnings/revenue growth
+            eps_growth_proxy = 0.0
+            rev_growth_proxy = 0.0
             
             return {
                 'earningsGrowth': eps_growth_proxy,
@@ -385,7 +388,7 @@ class EarningsAnalyzer:
 
         # 2. yfinance Fallback
         import os
-        if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true":
+        if os.getenv("DISABLE_YFINANCE_FALLBACK", "false").lower() == "true":
             return []
             
         try:

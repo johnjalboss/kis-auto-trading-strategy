@@ -33,6 +33,7 @@ class OrderStatus(Enum):
     FILLED = "FILLED"
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED"
+    FAILED = "FAILED"
 
 
 @dataclass
@@ -46,6 +47,7 @@ class SmartOrder:
     order_type: OrderType
     limit_price: Optional[float]
     status: OrderStatus
+    reason: str = ""
     
     # Execution details
     child_orders: List[dict]
@@ -114,8 +116,10 @@ class SmartOrderExecutor:
             current_price: Current market price
             urgency: LOW, MEDIUM, HIGH
         """
-        # [Alpha Slicing] 3주 이상의 매수 주문은 3분 간격 3분할 Slicing (TWAP) 기법 적용
-        if side == "BUY" and quantity >= 3:
+        order_value = quantity * current_price
+
+        # [Alpha Slicing] Large dollar orders (>= LARGE_ORDER_THRESHOLD) use 3-slice, 3-minute TWAP
+        if side == "BUY" and order_value >= self.LARGE_ORDER_THRESHOLD:
             return ExecutionPlan(
                 order_type=OrderType.TWAP,
                 num_slices=3,
@@ -125,8 +129,6 @@ class SmartOrderExecutor:
                 max_participation=0.10,
                 urgency=urgency
             )
-
-        order_value = quantity * current_price
         
         # Small orders (our typical case: 1 share of expensive stock)
         # [v1.1.8] BUY limit raised from 0.1% -> 0.5% above market
@@ -245,7 +247,14 @@ class SmartOrderExecutor:
             else:
                 limit = price * (1 + plan.limit_offset_pct)
         else:
-            limit = price * (1 + plan.limit_offset_pct)
+            if obi > 0.3:
+                # Strong buy pressure — raise sell limit (less negative offset) for a better fill
+                adjusted_offset = min(-0.0005, plan.limit_offset_pct * (1.0 - obi * 0.5))
+                limit = price * (1 + adjusted_offset)
+                logger.info("[OBI_FILTER] Strong buying pressure detected. Raised SELL limit offset from {:.3%} to {:.3%}",
+                            plan.limit_offset_pct, adjusted_offset)
+            else:
+                limit = price * (1 + plan.limit_offset_pct)
         
         order.limit_price = limit
         
@@ -409,7 +418,7 @@ class SmartOrderExecutor:
             if self.trader:
                 try:
                     if order.side == "BUY":
-                        result = self.trader.buy(order.symbol, slice_qty, limit)
+                        result = self.trader.buy(order.symbol, slice_qty, limit, ensure_fill=True)
                     else:
                         result = self.trader.sell(order.symbol, slice_qty, limit, ensure_fill=True)
                     
@@ -478,7 +487,7 @@ class SmartOrderExecutor:
         # Send notification upon completion
         if total_filled > 0:
             try:
-                from notification import get_notifier
+                from notifier import get_notifier
                 get_notifier().alert_trade(order.side, order.symbol, order.avg_fill_price, 
                                            f"TWAP Slicing Completed ({total_filled}/{order.total_quantity} shares)")
             except Exception as e:
@@ -516,7 +525,7 @@ class SmartOrderExecutor:
         return False
 
 
-import numpy as np
+
 
 # Global instance
 _executor = None

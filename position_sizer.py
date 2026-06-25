@@ -82,7 +82,7 @@ def get_live_performance_metrics(db_path: str = "trades.db") -> Tuple[float, flo
         pnl_list = df['pnl_pct'].dropna().astype(float).tolist()
         
         wins = [x for x in pnl_list if x > 0]
-        losses = [x for x in pnl_list if x <= 0]
+        losses = [x for x in pnl_list if x < 0]
         
         live_win_rate = len(wins) / len(pnl_list) if pnl_list else default_win_rate
         live_avg_win = np.mean(wins) if wins else default_avg_win
@@ -331,8 +331,8 @@ class PositionSizer:
             min_pos_pct = slot_pct * 0.50
             
         optimal = max(min_pos_pct, optimal)
-        optimal = min(optimal, slot_pct)
-        details.append(f"SLOT_CLAMPED (optimal={optimal:.1%}, slot={slot_pct:.1%})")
+        optimal = min(optimal, slot_pct * 1.5)
+        details.append(f"SLOT_CLAMPED (optimal={optimal:.1%}, slot_cap={slot_pct*1.5:.1%})")
         
         # Dollar amounts
         position_dollars = self.portfolio * optimal

@@ -109,7 +109,8 @@ def get_market_phase() -> MarketPhase:
         et = pytz.timezone('US/Eastern')
         now = datetime.now(et).time()
         weekday = datetime.now(et).weekday()
-    except:
+    except Exception as e:
+        logger.error("Failed to determine market phase timezone: {}", e)
         return MarketPhase.MIDDAY
     
     if weekday >= 5:
@@ -193,7 +194,7 @@ class StrategyEngine:
         phase = get_market_phase()
         return PHASE_CONFIGS.get(phase, PHASE_CONFIGS[MarketPhase.MIDDAY])
     
-    def fetch_data(self, symbol: str, period: str = "3mo",
+    def fetch_data(self, symbol: str, period: str = "1y",
                    interval: str = "1d") -> Optional[pd.DataFrame]:
         """Fetch and cache daily OHLCV data (KIS API:  )"""
         try:
@@ -703,6 +704,10 @@ class StrategyEngine:
         
         pos = self._positions[symbol]
         
+        df = self.fetch_data(symbol)
+        if df is None:
+            return ExitSignal("HOLD", "No data", 0)
+        
         # [Quant-Shield] Catastrophic Black-Swan News Exit (파산, 상장폐지 등 실시간 돌발 뉴스 감지 시 강제청산)
         try:
             from news_analyzer import get_news_analyzer
@@ -710,12 +715,10 @@ class StrategyEngine:
             if news_res and getattr(news_res, 'has_catastrophic_risk', False):
                 reason = getattr(news_res, 'catastrophic_reason', 'Catastrophic event detected')
                 logger.error("🚨 [BLACK_SWAN_SHIELD] CATASTROPHIC RISK DETECTED FOR {}! Reason: {}. Triggering IMMEDIATE EMERGENCY EXIT!", symbol, reason)
-                return ExitSignal("SELL", f"EMERGENCY_EXIT - {reason}", 100.0)
+                close_price = float(df['Close'].iloc[-1]) if not df.empty else pos.current_price
+                return ExitSignal("SELL_ALL", f"EMERGENCY_EXIT - {reason}", close_price)
         except Exception as ex:
             logger.debug("Black-swan news exit check failed: {}", ex)
-        df = self.fetch_data(symbol)
-        if df is None:
-            return ExitSignal("HOLD", "No data", 0)
         
         indicators = analyze_all(df)
         if indicators is None:
@@ -815,11 +818,19 @@ class StrategyEngine:
             _now_raw = datetime.now()
             _entry_raw = pos.entry_time
 
-            # timezone 
-            if _entry_raw.tzinfo is not None and _now_raw.tzinfo is None:
-                _entry_raw = _entry_raw.replace(tzinfo=None)
-            elif _entry_raw.tzinfo is None and _now_raw.tzinfo is not None:
-                _now_raw = _now_raw.replace(tzinfo=None)
+            # timezone-aware conversion to Eastern Time (ET) naive datetime objects
+            if _now_raw.tzinfo is None:
+                _now_et = datetime.now(_pytz_hold.utc).astimezone(_et_tz)
+            else:
+                _now_et = _now_raw.astimezone(_et_tz)
+                
+            if _entry_raw.tzinfo is None:
+                _entry_et = _entry_raw.replace(tzinfo=_pytz_hold.utc).astimezone(_et_tz)
+            else:
+                _entry_et = _entry_raw.astimezone(_et_tz)
+                
+            _now_raw = _now_et.replace(tzinfo=None)
+            _entry_raw = _entry_et.replace(tzinfo=None)
 
             is_same_day = (_now_raw.date() == _entry_raw.date())
 
@@ -1229,8 +1240,8 @@ class StrategyEngine:
         db_mgr = None
         try:
             db_mgr = get_database()
-        except:
-            pass
+        except Exception as e:
+            logger.error("Failed to initialize database connection: {}", e)
             
         for pos in api_positions:
             symbol = pos.symbol
@@ -1251,8 +1262,8 @@ class StrategyEngine:
                             if isinstance(db_entry_time, str):
                                 try:
                                     db_entry_time = datetime.fromisoformat(db_entry_time)
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.error("Failed to parse DB entry time string '{}': {}", db_entry_time, e)
                             
                             if isinstance(db_entry_time, datetime):
                                 true_entry_time = db_entry_time

@@ -58,6 +58,7 @@ class BotOrchestrator:
         self._daily_trade_count = 0
         self._daily_upgrade_count = 0
         self._last_trade_date = None
+        self._signal_executor = ThreadPoolExecutor(max_workers=10)
         
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
     
@@ -188,6 +189,7 @@ class BotOrchestrator:
     def phase_2_macro_evaluation(self):
         """Evaluate 15+ macro/risk modules: geopolitical, fed, vix, HMM regime, 
         intermarket, correlation, sector rotation, economic calendar, stress test"""
+        self.state.max_exposure_pct = 1.0  # Reset to prevent exposure collapse from multiplicative penalty stacking
         logger.info("=" * 60)
         logger.info("[PHASE 2] Evaluating Macro & Pre-market Risk (15 modules)")
         logger.info("=" * 60)
@@ -456,18 +458,14 @@ class BotOrchestrator:
                 return symbol, None
 
         signals_to_process = []
-        executor = ThreadPoolExecutor(max_workers=10)
         try:
-            future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
+            future_to_symbol = {self._signal_executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
             for future in as_completed(future_to_symbol):
                 symbol, signal = future.result()
                 if signal:
                     signals_to_process.append(signal)
-        finally:
-            if sys.version_info >= (3, 9):
-                executor.shutdown(wait=False, cancel_futures=True)
-            else:
-                executor.shutdown(wait=False)
+        except Exception as e:
+            logger.error("Signal evaluation ThreadPoolExecutor failed: {}", e)
         
         # Sort by score to process best first
         signals_to_process.sort(key=lambda x: x.composite_score, reverse=True)
@@ -500,7 +498,7 @@ class BotOrchestrator:
                             target_capital = max_position_value
 
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
-                        MAX_STOCK_CONCENTRATION_PCT = 0.55  # Max 55% of portfolio per stock
+                        MAX_STOCK_CONCENTRATION_PCT = getattr(config, 'MAX_POSITION_PCT', 0.30)
                         if signal.entry_price > total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             logger.info("SKIP {}: stock price (${:.2f}) exceeds {:.1f}% of total equity (${:.2f})", 
                                         symbol, signal.entry_price, MAX_STOCK_CONCENTRATION_PCT * 100, total_equity)
@@ -563,7 +561,7 @@ class BotOrchestrator:
                     # Execute upgrade if score gap is large enough
                     if worst_sym and (best_buy_signal.composite_score - worst_score) >= config.UPGRADE_SCORE_GAP:
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
-                        MAX_STOCK_CONCENTRATION_PCT = 0.30  # Max 30% of portfolio per stock
+                        MAX_STOCK_CONCENTRATION_PCT = getattr(config, 'MAX_POSITION_PCT', 0.30)
                         if best_buy_signal.entry_price > total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             logger.info("UPGRADE BLOCKED: {} price (${:.2f}) exceeds {:.1f}% of total equity (${:.2f})", 
                                         best_buy_signal.symbol, best_buy_signal.entry_price, MAX_STOCK_CONCENTRATION_PCT * 100, total_equity)
@@ -587,6 +585,13 @@ class BotOrchestrator:
                             time.sleep(1)  # Brief pause for order processing
                             bp = self.trader.get_buying_power()
                             if bp > 5 and best_buy_signal.entry_price > 0:
+                                # Re-calculate Total Portfolio Value (Net Liquidation) after sell
+                                positions_after = self.strategy.get_all_positions()
+                                total_equity = bp
+                                for s, p in positions_after.items():
+                                    ep = self.trader.get_price(s)
+                                    total_equity += (ep if ep > 0 else p.entry_price) * p.quantity
+
                                 # Recalculate empty slots after sell (it should be at least 1)
                                 empty_slots_after_sell = max(1, config.MAX_POSITIONS - len(self.strategy.get_all_positions()))
                                 target_capital = bp / empty_slots_after_sell
@@ -613,7 +618,7 @@ class BotOrchestrator:
                         
                         # Notify via Telegram
                         try:
-                            from notification import get_notifier
+                            from notifier import get_notifier
                             get_notifier().send_message(
                                 f"UPGRADE SIGNAL\n"
                                 f"Sell: {worst_sym} ({worst_score})\n"
@@ -656,13 +661,16 @@ class BotOrchestrator:
                 return
 
         # 1. Emergency Stop / Circuit Breaker
-        def _circuit():
-            from emergency_stop import check_circuit_breaker
-            if action == "BUY" and check_circuit_breaker(self.trader, self.rm):
-                raise RuntimeError("CIRCUIT BREAKER ACTIVATED")
-        if self._safe_import("circuit_breaker", _circuit) is None:
-            if action == "BUY" and self.state.modules_failed > 0:
-                pass  # Module import failed, continue
+        if action == "BUY":
+            try:
+                from emergency_stop import check_circuit_breaker
+                if check_circuit_breaker(self.trader, self.rm):
+                    logger.warning("CIRCUIT BREAKER ACTIVATED — trade blocked: {} {}", action, symbol)
+                    return
+            except ImportError:
+                pass  # Module not available, continue
+            except Exception as cb_err:
+                logger.error("Circuit breaker error: {}", cb_err)
 
         # 2. Frequency Controller gate
         if self._freq_controller:
@@ -673,13 +681,17 @@ class BotOrchestrator:
                 return
 
         # 3. Drawdown Controller
-        def _drawdown():
+        try:
             from drawdown_controller import get_drawdown_controller
             bp = self.trader.get_buying_power()
             dc = get_drawdown_controller(bp + sum(p.market_value for p in self.trader.get_positions()))
             if dc.is_halted():
-                raise RuntimeError("DRAWDOWN HALT")
-        self._safe_import("drawdown_controller", _drawdown)
+                logger.warning("DRAWDOWN HALT — trade blocked: {} {}", action, symbol)
+                return
+        except ImportError:
+            pass  # Module not available, continue
+        except Exception as dc_err:
+            logger.error("Drawdown controller error: {}", dc_err)
 
         # 4. Kelly Criterion + Position Sizing
         if action == "BUY":
@@ -760,7 +772,7 @@ class BotOrchestrator:
 
         # 9. Smart Order Execution
         try:
-            from smart_order import get_smart_executor, OrderStatus
+            from smart_order import get_smart_executor, OrderStatus, OrderType
             executor = get_smart_executor(self.trader)
             order = executor.execute(symbol, action, qty, price)
             
@@ -772,7 +784,7 @@ class BotOrchestrator:
                 # Threaded orders like TWAP/ICEBERG handle their own notifications)
                 if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT]:
                     try:
-                        from notification import get_notifier
+                        from notifier import get_notifier
                         notifier = get_notifier()
                         notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
                     except Exception as ne:
@@ -971,7 +983,7 @@ class BotOrchestrator:
                             logger.warning("🔄 [24/7 무중단 패치] 최신 전략 패치가 완료되었습니다. 봇을 즉시 자체 재기동합니다!")
                             import os
                             python_exe = sys.executable if sys.executable else "python3"
-                            os.execvp(python_exe, ['python', 'remote_main.py'] + sys.argv[1:])
+                            os.execvp(python_exe, [python_exe, 'remote_main.py'] + sys.argv[1:])
                 except Exception as ue:
                     logger.debug("24/7 무중단 업데이트 스킵: {}", ue)
                 is_open = scheduler.is_market_open()
@@ -1026,18 +1038,33 @@ class BotOrchestrator:
                         (now - self.state.last_screen_refresh) > timedelta(minutes=45)):
                         self.phase_3_run_screener()
                     
-                    # PHASE 4: Signal loop iteration
                     # Ensure internal position state is synced with API before processing
                     try:
                         self.strategy.sync_positions(self.trader.get_positions())
                     except Exception as se:
                         logger.error("Periodic position sync failed: {}", se)
 
+                    # EOD Close All Check (5 minutes before close: 15:55 US/Eastern)
+                    now_est = scheduler.now_est()
+                    is_eod_close_time = (now_est.hour == 15 and now_est.minute >= 55)
+                    if is_eod_close_time:
+                        if not getattr(self, '_eod_closed_today', False):
+                            logger.warning("🚨 [EOD_CLOSE_ALL] 15:55 ET reached! Enforcing EOD close all positions...")
+                            try:
+                                self.trader.close_all_positions()
+                                self.strategy._positions.clear()
+                                self._eod_closed_today = True
+                            except Exception as ce:
+                                logger.error("Failed to run EOD close all: {}", ce)
+                        time.sleep(scan_interval)
+                        continue
+
                     self._run_phase_4_cycle(engine)
                     
                     time.sleep(scan_interval)
                 else:
                     was_closed = True  # Track for next open
+                    self._eod_closed_today = False  # Reset EOD close tracker for next day
                     # Market closed ??run post-market once
                     if not ran_post_market_today:
                         self.phase_6_post_market()

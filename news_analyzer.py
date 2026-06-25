@@ -161,14 +161,16 @@ class NewsAnalyzer:
         # Check cache
         if symbol in self._cache:
             data, timestamp = self._cache[symbol]
-            if (datetime.now() - timestamp).seconds < self._cache_ttl:
+            if (datetime.now() - timestamp).total_seconds() < self._cache_ttl:
                 return data
         
         # Fetch news
         news_items = self._fetch_news(symbol)
         
         if not news_items:
-            return self._neutral_sentiment(symbol)
+            neutral = self._neutral_sentiment(symbol)
+            self._cache[symbol] = (neutral, datetime.now())
+            return neutral
         
         # Try Gemini Sentiment Judge first
         gemini_result = self._judge_with_gemini(symbol, news_items)
@@ -181,7 +183,7 @@ class NewsAnalyzer:
             breaking = None
             has_breaking = False
             for item in news_items:
-                if (datetime.now() - item.published).seconds < 3600:
+                if (datetime.now() - item.published).total_seconds() < 3600:
                     has_breaking = True
                     breaking = item.title
                     break
@@ -258,7 +260,7 @@ class NewsAnalyzer:
         breaking = None
         has_breaking = False
         for item in news_items:
-            if (datetime.now() - item.published).seconds < 3600:
+            if (datetime.now() - item.published).total_seconds() < 3600:
                 has_breaking = True
                 breaking = item.title
                 break
@@ -399,10 +401,11 @@ class NewsAnalyzer:
     
     def _analyze_headline(self, headline: str) -> tuple:
         """Analyze headline sentiment"""
+        import re
         headline_lower = headline.lower()
         
-        pos_count = sum(1 for word in POSITIVE_KEYWORDS if word in headline_lower)
-        neg_count = sum(1 for word in NEGATIVE_KEYWORDS if word in headline_lower)
+        pos_count = sum(1 for word in POSITIVE_KEYWORDS if re.search(r'\b' + re.escape(word) + r'\b', headline_lower))
+        neg_count = sum(1 for word in NEGATIVE_KEYWORDS if re.search(r'\b' + re.escape(word) + r'\b', headline_lower))
         
         if pos_count > neg_count:
             sentiment = "POSITIVE"

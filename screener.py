@@ -110,6 +110,7 @@ class DynamicScreener:
         # ============================================================
         # 0. 제외 목록 구성 — 현재 보유 종목만 제외 (단타 찌꺼기 쿨다운 삭제됨)
         # ============================================================
+        self._ohlcv_cache.clear()
         _exclude = set(exclude_symbols or [])
 
         # Determine screening mode
@@ -370,6 +371,12 @@ class DynamicScreener:
                 # Price Change (must be +1.5% to +15.0% to capture explosive breakout leaders)
                 yesterday_close = float(prior_history["Close"].iloc[-1])
                 pct_change = ((today_close - yesterday_close) / yesterday_close) * 100
+                
+                # Churning/Distribution Filter:
+                # Reject if volume is high (>=3x) but price progress is flat (<1.5%)
+                if volume_ratio >= 3.0 and pct_change < 1.5:
+                    return
+
                 if not (1.5 <= pct_change <= 15.0):
                     return
 
@@ -382,11 +389,6 @@ class DynamicScreener:
                 high_low_range = today_high - today_low
                 closing_range = (today_close - today_low) / high_low_range if high_low_range != 0 else 0.5
                 if closing_range < 0.60:
-                    return
-                    
-                # Churning/Distribution Filter:
-                # Reject if volume is high (>=3x) but price progress is flat (<1.5%)
-                if volume_ratio >= 3.0 and pct_change < 1.5:
                     return
 
                 # Faded Gap-Up Filter:
@@ -1169,21 +1171,8 @@ class DynamicScreener:
     
     def _calc_short_squeeze_score(self, info: dict) -> int:
         """Trend Quality Score (0-25) - Repurposed for Swing
-        Rewards stocks in smooth, established uptrends with minimal deep pullbacks."""
-        score = 0
-        
-        # We need historical data for this, so we'll rely on the caller passing it, or just use info
-        # Wait, the signature only has info. Let's adjust based on simple price info
-        price = info.get('regularMarketPrice', 0)
-        if price <= 0: return 0
-        
-        # We don't have hist here, so let's give a base score if price is above a certain threshold 
-        # (penny stocks excluded)
-        if price > 20: score += 10
-        elif price > 10: score += 5
-        
-        # We will use the momentum score and tech score for the heavy lifting instead.
-        return min(25, score + 10)  # Baseline points
+        Returns 0 since short interest is unavailable in KIS API."""
+        return 0
 
     
     def _calc_momentum_score(self, info: dict, hist: pd.DataFrame) -> int:
