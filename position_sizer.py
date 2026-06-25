@@ -324,9 +324,15 @@ class PositionSizer:
         optimal *= capital_scale
         details.append(f"CAPITAL_SCALE (Scaled by {capital_scale}x)")
 
-        # Clamp to bounds
-        optimal = min(optimal, max_pos)
-        optimal = max(0.01, optimal)  # Minimum 1% of portfolio
+        # Ensure we utilize the slot allocation fully as requested by the user
+        slot_pct = 1.0 / config.MAX_POSITIONS
+        min_pos_pct = slot_pct * 0.75
+        if current_regime in bear_regimes:
+            min_pos_pct = slot_pct * 0.50
+            
+        optimal = max(min_pos_pct, optimal)
+        optimal = min(optimal, slot_pct)
+        details.append(f"SLOT_CLAMPED (optimal={optimal:.1%}, slot={slot_pct:.1%})")
         
         # Dollar amounts
         position_dollars = self.portfolio * optimal
@@ -392,7 +398,8 @@ def calculate_optimal_size(symbol: str, raw_qty: int, kelly_pct: float, max_expo
     [LEGACY COMPATIBILITY HOOK]
     Scale down raw quantity using the macro max_exposure_pct parameter.
     """
-    adjusted_qty = raw_qty * max_exposure_pct
+    # Disable scaling order quantity down by max_exposure_pct to allow full capital deployment per slot
+    adjusted_qty = raw_qty
     
     # Kelly constraint (less aggressive penalty for low conviction)
     if kelly_pct < 0.05:

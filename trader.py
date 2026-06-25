@@ -720,13 +720,16 @@ class Trader:
                             if unfilled:
                                 logger.warning("BUY Order {} ({}) UNFILLED after 15s. Chasing market!", order_id, symbol)
                                 # Cancel the old order
-                                self.cancel_order(order_id, symbol, unfilled["quantity"], try_exchange, "BUY")
-                                time.sleep(2)
-                                
-                                # Resubmit at +1.0% (aggressive chase)
-                                chase_price = round(limit_price * 1.01, 2)
-                                logger.warning("Resubmitting BUY for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
-                                return self.buy(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                                if self.cancel_order(order_id, symbol, unfilled["quantity"], try_exchange, "BUY"):
+                                    time.sleep(2)
+                                    
+                                    # Resubmit at +1.0% (aggressive chase)
+                                    chase_price = round(limit_price * 1.01, 2)
+                                    logger.warning("Resubmitting BUY for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
+                                    return self.buy(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                                else:
+                                    logger.error("Cancel failed for BUY order {} ({}). Keeping original order active, skipping chase.", order_id, symbol)
+                                    return result
                         
                         return result
                     else:
@@ -797,13 +800,16 @@ class Trader:
                         if unfilled:
                             logger.warning("Order {} ({}) UNFILLED after 15s. Chasing market!", order_id, symbol)
                             # Cancel the old order
-                            self.cancel_order(order_id, symbol, unfilled["quantity"], exchange, "SELL")
-                            time.sleep(2)  # Wait for cancellation to process
-                            
-                            # Resubmit at -1.0% (aggressive chase)
-                            chase_price = round(limit_price * 0.99, 2)
-                            logger.warning("Resubmitting SELL for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
-                            return self.sell(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                            if self.cancel_order(order_id, symbol, unfilled["quantity"], exchange, "SELL"):
+                                time.sleep(2)  # Wait for cancellation to process
+                                
+                                # Resubmit at -1.0% (aggressive chase)
+                                chase_price = round(limit_price * 0.99, 2)
+                                logger.warning("Resubmitting SELL for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
+                                return self.sell(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                            else:
+                                logger.error("Cancel failed for order {} ({}). Keeping original order active, skipping chase.", order_id, symbol)
+                                return result
                     
                     return result
                 else:

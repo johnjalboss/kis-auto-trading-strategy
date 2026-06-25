@@ -59,7 +59,7 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "60"))
 MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.30"))  # 30% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "7"))  # 스윙 최대 7종목 동시 보유
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 스윙 최대 5종목 동시 보유
 
 # ==============================================
 # Position Upgrade (교체 매매)

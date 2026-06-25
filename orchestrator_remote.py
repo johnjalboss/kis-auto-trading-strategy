@@ -500,7 +500,7 @@ class BotOrchestrator:
                             target_capital = max_position_value
 
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
-                        MAX_STOCK_CONCENTRATION_PCT = 0.30  # Max 30% of portfolio per stock
+                        MAX_STOCK_CONCENTRATION_PCT = 0.55  # Max 55% of portfolio per stock
                         if signal.entry_price > total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             logger.info("SKIP {}: stock price (${:.2f}) exceeds {:.1f}% of total equity (${:.2f})", 
                                         symbol, signal.entry_price, MAX_STOCK_CONCENTRATION_PCT * 100, total_equity)
