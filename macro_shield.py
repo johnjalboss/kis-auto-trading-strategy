@@ -85,9 +85,9 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
     avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
     
-    rs = avg_gain / avg_loss
+    rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return rsi.fillna(100.0)
 
 
 def calculate_relative_strength(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
@@ -151,16 +151,28 @@ class MacroRiskManager:
         Returns:
             bool: True if successful
         """
-        # Check if refresh needed
+        # Check if refresh needed (dynamic TTL based on VIX volatility)
         if not force_refresh and self._last_update:
-            if datetime.now() - self._last_update < timedelta(hours=1):
-                logger.debug("Using cached data (updated {})", self._last_update)
+            cache_minutes = 60
+            vix_data = self._data.get("^VIX")
+            if vix_data is not None and not vix_data.empty:
+                try:
+                    last_vix = float(vix_data['Close'].iloc[-1])
+                    if last_vix > 25:
+                        cache_minutes = 15
+                    elif last_vix > 20:
+                        cache_minutes = 30
+                except Exception:
+                    pass
+            if datetime.now() - self._last_update < timedelta(minutes=cache_minutes):
+                logger.debug("Using cached data (TTL {}m, updated {})", cache_minutes, self._last_update)
                 return True
         
         logger.info("Fetching macro data for {} tickers...", len(self.ALL_TICKERS))
         
         try:
-            end_date = datetime.now()
+            from datetime import date
+            end_date = datetime.combine(date.today(), datetime.min.time())
             start_date = end_date - timedelta(days=self.lookback_days)
             
             for ticker in self.ALL_TICKERS:
@@ -238,11 +250,11 @@ class MacroRiskManager:
         if is_bullish:
             # More bullish as VIX drops further below SMA
             ratio = (vix_sma - current_vix) / vix_sma
-            score = min(25, 15 + ratio * 100)  # 15-25 range
+            score = min(25, 12 + ratio * 130)  # 12-25 range
         else:
             # Penalty based on how far above SMA
             ratio = (current_vix - vix_sma) / vix_sma
-            score = max(0, 15 - ratio * 50)  # 0-15 range
+            score = max(0, 12 - ratio * 60)  # 0-12 range
         
         return FilterResult(
             name="VIX Regime",

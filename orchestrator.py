@@ -1053,13 +1053,16 @@ class BotOrchestrator:
                 return
 
         # 1. Emergency Stop / Circuit Breaker
-        def _circuit():
-            from emergency_stop import check_circuit_breaker
-            if action == "BUY" and check_circuit_breaker(self.trader, self.rm):
-                raise RuntimeError("CIRCUIT BREAKER ACTIVATED")
-        if self._safe_import("circuit_breaker", _circuit) is None:
-            if action == "BUY" and self.state.modules_failed > 0:
-                pass  # Module import failed, continue
+        if action == "BUY":
+            try:
+                from emergency_stop import check_circuit_breaker
+                if check_circuit_breaker(self.trader, self.rm):
+                    logger.warning("CIRCUIT BREAKER ACTIVATED — trade blocked: {} {}", action, symbol)
+                    return
+            except ImportError:
+                pass
+            except Exception as cb_err:
+                logger.error("Circuit breaker error: {}", cb_err)
 
         # 2. Frequency Controller gate
         if self._freq_controller:
@@ -1070,13 +1073,17 @@ class BotOrchestrator:
                 return
 
         # 3. Drawdown Controller
-        def _drawdown():
+        try:
             from drawdown_controller import get_drawdown_controller
             bp = self.trader.get_buying_power()
             dc = get_drawdown_controller(bp + sum(p.market_value for p in self.trader.get_positions()))
             if dc.is_halted():
-                raise RuntimeError("DRAWDOWN HALT")
-        self._safe_import("drawdown_controller", _drawdown)
+                logger.warning("DRAWDOWN HALT — trade blocked: {} {}", action, symbol)
+                return
+        except ImportError:
+            pass
+        except Exception as dc_err:
+            logger.error("Drawdown controller error: {}", dc_err)
 
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer
         if action == "BUY":
@@ -1731,31 +1738,32 @@ class BotOrchestrator:
         logger.info("⚙️ [Weekly Tuning] 시작합니다...")
         try:
             # 1. 7일간의 거래 성과 분석 및 통계 생성
-            from database import get_db
+            from database import get_database
             import pandas as pd
             import numpy as np
             
-            with get_db() as db:
-                cursor = db.cursor()
+            db = get_database()
+            with db._get_conn() as conn:
+                cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT ticker, entry_price, exit_price, qty, entry_time, exit_time, profit, profit_rate
+                    SELECT symbol, price, quantity, exit_time, pnl, pnl_pct
                     FROM trades
-                    WHERE status = 'CLOSED' AND exit_time >= datetime('now', '-7 days')
+                    WHERE side = 'SELL' AND exit_time >= datetime('now', '-7 days')
                 """)
-                rows = cursor.fetchall()
+                rows = [dict(row) for row in cursor.fetchall()]
                 
             if not rows:
                 logger.info("⚙️ [Weekly Tuning] 최근 7일간 완료된 거래가 없어 튜닝을 스킵합니다.")
                 return
                 
-            df = pd.DataFrame(rows, columns=['ticker', 'entry_price', 'exit_price', 'qty', 'entry_time', 'exit_time', 'profit', 'profit_rate'])
+            df = pd.DataFrame(rows)
             
             # 2. 성과 메트릭 계산
             total_trades = len(df)
-            winning_trades = len(df[df['profit'] > 0])
+            winning_trades = len(df[df['pnl'] > 0])
             win_rate = winning_trades / total_trades if total_trades > 0 else 0
-            avg_profit_rate = df['profit_rate'].mean()
-            total_profit = df['profit'].sum()
+            avg_profit_rate = df['pnl_pct'].mean()
+            total_profit = df['pnl'].sum()
             
             logger.info("⚙️ [Weekly Tuning] 최근 7일 성과 요약: 거래수={}, 승률={:.1%}, 평균수익률={:.2%}, 총수익={:.0f}원", 
                         total_trades, win_rate, avg_profit_rate, total_profit)
@@ -1801,7 +1809,7 @@ class BotOrchestrator:
                     logger.info("⚙️ [Weekly Tuning] {} 업데이트 완료.", env_path)
                     
                     try:
-                        from notification import get_notifier
+                        from notifier import get_notifier
                         msg = (
                             f"⚙️ <b>주간 자율 피드백 및 파라미터 자동 튜닝 리포트</b>\n\n"
                             f"• 기간: 최근 7일\n"
@@ -1813,7 +1821,7 @@ class BotOrchestrator:
                             f"• ATR_TP_MULT: {current_tp_mult} -> {new_tp_mult:.1f}\n"
                             f"• 사유: {reason}"
                         )
-                        get_notifier().send_message(msg)
+                        get_notifier().send(msg)
                     except Exception as ne:
                         logger.error("Failed to send weekly tuning notification: {}", ne)
                 else:
@@ -1821,7 +1829,7 @@ class BotOrchestrator:
             else:
                 logger.info("⚙️ [Weekly Tuning] 파라미터 조정 조건에 부합하지 않아 기존 설정을 유지합니다.")
                 try:
-                    from notification import get_notifier
+                    from notifier import get_notifier
                     msg = (
                         f"⚙️ <b>주간 자율 피드백 리포트 (유지)</b>\n\n"
                         f"• 기간: 최근 7일\n"
@@ -1831,7 +1839,7 @@ class BotOrchestrator:
                         f"• 총 손익: {total_profit:,.0f}원\n\n"
                         f"🔧 현재 파라미터 설정(ATR_TP_MULT={current_tp_mult})을 유지합니다."
                     )
-                    get_notifier().send_message(msg)
+                    get_notifier().send(msg)
                 except Exception as ne:
                     logger.error("Failed to send weekly tuning notification: {}", ne)
                     

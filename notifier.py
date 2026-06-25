@@ -275,11 +275,41 @@ class TelegramNotifier:
     def send_photo_sync(self, photo_path: str, caption: str = "") -> bool:
         """Send photo synchronously and return success status"""
         return self._send_photo_sync(photo_path, caption)
-    
+
+    # ==============================================
+    # Compatibility with legacy notification.py
+    # ==============================================
+    def send_message(self, message: str):
+        """Alias for compatibility with legacy notification.py"""
+        self.send(message)
+
+    def send_all(self, message: str) -> bool:
+        """Alias for compatibility with legacy notification.py"""
+        return self._send_sync(message)
+
+    def alert_status(self, status: str, details: str):
+        """Alias for compatibility with legacy notification.py"""
+        self.system_status(status, details)
+
+    def alert_emergency(self, severity: str, reason: str):
+        """Alias for compatibility with legacy notification.py"""
+        self.risk_warning(f"EMERGENCY {severity}: {reason}")
+
+    def alert_daily_summary(self, pnl: float, pnl_pct: float, trades: int):
+        """Alias for compatibility with legacy notification.py"""
+        self.daily_report(pnl, pnl_pct, trades)
+        
     # ==============================================
     # Trade Alerts
     # ==============================================
     
+    def alert_trade(self, side: str, symbol: str, price: float, details: str = ""):
+        """General trade alert fallback method"""
+        if side.upper() == "BUY":
+            self.trade_entry(symbol, 0, price, details)
+        else:
+            self.trade_exit(symbol, 0, price, 0.0, details)
+
     def trade_entry(self, symbol: str, quantity: int, price: float, reason: str = ""):
         """Notify trade entry"""
         # 매수 이유 한국어 변환

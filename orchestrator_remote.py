@@ -291,6 +291,8 @@ class BotOrchestrator:
         self.state.last_macro_refresh = datetime.now()
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 
                     self.state.max_exposure_pct, self.state.global_risk_level, self.state.current_regime)
+        self.strategy._last_regime = self.state.current_regime
+        logger.info("  -> strategy._last_regime synced to: {}", self.state.current_regime)
 
     # ==========================================
     # PHASE 3: SCREENER & UNIVERSE REDUCTION
@@ -1005,6 +1007,9 @@ class BotOrchestrator:
                     # Market just opened ??force immediate macro + screener refresh
                     if was_closed:
                         logger.info("? Market OPEN detected! Running fresh macro + screener...")
+                        if hasattr(self, '_spy_open'):
+                            delattr(self, '_spy_open')
+                            logger.info("  -> Reset _spy_open for the new trading day")
                         self.state.max_exposure_pct = 1.0
                         self.phase_2_macro_evaluation()
                         self.phase_3_run_screener()

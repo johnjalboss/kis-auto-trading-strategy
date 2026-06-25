@@ -223,10 +223,12 @@ class TokenManager:
         self._lock = threading.Lock()
         self._refresh_thread = None
         self._running = False
+        self._stop_event = threading.Event()
     
     def start_auto_refresh(self):
         """Start background token refresh"""
         self._running = True
+        self._stop_event.clear()
         self._refresh_thread = threading.Thread(target=self._refresh_loop, daemon=True)
         self._refresh_thread.start()
         logger.info("Token auto-refresh started (every {}h)", self.REFRESH_HOURS)
@@ -234,8 +236,9 @@ class TokenManager:
     def stop_auto_refresh(self):
         """Stop background refresh"""
         self._running = False
+        self._stop_event.set()
         if self._refresh_thread:
-            self._refresh_thread.join(timeout=5)
+            self._refresh_thread.join(timeout=10)
     
     def _refresh_loop(self):
         """Background refresh loop"""
@@ -244,7 +247,7 @@ class TokenManager:
                 self.get_token()
             except Exception as e:
                 logger.error("Token refresh failed: {}", e)
-            time.sleep(self.REFRESH_HOURS * 3600)
+            self._stop_event.wait(timeout=self.REFRESH_HOURS * 3600)
     
     def get_token(self) -> str:
         """Get valid access token (thread-safe and process-safe)"""
@@ -305,7 +308,11 @@ class TokenManager:
             raise ValueError(f"Invalid token response: {data}")
         
         self._token = data["access_token"]
-        self._expires_at = datetime.now() + timedelta(hours=24)
+        expiry_str = data.get("access_token_token_expired", "")
+        try:
+            self._expires_at = datetime.strptime(expiry_str, "%Y-%m-%d %H:%M:%S") if expiry_str else datetime.now() + timedelta(hours=24)
+        except ValueError:
+            self._expires_at = datetime.now() + timedelta(hours=24)
         self._save_to_file()
         
         logger.success("New token acquired, expires {}", self._expires_at)
@@ -408,7 +415,7 @@ class Trader:
         params = {
             "CANO": self.account_no,
             "ACNT_PRDT_CD": self.account_cd,
-            "OVRS_EXCG_CD": "NASD",
+            "OVRS_EXCG_CD": ExchangeMapper.get_exchange(symbol),
             "OVRS_ORD_UNPR": f"{ref_price:.2f}",
             "ITEM_CD": symbol,
         }
@@ -462,11 +469,9 @@ class Trader:
                     continue
                     
                 for item in data.get("output1", []):
-                    # Use ord_psbl_qty (매도가능수량) for sellable amount, fallback to ovrs_cblc_qty
-                    sellable_qty_str = item.get("ord_psbl_qty", "")
+                    # Use ovrs_cblc_qty (해외체결잔고수량) as the total quantity held
                     qty_str = item.get("ovrs_cblc_qty", "0")
-                    
-                    qty = int(float(sellable_qty_str)) if sellable_qty_str.strip() else int(float(qty_str))
+                    qty = int(float(qty_str)) if qty_str.strip() else 0
                     
                     if qty > 0:
                         symbol = item.get("ovrs_pdno", "")
@@ -568,18 +573,18 @@ class Trader:
         for excd in exchanges_to_try:
             params = {"AUTH": "", "EXCD": excd, "SYMB": symbol}
             
-            # Rate limit protection (Max 20 RPS)
-            time.sleep(0.1)
+            # Rate limit protection (Max 20 RPS - Thread-Safe Serialization)
+            with _price_query_lock:
+                time.sleep(0.1)
+                try:
+                    resp = requests.get(url, headers=self._get_headers(tr_id),
+                                        params=params, timeout=10)
+                    data = resp.json()
 
-            try:
-                resp = requests.get(url, headers=self._get_headers(tr_id),
-                                    params=params, timeout=10)
-                data = resp.json()
-
-                if data.get("rt_cd") == "0":
-                    return data
-            except Exception as e:
-                logger.error("Order book fetch failed for {} on {}: {}", symbol, excd, e)
+                    if data.get("rt_cd") == "0":
+                        return data
+                except Exception as e:
+                    logger.error("Order book fetch failed for {} on {}: {}", symbol, excd, e)
         return {}
 
     def calculate_obi(self, symbol: str, exchange: str = None) -> float:
@@ -653,6 +658,11 @@ class Trader:
     
     def buy(self, symbol: str, quantity: int, limit_price: float = None, ensure_fill: bool = False) -> OrderResult:
         """Buy stock with limit order, optionally chasing price if unfilled"""
+        # Check permanent blacklist first (do it at the very top to save API calls)
+        if symbol.upper() in _KIS_BLACKLIST:
+            logger.debug("BLACKLIST: {} skipped (KIS API permanently rejected)", symbol)
+            return OrderResult(False, "", symbol, "BUY", quantity, limit_price or 0.0, "KIS_BLACKLISTED")
+
         if limit_price is None:
             price = self.get_price(symbol)
             # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
@@ -680,11 +690,6 @@ class Trader:
         
         logger.info("BUY {} x {} @ ${:.2f} ({})", symbol, quantity, limit_price, exchange)
         
-        # Check permanent blacklist first
-        if symbol.upper() in _KIS_BLACKLIST:
-            logger.debug("BLACKLIST: {} skipped (KIS API permanently rejected)", symbol)
-            return OrderResult(False, "", symbol, "BUY", quantity, limit_price, "KIS_BLACKLISTED")
-        
         # All exchanges to try in order
         EXCHANGE_PROBE_ORDER = [exchange, "NYSE", "NASD", "AMEX"]
         # Deduplicate while preserving order
@@ -692,6 +697,7 @@ class Trader:
         exchanges_to_try = [e for e in EXCHANGE_PROBE_ORDER if not (e in seen or seen.add(e))]
         
         no_info_error = "해당종목정보가 없습니다"
+        all_no_info = True  # Flag to track if all errors were KIS "no info" errors
         
         for try_exchange in exchanges_to_try:
             body["OVRS_EXCG_CD"] = try_exchange
@@ -705,6 +711,7 @@ class Trader:
                     data = resp.json()
                     
                     if data.get("rt_cd") == "0":
+                        all_no_info = False
                         order_id = data.get("output", {}).get("ODNO", "")
                         logger.success("BUY order placed: {} (ID: {}, exchange: {})", symbol, order_id, try_exchange)
                         # Cache successful exchange
@@ -723,8 +730,9 @@ class Trader:
                                 if self.cancel_order(order_id, symbol, unfilled["quantity"], try_exchange, "BUY"):
                                     time.sleep(2)
                                     
-                                    # Resubmit at +1.0% (aggressive chase)
-                                    chase_price = round(limit_price * 1.01, 2)
+                                    # Resubmit at max of +1% or current price +0.5% (aggressive chase)
+                                    current_price = self.get_price(symbol)
+                                    chase_price = round(max(limit_price * 1.01, current_price * 1.005), 2)
                                     logger.warning("Resubmitting BUY for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
                                     return self.buy(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
                                 else:
@@ -737,21 +745,32 @@ class Trader:
                         logger.error("BUY failed on {}: {}", try_exchange, msg)
                         if no_info_error in msg:
                             break  # No point retrying same exchange — try next
-                        # Other errors: retry same exchange
+                        
+                        # Any other error means it's not a "no info" issue
+                        all_no_info = False
                         if attempt < self.MAX_RETRIES - 1:
                             time.sleep(self.RETRY_DELAY)
                 except Exception as e:
+                    # Connection/network errors are not "no info" errors
+                    all_no_info = False
                     if attempt < self.MAX_RETRIES - 1:
                         time.sleep(self.RETRY_DELAY)
                         continue
                     logger.error("BUY request exception for {}: {}", symbol, e)
         
-        # All exchanges failed with "no info" → permanent blacklist
-        add_to_blacklist(symbol, "해당종목정보가 없습니다 (all exchanges)")
-        return OrderResult(False, "", symbol, "BUY", quantity, limit_price, "KIS_SYMBOL_NOT_FOUND")
+        # Only blacklist if we specifically got KIS "no info" error on all exchanges
+        if all_no_info:
+            add_to_blacklist(symbol, "해당종목정보가 없습니다 (all exchanges)")
+            return OrderResult(False, "", symbol, "BUY", quantity, limit_price, "KIS_SYMBOL_NOT_FOUND")
+        else:
+            return OrderResult(False, "", symbol, "BUY", quantity, limit_price, "ORDER_FAILED")
     
     def sell(self, symbol: str, quantity: int, limit_price: float = None, ensure_fill: bool = False) -> OrderResult:
         """Sell stock with limit order, optionally chasing price if unfilled"""
+        # Warn if selling a blacklisted symbol, but don't hard-block sells
+        if symbol.upper() in _KIS_BLACKLIST:
+            logger.warning("⚠️ SELL on blacklisted {}: attempting anyway to close position.", symbol)
+
         if limit_price is None:
             price = self.get_price(symbol)
             # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
@@ -803,8 +822,9 @@ class Trader:
                             if self.cancel_order(order_id, symbol, unfilled["quantity"], exchange, "SELL"):
                                 time.sleep(2)  # Wait for cancellation to process
                                 
-                                # Resubmit at -1.0% (aggressive chase)
-                                chase_price = round(limit_price * 0.99, 2)
+                                # Resubmit at min of -1.0% or current price -0.5% (aggressive chase)
+                                current_price = self.get_price(symbol)
+                                chase_price = round(min(limit_price * 0.99, current_price * 0.995), 2)
                                 logger.warning("Resubmitting SELL for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
                                 return self.sell(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
                             else:
@@ -935,7 +955,8 @@ class Trader:
     def wait_for_fill(self, order_id: str, symbol: str, 
                        max_wait: int = 30) -> bool:
         """주문 체결 대기 (최대 max_wait초)"""
-        for i in range(max_wait // 5):
+        num_checks = max(1, max_wait // 5)
+        for i in range(num_checks):
             time.sleep(5)
             orders = self.get_unfilled_orders()
             still_pending = any(o["order_id"] == order_id for o in orders)

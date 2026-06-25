@@ -22,6 +22,7 @@ class DailyStats:
     date: date
     starting_balance: float = 0.0
     current_balance: float = 0.0
+    intraday_peak: float = 0.0
     trades_count: int = 0
     wins: int = 0
     losses: int = 0
@@ -41,9 +42,8 @@ class DailyStats:
     
     @property
     def win_rate(self) -> float:
-        if self.trades_count == 0:
-            return 0.0
-        return self.wins / self.trades_count
+        total = self.wins + self.losses
+        return self.wins / total if total > 0 else 0.0
 
 
 @dataclass 
@@ -184,7 +184,8 @@ class RiskManager:
             self._daily_stats = DailyStats(
                 date=today,
                 starting_balance=starting_balance,
-                current_balance=starting_balance
+                current_balance=starting_balance,
+                intraday_peak=starting_balance
             )
             self._trading_halted = False
             self._cooldown_until = None
@@ -192,8 +193,11 @@ class RiskManager:
             # ★ [QUANT RISK v1.0.9] 주간 드로다운 및 누적 P&L 복원 메커니즘
             # 단순 0.0 초기화가 아닌, trades.db 데이터베이스에서 
             # 이번 주 월요일 00:00:00 EST 이후 완료된 거래 손익의 실질 합계액을 쿼리하여 복원
-            if self._week_start_date is None or today.weekday() == 0:  # Monday
-                self._week_start_date = today
+            current_week_monday = today - timedelta(days=today.weekday())
+            is_new_week = (self._week_start_date is None or 
+                           self._week_start_date < current_week_monday)
+            if is_new_week:
+                self._week_start_date = current_week_monday
                 self._weekly_halted = False
                 
                 # 이번 주 월요일(EST) 계산
@@ -243,8 +247,9 @@ class RiskManager:
         
         self._daily_stats.current_balance = new_balance
         
-        # Track max drawdown
-        peak = max(self._daily_stats.starting_balance, new_balance)
+        # Track max drawdown using running intraday peak
+        self._daily_stats.intraday_peak = max(self._daily_stats.intraday_peak, new_balance)
+        peak = self._daily_stats.intraday_peak
         current_drawdown = (peak - new_balance) / peak if peak > 0 else 0
         self._daily_stats.max_drawdown = max(self._daily_stats.max_drawdown, current_drawdown)
         
@@ -284,7 +289,7 @@ class RiskManager:
         
         pnl_pct = self._daily_stats.pnl_pct
         
-        if pnl_pct <= -self.daily_stop_pct:
+        if pnl_pct <= -self.daily_stop_pct and not self._trading_halted:
             self._trading_halted = True
             logger.warning("DAILY STOP LOSS TRIGGERED: {:.1%} loss", abs(pnl_pct))
             
@@ -329,7 +334,8 @@ class RiskManager:
         # Check cooldown
         if self._cooldown_until:
             if datetime.now() < self._cooldown_until:
-                remaining = (self._cooldown_until - datetime.now()).seconds // 60
+                delta = self._cooldown_until - datetime.now()
+                remaining = max(0, int(delta.total_seconds())) // 60
                 return False, f"Cooldown: {remaining}min remaining"
             else:
                 self._cooldown_until = None
@@ -348,13 +354,12 @@ class RiskManager:
         # [BUG FIX v1.0.9] 오직 주간 P&L이 손실(self._weekly_pnl < 0)일 때만 주간 정지가 동작하도록 수정
         # 이전: abs(self._weekly_pnl)로 인해 주간 10% 이상 수익이 났을 때도 계좌를 강제 정지하는 치명적인 논리 결함 존재.
         if starting > 0 and self._weekly_pnl < 0 and abs(self._weekly_pnl) / starting > self.weekly_stop_pct:
-            if self._weekly_pnl < 0:
-                self._weekly_halted = True
-                logger.warning("WEEKLY STOP: ${:,.0f} loss ({:.1%} of balance)",
-                             self._weekly_pnl, self._weekly_pnl / starting)
-                from notifier import get_notifier
-                get_notifier().system_status("WEEKLY STOP", 
-                    f"Weekly loss ${self._weekly_pnl:,.0f} exceeds {self.weekly_stop_pct:.0%} limit")
+            self._weekly_halted = True
+            logger.warning("WEEKLY STOP: ${:,.0f} loss ({:.1%} of balance)",
+                         self._weekly_pnl, self._weekly_pnl / starting)
+            from notifier import get_notifier
+            get_notifier().system_status("WEEKLY STOP", 
+                f"Weekly loss ${self._weekly_pnl:,.0f} exceeds {self.weekly_stop_pct:.0%} limit")
     
     # ==============================================
     # Position Management

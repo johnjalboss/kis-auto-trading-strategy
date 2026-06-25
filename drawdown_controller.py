@@ -95,8 +95,10 @@ class DrawdownController:
         
         # Recovery tracking
         self.consecutive_green_days = 0
+        self.last_green_day_date = ""
         self.is_stopped = False
         self.stop_reason = ""
+        self.max_drawdown_recorded = 0.0
         
         # Load saved state
         self._load_state()
@@ -123,12 +125,21 @@ class DrawdownController:
         # Check if new period
         self._check_period_reset()
         
-        # Track consecutive days
+        # Track consecutive days (debounced to once per day)
+        try:
+            et = pytz.timezone('US/Eastern')
+            today_str = str(datetime.now(et).date())
+        except Exception:
+            today_str = str(datetime.now().date())
+
         daily_change = new_capital - self.daily_start
         if daily_change > 0:
-            self.consecutive_green_days += 1
+            if self.last_green_day_date != today_str:
+                self.consecutive_green_days += 1
+                self.last_green_day_date = today_str
         elif daily_change < 0:
             self.consecutive_green_days = 0
+            self.last_green_day_date = ""
         
         # Calculate metrics
         return self._calculate_state()
@@ -137,7 +148,8 @@ class DrawdownController:
         """Calculate current drawdown state"""
         # Drawdowns
         current_dd = (self.current_capital - self.peak_capital) / self.peak_capital
-        max_dd = (self.peak_capital - self.initial_capital) / self.initial_capital if self.peak_capital > self.initial_capital else current_dd
+        self.max_drawdown_recorded = min(self.max_drawdown_recorded, current_dd)
+        max_dd = self.max_drawdown_recorded
         
         # Period P&L
         daily_pnl = self.current_capital - self.daily_start
@@ -152,50 +164,10 @@ class DrawdownController:
         # Determine status
         status = "NORMAL"
         reason = ""
-        trading_allowed = True
-        size_mult = 1.0
+        trading_allowed = not self.is_stopped
+        size_mult = 0.3 if self.is_stopped else 1.0
         
-        # Check daily limits
-        if daily_pnl_pct <= self.DAILY_STOP:
-            status = "STOP"
-            reason = f"Daily loss {daily_pnl_pct:.1%} exceeded limit"
-            trading_allowed = False
-        elif daily_pnl_pct <= self.DAILY_CAUTION:
-            status = "CAUTION"
-            reason = f"Daily loss {daily_pnl_pct:.1%}"
-            size_mult = 0.5
-        
-        # Check weekly limits
-        if weekly_pnl_pct <= self.WEEKLY_STOP:
-            status = "STOP"
-            reason = f"Weekly loss {weekly_pnl_pct:.1%} exceeded limit"
-            trading_allowed = False
-        elif weekly_pnl_pct <= self.WEEKLY_CAUTION and status != "STOP":
-            status = "WARNING"
-            reason = f"Weekly loss {weekly_pnl_pct:.1%}"
-            size_mult = min(size_mult, 0.5)
-        
-        # Check monthly limits
-        if monthly_pnl_pct <= self.MONTHLY_STOP:
-            status = "STOP"
-            reason = f"Monthly loss {monthly_pnl_pct:.1%} exceeded limit"
-            trading_allowed = False
-        elif monthly_pnl_pct <= self.MONTHLY_CAUTION and status not in ["STOP", "WARNING"]:
-            status = "CAUTION"
-            reason = f"Monthly loss {monthly_pnl_pct:.1%}"
-            size_mult = min(size_mult, 0.6)
-        
-        # Check max drawdown
-        if current_dd <= self.MAX_DD_STOP:
-            status = "STOP"
-            reason = f"Max DD {current_dd:.1%} exceeded limit"
-            trading_allowed = False
-        elif current_dd <= self.MAX_DD_CAUTION and status not in ["STOP"]:
-            status = "WARNING"
-            reason = f"Max DD {current_dd:.1%}"
-            size_mult = min(size_mult, 0.5)
-        
-        # Recovery check
+        # Tentative recovery check (only if currently stopped)
         if self.is_stopped and self.consecutive_green_days >= 3:
             self.is_stopped = False
             status = "CAUTION"
@@ -203,10 +175,54 @@ class DrawdownController:
             trading_allowed = True
             size_mult = 0.3
         
+        # Check daily limits
+        if daily_pnl_pct <= self.DAILY_STOP:
+            status = "STOP"
+            reason = f"Daily loss {daily_pnl_pct:.1%} exceeded limit"
+            trading_allowed = False
+        elif daily_pnl_pct <= self.DAILY_CAUTION:
+            if status != "STOP":
+                status = "CAUTION"
+                reason = f"Daily loss {daily_pnl_pct:.1%}"
+            size_mult = min(size_mult, 0.5)
+        
+        # Check weekly limits
+        if weekly_pnl_pct <= self.WEEKLY_STOP:
+            status = "STOP"
+            reason = f"Weekly loss {weekly_pnl_pct:.1%} exceeded limit"
+            trading_allowed = False
+        elif weekly_pnl_pct <= self.WEEKLY_CAUTION:
+            if status not in ["STOP"]:
+                status = "WARNING"
+                reason = f"Weekly loss {weekly_pnl_pct:.1%}"
+            size_mult = min(size_mult, 0.5)
+        
+        # Check monthly limits
+        if monthly_pnl_pct <= self.MONTHLY_STOP:
+            status = "STOP"
+            reason = f"Monthly loss {monthly_pnl_pct:.1%} exceeded limit"
+            trading_allowed = False
+        elif monthly_pnl_pct <= self.MONTHLY_CAUTION:
+            if status not in ["STOP", "WARNING"]:
+                status = "CAUTION"
+                reason = f"Monthly loss {monthly_pnl_pct:.1%}"
+            size_mult = min(size_mult, 0.6)
+        
+        # Check max drawdown
+        if current_dd <= self.MAX_DD_STOP:
+            status = "STOP"
+            reason = f"Max DD {current_dd:.1%} exceeded limit"
+            trading_allowed = False
+        elif current_dd <= self.MAX_DD_CAUTION:
+            if status not in ["STOP"]:
+                status = "WARNING"
+                reason = f"Max DD {current_dd:.1%}"
+            size_mult = min(size_mult, 0.5)
+        
         if not trading_allowed:
             self.is_stopped = True
             self.stop_reason = reason
-            size_mult = 0
+            size_mult = 0.0
         
         # Save state
         def to_float(val):
@@ -256,13 +272,31 @@ class DrawdownController:
             self.daily_start = self.current_capital
             self.day_start_date = today
         
-        # Weekly reset (Monday)
-        if today.weekday() == 0 and today != self.week_start_date:
+        # Weekly reset (reset if current week Monday differs from stored week Monday)
+        current_week_monday = today - timedelta(days=today.weekday())
+        try:
+            # Handle potential string format from old state or date parsing
+            if isinstance(self.week_start_date, str):
+                self.week_start_date = datetime.strptime(self.week_start_date, "%Y-%m-%d").date()
+            stored_week_monday = self.week_start_date - timedelta(days=self.week_start_date.weekday())
+        except Exception:
+            stored_week_monday = current_week_monday
+            
+        if current_week_monday != stored_week_monday:
             self.weekly_start = self.current_capital
             self.week_start_date = today
         
-        # Monthly reset
-        if today.day == 1 and today != self.month_start_date:
+        # Monthly reset (reset if month or year differs from stored month start)
+        try:
+            if isinstance(self.month_start_date, str):
+                self.month_start_date = datetime.strptime(self.month_start_date, "%Y-%m-%d").date()
+            stored_month = self.month_start_date.month
+            stored_year = self.month_start_date.year
+        except Exception:
+            stored_month = today.month
+            stored_year = today.year
+            
+        if today.month != stored_month or today.year != stored_year:
             self.monthly_start = self.current_capital
             self.month_start_date = today
     
@@ -286,7 +320,9 @@ class DrawdownController:
         self.weekly_start = self.initial_capital
         self.monthly_start = self.initial_capital
         self.consecutive_green_days = 0
+        self.last_green_day_date = ""
         self.is_stopped = False
+        self.max_drawdown_recorded = 0.0
         self._save_state()
     
     def _save_state(self):
@@ -303,8 +339,10 @@ class DrawdownController:
                 'week_start_date': str(self.week_start_date),
                 'month_start_date': str(self.month_start_date),
                 'consecutive_green_days': self.consecutive_green_days,
+                'last_green_day_date': self.last_green_day_date,
                 'is_stopped': self.is_stopped,
                 'stop_reason': self.stop_reason,
+                'max_drawdown_recorded': self.max_drawdown_recorded,
                 'last_update': datetime.now().isoformat()
             }
             with open(self.state_file, 'w') as f:
@@ -324,8 +362,10 @@ class DrawdownController:
                 self.weekly_start = state.get('weekly_start', self.initial_capital)
                 self.monthly_start = state.get('monthly_start', self.initial_capital)
                 self.consecutive_green_days = state.get('consecutive_green_days', 0)
+                self.last_green_day_date = state.get('last_green_day_date', '')
                 self.is_stopped = state.get('is_stopped', False)
                 self.stop_reason = state.get('stop_reason', '')
+                self.max_drawdown_recorded = state.get('max_drawdown_recorded', 0.0)
                 logger.info(f"Loaded state: capital=${self.current_capital:,.2f}")
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
