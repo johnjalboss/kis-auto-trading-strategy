@@ -515,21 +515,34 @@ def sync_from_vps():
     remote_db = "/home/ubuntu/us-theme-tracker/us_stocks_data.db"
     remote_cache = "/home/ubuntu/us-theme-tracker/theme_radar_cache.json"
     
+    known_hosts_dev = "NUL" if os.name == "nt" else "/dev/null"
+    
     try:
-        # Pull cache json
-        proc = subprocess.Popen(
-            ['scp', '-i', key_file, '-o', 'StrictHostKeyChecking=no', f'{user}@{ip}:{remote_cache}', local_cache],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        # Pull cache json with 30s timeout
+        res_cache = subprocess.run(
+            ['scp', '-i', key_file, 
+             '-o', 'StrictHostKeyChecking=no', 
+             '-o', f'UserKnownHostsFile={known_hosts_dev}', 
+             f'{user}@{ip}:{remote_cache}', local_cache],
+            capture_output=True, text=True, timeout=30
         )
-        proc.communicate(input=b"yes\n", timeout=10)
         
-        # Pull DB
-        proc2 = subprocess.Popen(
-            ['scp', '-i', key_file, '-o', 'StrictHostKeyChecking=no', f'{user}@{ip}:{remote_db}', local_db],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        # Pull DB with 60s timeout
+        res_db = subprocess.run(
+            ['scp', '-i', key_file, 
+             '-o', 'StrictHostKeyChecking=no', 
+             '-o', f'UserKnownHostsFile={known_hosts_dev}', 
+             f'{user}@{ip}:{remote_db}', local_db],
+            capture_output=True, text=True, timeout=60
         )
-        proc2.communicate(input=b"yes\n", timeout=10)
-        return True
+        
+        if res_cache.returncode == 0 and res_db.returncode == 0:
+            return True
+        else:
+            print(f"Sync failed. Cache code={res_cache.returncode}, DB code={res_db.returncode}")
+            print(f"Cache Stderr: {res_cache.stderr}")
+            print(f"DB Stderr: {res_db.stderr}")
+            return False
     except Exception as e:
         print(f"Failed to sync from VPS: {e}")
         return False
