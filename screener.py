@@ -1077,12 +1077,20 @@ class DynamicScreener:
                             _beat2 = (_er.get('beat_surprise', 0) or _er.get('eps_surprise_pct', 0) or
                                       _er.get('surprise_pct', 0))
                             _days2 = _er.get('days_since_earnings', 99)
+                            _shock2 = _er.get('has_earnings_shock', False)
+                            _shock_reason2 = _er.get('earnings_shock_reason', '')
                         else:
                             # It is an EarningsSignal dataclass object!
                             _beat2 = getattr(_er, 'last_eps_surprise', 0.0)
                             _days2 = getattr(_er, 'days_since_earnings', 99)
+                            _shock2 = getattr(_er, 'has_earnings_shock', False)
+                            _shock_reason2 = getattr(_er, 'earnings_shock_reason', '')
                             
-                        if _beat2 > 5 and _days2 <= 30:
+                        if _shock2:
+                            pead_blacklist = True
+                            logger.warning("🚨 [AI_EARNINGS_SHOCK_BLACKLIST] {} completely blacklisted due to Gemini AI earnings/guidance/management shock! Reason: {}",
+                                           symbol, _shock_reason2)
+                        elif _beat2 > 5 and _days2 <= 30:
                             pead_bonus = 15
                             logger.debug("PEAD_BONUS screener: {} EPS beat {:.0f}%", symbol, _beat2)
                         elif _beat2 < -15 and _days2 <= 30:

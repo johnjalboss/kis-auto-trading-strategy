@@ -61,6 +61,10 @@ class EarningsSignal:
     signal: str
     details: List[str]
     days_since_earnings: int = 999  # Added for PEAD tracking
+    
+    # ── [Quant-Shield] Gemini AI Earnings & Guidance Shock Filter ──
+    has_earnings_shock: bool = False
+    earnings_shock_reason: Optional[str] = None
 
 
 class EarningsAnalyzer:
@@ -199,6 +203,17 @@ class EarningsAnalyzer:
             signal = "POOR_FUNDAMENTALS"
         else:
             signal = "NEUTRAL"
+            
+        # ── [AI-Shield] Gemini AI Earnings & Guidance Shock Filter ──
+        has_earnings_shock = False
+        earnings_shock_reason = None
+        try:
+            from news_analyzer import get_news_analyzer
+            news_items = get_news_analyzer()._fetch_news(symbol)
+            if news_items:
+                has_earnings_shock, earnings_shock_reason = self._check_earnings_shock_with_gemini(symbol, news_items)
+        except Exception as e:
+            logger.error("Failed to check earnings shock for {}: {}", symbol, e)
         
         result = EarningsSignal(
             symbol=symbol,
@@ -214,10 +229,97 @@ class EarningsAnalyzer:
             earnings_score=max(-100, min(100, score)),
             signal=signal,
             details=details,
-            days_since_earnings=days_since
+            days_since_earnings=days_since,
+            has_earnings_shock=has_earnings_shock,
+            earnings_shock_reason=earnings_shock_reason
         )
         self._cache[symbol] = result
         return result
+
+    def _check_earnings_shock_with_gemini(self, symbol: str, news_items: list) -> tuple:
+        """
+        Check if the company recently reported bad earnings, lowered guidance, or had negative executive changes.
+        Returns: (has_earnings_shock: bool, reason: Optional[str])
+        """
+        import os
+        import json
+        import requests
+        
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.debug("GEMINI_API_KEY not found. Skipping Gemini earnings shock filter.")
+            return False, None
+            
+        if not news_items:
+            return False, None
+            
+        # Filter news headlines with earnings keywords (case-insensitive)
+        earnings_keywords = [
+            'earnings', 'q1', 'q2', 'q3', 'q4', 'revenue', 'guidance', 'forecast',
+            'outlook', 'ceo', 'cfo', 'results', 'report', 'profit', 'sales', 'sec',
+            '10-k', '10-q', 'quarterly', 'fiscal', 'executive'
+        ]
+        
+        filtered_news = []
+        for item in news_items:
+            title_lower = item.title.lower()
+            if any(kw in title_lower for kw in earnings_keywords):
+                filtered_news.append(item)
+                
+        if not filtered_news:
+            logger.debug("No earnings-related news found for {}. Skipping Gemini earnings shock filter.", symbol)
+            return False, None
+            
+        # Use top 8 earnings news headlines
+        headlines = [item.title for item in filtered_news[:8]]
+        
+        prompt = (
+            f"You are a professional quant risk manager. Analyze the following news headlines for symbol '{symbol}' "
+            "to check if any of the following specific negative events occurred recently (within the last 30 days):\n"
+            "1. Bad earnings results (e.g. significant earnings or revenue miss, catastrophic loss).\n"
+            "2. Downward revision of guidance (e.g. lowering forecast, pessimistic outlook, cutting future outlook).\n"
+            "3. Sudden resignation or departure of key executives (CEO/CFO) under negative or troubled circumstances.\n\n"
+            "Evaluate if any of these events are present in the headlines. Provide your output strictly in JSON format with keys:\n"
+            "- 'has_earnings_shock': boolean (true if any of the above negative shocks are detected, false otherwise)\n"
+            "- 'shock_type': string (one of 'EARNINGS_MISS', 'GUIDANCE_DOWN', 'MANAGEMENT_DEPARTURE', or 'NONE')\n"
+            "- 'reason': string (a short description explaining the shock, or null if has_earnings_shock is false)\n\n"
+            "Headlines:\n"
+            + "\n".join(f"- {h}" for h in headlines) + "\n\n"
+            "Output JSON only (no markdown block, no ```json):"
+        )
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        try:
+            # Let's set a 6-second timeout to prevent blocking
+            resp = requests.post(url, headers=headers, json=payload, timeout=6)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                text = res_json['candidates'][0]['content']['parts'][0]['text']
+                data = json.loads(text.strip())
+                has_shock = bool(data.get("has_earnings_shock", False))
+                shock_type = data.get("shock_type", "NONE")
+                reason = data.get("reason", None)
+                
+                if has_shock:
+                    logger.warning("[GEMINI_EARNINGS_SHOCK] {} | Detected {} Shock! Reason: {}", 
+                                   symbol, shock_type, reason)
+                else:
+                    logger.debug("[GEMINI_EARNINGS_SHOCK] {} | No earnings shock detected.", symbol)
+                return has_shock, reason
+        except Exception as e:
+            logger.error("[GEMINI_EARNINGS_SHOCK] Exception during Gemini shock evaluation for {}: {}", symbol, e)
+            
+        return False, None
     
     def _fetch_info(self, symbol: str) -> dict:
         """Fetch stock info via KIS API (proxy for yf.Ticker.info)"""
