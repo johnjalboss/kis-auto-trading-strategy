@@ -788,7 +788,7 @@ class BotOrchestrator:
                     try:
                         from notifier import get_notifier
                         notifier = get_notifier()
-                        notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
+                        notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity)
                     except Exception as ne:
                         logger.debug("Trade notification failed: {}", ne)
 

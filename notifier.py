@@ -303,20 +303,21 @@ class TelegramNotifier:
     # Trade Alerts
     # ==============================================
     
-    def alert_trade(self, side: str, symbol: str, price: float, details: str = ""):
+    def alert_trade(self, side: str, symbol: str, price: float, details: str = "", quantity: int = 0):
         """General trade alert fallback method"""
         if side.upper() == "BUY":
-            self.trade_entry(symbol, 0, price, details)
+            self.trade_entry(symbol, quantity, price, details)
         else:
-            self.trade_exit(symbol, 0, price, 0.0, details)
+            self.trade_exit(symbol, quantity, price, 0.0, details)
 
     def trade_entry(self, symbol: str, quantity: int, price: float, reason: str = ""):
         """Notify trade entry"""
         # 매수 이유 한국어 변환
         reason_ko = _translate_reason(reason)
+        qty_str = f" x {quantity}주" if quantity > 0 else ""
         msg = (
             f"🟢 <b>매수 체결</b>\n"
-            f"<code>{symbol}</code> x {quantity}주\n"
+            f"<code>{symbol}</code>{qty_str}\n"
             f"가격: ${price:.2f}\n"
         )
         if reason_ko:
@@ -331,9 +332,10 @@ class TelegramNotifier:
         emoji = "💰" if pnl_pct > 0 else "🔻"
         pnl_label = "수익" if pnl_pct > 0 else "손실"
         reason_ko = _translate_reason(reason)
+        qty_str = f" x {quantity}주" if quantity > 0 else ""
         msg = (
             f"{emoji} <b>매도 체결</b>\n"
-            f"<code>{symbol}</code> x {quantity}주\n"
+            f"<code>{symbol}</code>{qty_str}\n"
             f"가격: ${price:.2f}\n"
             f"{pnl_label}: {pnl_pct:+.1%}\n"
         )

@@ -1231,7 +1231,7 @@ class BotOrchestrator:
                                         reason = f"{reason} | [Gemini] {sentiment.recommendation}"
                                 except Exception as se:
                                     logger.debug("Failed to append Gemini sentiment to trade alert for {}: {}", symbol, se)
-                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason)
+                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",
                                        symbol, order.status.value)
