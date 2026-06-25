@@ -323,6 +323,14 @@ def main():
         except Exception:
             return pd.Series(dtype=float)
 
+    # Load previous signal_types for hysteresis (prevents signal flickering)
+    prev_signals = {}
+    try:
+        rows = db_query("SELECT theme_id, signal_type FROM theme_signals")
+        prev_signals = {r[0]: r[1] for r in rows}
+    except Exception as e:
+        print(f"Warning: could not load previous signals for hysteresis: {e}")
+
     results = []
     for tid, ticks in theme_tickers.items():
         stock_metrics = []
@@ -428,6 +436,23 @@ def main():
 
         quality = max(0, min(100, score))
 
+        prev_sig = prev_signals.get(tid, "NOISE")
+        
+        # Define Hysteresis (Buffer) Thresholds
+        is_true_prev = (prev_sig == "TRUE_SIGNAL")
+        is_watch_prev = (prev_sig == "WATCH" or prev_sig == "TRUE_SIGNAL")
+        
+        req_quality_true = 60 if is_true_prev else 70
+        req_rvol_true    = 1.4 if is_true_prev else 1.6
+        req_breadth_true = 50.0 if is_true_prev else 60.0
+        req_ma_true      = 50.0 if is_true_prev else 60.0
+        req_ma50_true    = 40.0 if is_true_prev else 50.0
+        req_ret5d_true   = 1.0 if is_true_prev else 1.5
+        
+        req_quality_watch = 35 if is_watch_prev else 40
+        req_rvol_watch    = 1.0 if is_watch_prev else 1.1
+        req_ret5d_watch   = 0.8 if is_watch_prev else 1.0
+
         is_deadcat = (med_ret20d < -8 and med_ret5d > 3)
         is_pump    = (med_ret5d > 8 and breadth_1d < 35 and med_rvol > 1.5)
         is_overheated = (med_ret60d > 30 and med_ret5d > 5)
@@ -438,9 +463,15 @@ def main():
             sig_type = "PUMP"
         elif is_overheated:
             sig_type = "OVERHEATED"
-        elif quality >= 70 and med_rvol >= 1.6 and breadth_1d >= 60.0 and above_ma_pct >= 60.0 and above_ma50_pct >= 50.0 and med_ret5d >= 1.5:
+        elif (quality >= req_quality_true and 
+              med_rvol >= req_rvol_true and 
+              breadth_1d >= req_breadth_true and 
+              above_ma_pct >= req_ma_true and 
+              above_ma50_pct >= req_ma50_true and 
+              med_ret5d >= req_ret5d_true):
             sig_type = "TRUE_SIGNAL"
-        elif quality >= 40 and (med_rvol >= 1.1 or med_ret5d >= 1.0):
+        elif (quality >= req_quality_watch and 
+              (med_rvol >= req_rvol_watch or med_ret5d >= req_ret5d_watch)):
             sig_type = "WATCH"
         else:
             sig_type = "NOISE"

@@ -494,17 +494,85 @@ def save_signals_to_db(df: pd.DataFrame):
         conn.close()
 
 
+def get_cache_mtime():
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme_radar_cache.json")
+    if os.path.exists(cache_path):
+        return os.path.getmtime(cache_path)
+    return 0
+
+
+def sync_from_vps():
+    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
+    if not os.path.exists(key_file):
+        return False
+        
+    import subprocess
+    ip = "141.148.172.12"
+    user = "ubuntu"
+    local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "us_stocks_data.db")
+    local_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme_radar_cache.json")
+    
+    remote_db = "/home/ubuntu/us-theme-tracker/us_stocks_data.db"
+    remote_cache = "/home/ubuntu/us-theme-tracker/theme_radar_cache.json"
+    
+    try:
+        # Pull cache json
+        proc = subprocess.Popen(
+            ['scp', '-i', key_file, '-o', 'StrictHostKeyChecking=no', f'{user}@{ip}:{remote_cache}', local_cache],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        proc.communicate(input=b"yes\n", timeout=10)
+        
+        # Pull DB
+        proc2 = subprocess.Popen(
+            ['scp', '-i', key_file, '-o', 'StrictHostKeyChecking=no', f'{user}@{ip}:{remote_db}', local_db],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        proc2.communicate(input=b"yes\n", timeout=10)
+        return True
+    except Exception as e:
+        print(f"Failed to sync from VPS: {e}")
+        return False
+
+
 @st.cache_data(ttl=900, show_spinner=False)   # 15분 캐시
-def compute_theme_signals(max_themes=80, force_refresh=False):
+def compute_theme_signals(max_themes=80, force_refresh=False, cache_mtime=0):
     """
     ★ 가속화 캐시 신호 엔진 ★
     update_signals_batch.py가 생성한 JSON 캐시를 0.1초 만에 불러옵니다.
-    캐시가 없거나 force_refresh=True일 경우, 배치를 직접 구동해 갱신 후 로드합니다.
+    로컬 환경의 경우, VPS로부터 최신 시그널 및 가격 DB/캐시를 즉시 동기화(Sync)합니다.
     """
     cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme_radar_cache.json")
+    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
     
-    # 강제 갱신 요청이 있거나 캐시가 없으면 배치를 직접 구동
-    if force_refresh or not os.path.exists(cache_path):
+    run_local_batch = False
+    
+    # 1. 로컬 환경 확인 및 동기화 처리
+    if os.path.exists(key_file):
+        should_sync = force_refresh or not os.path.exists(cache_path)
+        if not should_sync and os.path.exists(cache_path):
+            import time
+            mtime = os.path.getmtime(cache_path)
+            # 마지막 동기화 후 10분이 경과했으면 자동으로 동기화
+            if time.time() - mtime > 600:
+                should_sync = True
+                
+        if should_sync:
+            with st.spinner("🔄 VPS로부터 최신 퀀트 시그널 및 실시간 주가 동기화 중..."):
+                success = sync_from_vps()
+                if success:
+                    st.toast("✅ VPS 동기화 성공!", icon="🟢")
+                    st.cache_data.clear()
+                else:
+                    st.toast("⚠️ VPS 동기화 실패. 로컬 연산을 구동합니다.", icon="🟡")
+                    run_local_batch = True
+    else:
+        # 키가 없는 원격 VPS 자체 환경 또는 순수 로컬인 경우
+        if force_refresh or not os.path.exists(cache_path):
+            run_local_batch = True
+            
+    # 2. 로컬 배치 구동 (동기화 실패 혹은 로컬 전용 실행 시)
+    if run_local_batch:
         with st.spinner("📡 실시간 퀀트 시그널 연산 중... (yfinance 대용량 다운로드로 약 30초 소요)"):
             import subprocess
             import sys
@@ -974,11 +1042,13 @@ TRADITIONAL = {"regional_banks","insurance","reits_real_estate","asset_managemen
                "steel_metals","auto_manufacturers","air_freight_logistics",
                "apparel_footwear","oil_gas_exploration","telecom_carriers","cable_broadband"}
 
+cache_mtime = get_cache_mtime()
+
 if st.session_state.get("trigger_force_refresh", False):
-    raw_themes_df = compute_theme_signals(force_refresh=True)
+    raw_themes_df = compute_theme_signals(force_refresh=True, cache_mtime=cache_mtime)
     st.session_state.trigger_force_refresh = False
 else:
-    raw_themes_df = compute_theme_signals(force_refresh=False)
+    raw_themes_df = compute_theme_signals(force_refresh=False, cache_mtime=cache_mtime)
 
 if raw_themes_df.empty:
     st.error("데이터 로드 실패. 인터넷 연결 및 종목 분류를 확인하세요.")
