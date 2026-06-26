@@ -997,20 +997,20 @@ class BotOrchestrator:
                                 if qty > 0:
                                     self.phase_5_execute_trade(best_buy_signal.symbol, "BUY", qty,
                                                               best_buy_signal.entry_price,
-                                                              f"UPGRADE BUY: {best_buy_signal.composite_score}??(replaced {worst_sym})")
+                                                              f"UPGRADE BUY: {best_buy_signal.composite_score} (replaced {worst_sym})")
                                     self._daily_upgrade_count += 1
-                        
-                        # Notify via Telegram
-                        try:
-                            from notification import get_notifier
-                            get_notifier().send_message(
-                                f"UPGRADE SIGNAL\n"
-                                f"Sell: {worst_sym} ({worst_score})\n"
-                                f"Buy: {best_buy_signal.symbol} ({best_buy_signal.composite_score})\n"
-                                f"Improvement: {best_buy_signal.composite_score - worst_score}"
-                            )
-                        except Exception:
-                            pass
+                                    
+                                    # Notify via Telegram
+                                    try:
+                                        from notification import get_notifier
+                                        get_notifier().send_message(
+                                            f"🔄 PORTFOLIO UPGRADE EXECUTED\n"
+                                            f"Sold: {worst_sym} ({worst_score})\n"
+                                            f"Bought: {best_buy_signal.symbol} ({best_buy_signal.composite_score}) - {qty} shares\n"
+                                            f"Improvement: +{best_buy_signal.composite_score - worst_score}"
+                                        )
+                                    except Exception as ne:
+                                        logger.debug("Failed to send upgrade notification: {}", ne)
             except Exception as e:
                 logger.debug("Upgrade logic error: {}", e)
                     
