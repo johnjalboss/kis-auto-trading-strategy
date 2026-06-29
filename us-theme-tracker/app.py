@@ -1084,7 +1084,12 @@ exit_signals  = themes_df[
     ((themes_df["ret_5d"] < -1.5) & (themes_df["velocity_icon"] == "▼ 감속") & (themes_df["quality"] < 30))
 ].sort_values("ret_5d", ascending=True).head(6)
 
-tab_signal, tab_board, tab_explorer = st.tabs(["🚨 실시간 매매 신호", "📊 전체 테마 순위", "🔍 테마 상세 탐색"])
+tab_signal, tab_portfolio, tab_board, tab_explorer = st.tabs([
+    "🚨 실시간 매매 신호", 
+    "📋 내 보유 종목 진단", 
+    "📊 전체 테마 순위", 
+    "🔍 테마 상세 탐색"
+])
 
 with tab_signal:
     if status == "🚨 시장 폭락 국면":
@@ -1244,8 +1249,150 @@ with tab_signal:
             """, unsafe_allow_html=True)
 
 
+
+with tab_portfolio:
+    st.markdown("## 📋 내 보유 종목 실시간 진단기")
+    st.caption("내가 보유한 미국 주식 티커를 입력하면, 테마레이더의 5-Factor 엔진이 실시간 수급과 추세를 분석하여 최적의 대응 전략을 제안합니다.")
+    
+    if "my_tickers_input" not in st.session_state:
+        st.session_state.my_tickers_input = "NVDA, PLTD, AAPL"
+        
+    user_tickers = st.text_input(
+        "🔍 보유 종목 티커 입력 (쉼표로 구분)", 
+        value=st.session_state.my_tickers_input,
+        help="예: NVDA, PLTD, AAPL, TSLA"
+    )
+    st.session_state.my_tickers_input = user_tickers
+    
+    portfolio_tickers = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
+    
+    if not portfolio_tickers:
+        st.info("진단할 종목 티커를 입력해 주세요.")
+    else:
+        # Inverse mapping (ticker -> list of theme IDs)
+        ticker_to_theme = {}
+        for tid, tinfo in themes_config.items():
+            for ticker in tinfo.get("tickers", []):
+                if ticker not in ticker_to_theme:
+                    ticker_to_theme[ticker] = []
+                ticker_to_theme[ticker].append(tid)
+                
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        for ticker in portfolio_tickers:
+            mapped_themes = ticker_to_theme.get(ticker, [])
+            
+            target_theme_row = None
+            stock_metric = None
+            
+            if mapped_themes:
+                matching_themes = themes_df[themes_df["theme_id"].isin(mapped_themes)]
+                if not matching_themes.empty:
+                    target_theme_row = matching_themes.sort_values("quality", ascending=False).iloc[0]
+                    for s in target_theme_row["stock_data"]:
+                        if s["ticker"] == ticker:
+                            stock_metric = s
+                            break
+            
+            col_card, col_diag = st.columns([4, 8])
+            
+            with col_card:
+                if target_theme_row is not None and stock_metric is not None:
+                    theme_name = target_theme_row["name_ko"]
+                    price = stock_metric["price"]
+                    ret_5d = stock_metric["ret_5d"]
+                    rvol = stock_metric["rvol"]
+                    sig_type = target_theme_row["signal_type"]
+                    quality = target_theme_row["quality"]
+                    
+                    pct_color = "#00d97e" if ret_5d >= 0 else "#ff3b5c"
+                    
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d1f3c,#080e18);
+                                border:1px solid #1e3a5f;border-radius:10px;padding:16px;height:100%;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:20px;font-weight:800;color:#e6f3ff;">{ticker}</span>
+                        <span class="badge b-blue">Q:{quality}점</span>
+                      </div>
+                      <div style="font-size:12px;color:#7aa3cc;margin-top:4px;">소속: {theme_name}</div>
+                      <div style="font-size:22px;font-weight:700;margin-top:12px;color:#e6f3ff;">
+                        ${price:.2f}
+                      </div>
+                      <div style="font-size:13px;color:{pct_color};font-weight:600;margin-top:2px;">
+                        5일 변동: {ret_5d:+.1f}% (RVOL: {rvol:.1f}x)
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    price_val = 0.0
+                    try:
+                        import yfinance as yf
+                        t_info = yf.Ticker(ticker).fast_info
+                        price_val = t_info.last_price or 0.0
+                    except:
+                        pass
+                    
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#151b26,#0c1017);
+                                border:1px solid #2d3748;border-radius:10px;padding:16px;height:100%;">
+                      <div style="font-size:20px;font-weight:800;color:#a0aec0;">{ticker}</div>
+                      <div style="font-size:12px;color:#718096;margin-top:4px;">소속: 테마 미매핑</div>
+                      <div style="font-size:22px;font-weight:700;margin-top:12px;color:#a0aec0;">
+                        ${price_val:.2f}
+                      </div>
+                      <div style="font-size:13px;color:#718096;margin-top:2px;">
+                        실시간 가격 정보 로드 완료
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+            with col_diag:
+                if target_theme_row is not None and stock_metric is not None:
+                    sig_type = target_theme_row["signal_type"]
+                    quality = target_theme_row["quality"]
+                    ret_5d = stock_metric["ret_5d"]
+                    
+                    if sig_type == "TRUE_SIGNAL":
+                        status_title = "🟢 강력 보유 및 추매 가능"
+                        status_color = "#00d97e"
+                        status_desc = "소속 테마의 수급 분출이 강력하며 추세가 우상향 정배열을 유지하고 있습니다. 현재 매수 평단가 대비 목표가 도달 시까지 보유를 추천하며, 단기 눌림목 발생 시 비중 확대(추가 매수)도 매우 유리한 국면입니다."
+                    elif sig_type == "WATCH":
+                        status_title = "🟡 관망 및 보유 유지"
+                        status_color = "#f0b429"
+                        status_desc = "소속 테마가 단기 상승 후 숨고르기 또는 이평선 지지력 테스트를 진행 중입니다. 지지선을 이탈하지 않는 한 기존 물량은 보유하되, 신규 진입은 가격이 진정될 때까지 보수적으로 접근하십시오."
+                    elif sig_type in ["OVERHEATED", "PUMP"]:
+                        status_title = "🍊 단기 과열 / 분할 익절 권장"
+                        status_color = "#fb923c"
+                        status_desc = "소속 테마가 단기 과열 구간에 진입했거나 비정상적인 단기 수급 분출(펌핑)이 일어났습니다. 현재 수익권이라면 욕심을 버리고 일부 비중을 분할 익절하여 확실한 현금을 확보하시는 것을 추천합니다."
+                    elif sig_type == "DEAD_CAT" or (quality < 25 and ret_5d < -2.0):
+                        status_title = "🚨 즉시 매도 / 탈출 권장"
+                        status_color = "#ff3b5c"
+                        status_desc = "소속 테마가 기술적 하락 추세로 복귀했거나(데드캣), 하방 이탈 속도가 빨라지고 있습니다. 추가적인 손실을 방지하고 자금을 보호하기 위해 즉각적인 손절 혹은 전량 매도를 강력히 권장합니다."
+                    else:
+                        status_title = "⚪ 중립 / 개별 대응"
+                        status_color = "#7aa3cc"
+                        status_desc = "소속 테마에 뚜렷한 주도 수급이나 방향성이 없는 관망 국면(NOISE)입니다. 테마의 영향력이 미미하므로 개별 종목의 자체 실적 발표 일정 및 지지선/저항선 차트 분석을 기준으로 매매를 진행하십시오."
+                else:
+                    status_title = "⚪ 테마 미매핑 종목"
+                    status_color = "#a0aec0"
+                    status_desc = "이 종목은 테마레이더가 추적하는 80여 개 미래 성장 세부테마군에 포함되어 있지 않습니다. 시장의 테마 수급 동조화를 기대하기 어려우므로, 개별 기업의 펀더멘탈(실적) 및 거시경제 변수를 기준으로 개별 대응하십시오."
+                    
+                st.markdown(f"""
+                <div style="background:#0a1520;border-left:4px solid {status_color};border-radius:0 8px 8px 0;
+                            padding:16px 20px;height:100%;display:flex;flex-direction:column;justify-content:center;">
+                  <div style="font-size:16px;font-weight:800;color:{status_color};margin-bottom:6px;">
+                    {status_title}
+                  </div>
+                  <div style="font-size:13px;color:#d0dff0;line-height:1.6;">
+                    {status_desc}
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("<hr style='border-color:#1a2840;margin:12px 0;'>", unsafe_allow_html=True)
+
+
 # ════════════════════════════════════════════════════════════════════════
-# TAB 2: 전체 순위표
+# TAB 3: 전체 순위표
 # ════════════════════════════════════════════════════════════════════════
 with tab_board:
     st.markdown("## 📊 전체 테마 순위표")
