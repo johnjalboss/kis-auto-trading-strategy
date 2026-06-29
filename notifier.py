@@ -303,12 +303,12 @@ class TelegramNotifier:
     # Trade Alerts
     # ==============================================
     
-    def alert_trade(self, side: str, symbol: str, price: float, details: str = "", quantity: int = 0):
+    def alert_trade(self, side: str, symbol: str, price: float, details: str = "", quantity: int = 0, pnl_pct: float = 0.0):
         """General trade alert fallback method"""
         if side.upper() == "BUY":
             self.trade_entry(symbol, quantity, price, details)
         else:
-            self.trade_exit(symbol, quantity, price, 0.0, details)
+            self.trade_exit(symbol, quantity, price, pnl_pct, details)
 
     def trade_entry(self, symbol: str, quantity: int, price: float, reason: str = ""):
         """Notify trade entry"""

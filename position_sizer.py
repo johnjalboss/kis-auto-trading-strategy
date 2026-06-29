@@ -297,6 +297,47 @@ class PositionSizer:
         except Exception as e:
             logger.debug("[SIZER] Portfolio correlation diversification scaling failed: {}", e)
 
+        # [THEME_RADAR_QUALITY_SCALE] 테마 스코어(Quality) 연동 동적 비중 조절
+        theme_quality = None
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tracker_db = os.path.join(base_dir, "us-theme-tracker", "us_stocks_data.db")
+            if os.path.exists(tracker_db):
+                conn = sqlite3.connect(tracker_db, timeout=5.0)
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT ts.quality 
+                    FROM theme_recommendations tr
+                    JOIN theme_signals ts ON tr.theme_id = ts.theme_id
+                    WHERE tr.ticker = ?
+                """, (symbol,))
+                row = cur.fetchone()
+                if row:
+                    theme_quality = row[0]
+                conn.close()
+        except Exception as q_err:
+            logger.debug("[SIZER] Failed to fetch theme quality: {}", q_err)
+
+        if theme_quality is not None:
+            if theme_quality >= 90:
+                theme_mult = 1.30
+                lbl = "A+ (Excellent)"
+            elif theme_quality >= 80:
+                theme_mult = 1.15
+                lbl = "A (Strong)"
+            elif theme_quality >= 70:
+                theme_mult = 1.00
+                lbl = "B+ (Standard)"
+            elif theme_quality >= 60:
+                theme_mult = 0.80
+                lbl = "B (Moderate)"
+            else:
+                theme_mult = 0.60
+                lbl = "C (Speculative)"
+                
+            optimal *= theme_mult
+            details.append(f"THEME_QUALITY_SCALE (Quality: {theme_quality} [{lbl}] | Scaled by {theme_mult:.0%})")
+
         # Apply max single position limits
         max_pos = self.MAX_SINGLE_POSITION
         

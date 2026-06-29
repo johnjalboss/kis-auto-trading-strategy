@@ -511,9 +511,11 @@ def sync_from_vps():
     user = "ubuntu"
     local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "us_stocks_data.db")
     local_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme_radar_cache.json")
+    local_trades = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
     
     remote_db = "/home/ubuntu/us-theme-tracker/us_stocks_data.db"
     remote_cache = "/home/ubuntu/us-theme-tracker/theme_radar_cache.json"
+    remote_trades = "/home/ubuntu/kis-auto-trading/trades.db"
     
     known_hosts_dev = "NUL" if os.name == "nt" else "/dev/null"
     
@@ -535,11 +537,31 @@ def sync_from_vps():
              f'{user}@{ip}:{remote_db}', local_db],
             capture_output=True, text=True, timeout=60
         )
+
+        # Pull Trades DB with 30s timeout
+        res_trades = subprocess.run(
+            ['scp', '-i', key_file, 
+             '-o', 'StrictHostKeyChecking=no', 
+             '-o', f'UserKnownHostsFile={known_hosts_dev}', 
+             f'{user}@{ip}:{remote_trades}', local_trades],
+            capture_output=True, text=True, timeout=30
+        )
+
+        # Pull Bot Status JSON with 15s timeout (Optional)
+        remote_status = "/home/ubuntu/kis-auto-trading/bot_status.json"
+        local_status = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_status.json")
+        subprocess.run(
+            ['scp', '-i', key_file, 
+             '-o', 'StrictHostKeyChecking=no', 
+             '-o', f'UserKnownHostsFile={known_hosts_dev}', 
+             f'{user}@{ip}:{remote_status}', local_status],
+            capture_output=True, text=True, timeout=15
+        )
         
-        if res_cache.returncode == 0 and res_db.returncode == 0:
+        if res_cache.returncode == 0 and res_db.returncode == 0 and res_trades.returncode == 0:
             return True
         else:
-            print(f"Sync failed. Cache code={res_cache.returncode}, DB code={res_db.returncode}")
+            print(f"Sync failed. Cache code={res_cache.returncode}, DB code={res_db.returncode}, Trades code={res_trades.returncode}")
             print(f"Cache Stderr: {res_cache.stderr}")
             print(f"DB Stderr: {res_db.stderr}")
             return False
@@ -1251,23 +1273,201 @@ with tab_signal:
 
 
 with tab_portfolio:
-    st.markdown("## 📋 내 보유 종목 실시간 진단기")
-    st.caption("내가 보유한 미국 주식 티커를 입력하면, 테마레이더의 5-Factor 엔진이 실시간 수급과 추세를 분석하여 최적의 대응 전략을 제안합니다.")
+    st.markdown("## 📋 내 보유 종목 실시간 진단 및 봇 모니터링")
+    st.caption("자동매매봇의 실시간 계좌 상태와 포지션을 확인하고, 보유 종목 및 관망 종목들의 5-Factor 퀀트 진단을 한눈에 모니터링합니다.")
+    
+    # 1. 자동매매봇 계좌 현황 및 포지션 로드 (trades.db)
+    local_trades_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
+    
+    bot_positions = []
+    bot_stats = None
+    bot_recent_trades = []
+    
+    if os.path.exists(local_trades_db):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(local_trades_db)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            
+            # 테이블 존재 여부 확인 후 포지션 로드
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='positions'")
+            if cur.fetchone():
+                cur.execute("SELECT symbol, quantity, avg_price, entry_time FROM positions")
+                bot_positions = [dict(r) for r in cur.fetchall()]
+                
+            # 일일 누적 통계 로드
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='daily_stats'")
+            if cur.fetchone():
+                cur.execute("SELECT date, starting_balance, ending_balance, trades_count, wins, losses, net_pnl, regime FROM daily_stats ORDER BY date DESC LIMIT 1")
+                row = cur.fetchone()
+                if row:
+                    bot_stats = dict(row)
+                    # None 값 방어 로직 적용
+                    bot_stats['starting_balance'] = bot_stats.get('starting_balance') if bot_stats.get('starting_balance') is not None else 0.0
+                    bot_stats['ending_balance'] = bot_stats.get('ending_balance') if bot_stats.get('ending_balance') is not None else bot_stats['starting_balance']
+                    bot_stats['net_pnl'] = bot_stats.get('net_pnl') if bot_stats.get('net_pnl') is not None else 0.0
+                    bot_stats['trades_count'] = bot_stats.get('trades_count') if bot_stats.get('trades_count') is not None else 0
+                    bot_stats['wins'] = bot_stats.get('wins') if bot_stats.get('wins') is not None else 0
+                    bot_stats['losses'] = bot_stats.get('losses') if bot_stats.get('losses') is not None else 0
+                    bot_stats['regime'] = bot_stats.get('regime') if bot_stats.get('regime') is not None else "UNKNOWN"
+                    
+            # [실시간 당일 통계 집계] daily_stats의 옛날 데이터 대신 오늘 체결된 거래를 직접 합산
+            import datetime
+            logical_today = (datetime.datetime.now() - datetime.timedelta(hours=12)).strftime('%Y-%m-%d')
+            
+            today_net_pnl = 0.0
+            today_trades_count = 0
+            today_wins = 0
+            today_losses = 0
+            
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='trades'")
+            if cur.fetchone():
+                cur.execute("SELECT pnl FROM trades WHERE side='SELL' AND exit_time LIKE ?", (f"{logical_today}%",))
+                today_trades = cur.fetchall()
+                if today_trades:
+                    today_net_pnl = sum(r[0] for r in today_trades)
+                    today_trades_count = len(today_trades)
+                    today_wins = len([r for r in today_trades if r[0] > 0])
+                    today_losses = len([r for r in today_trades if r[0] < 0])
+                    
+            # 최근 청산 내역 로드
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='trades'")
+            if cur.fetchone():
+                cur.execute("SELECT symbol, side, quantity, price, pnl, pnl_pct, exit_time, reason FROM trades WHERE side='SELL' ORDER BY exit_time DESC LIMIT 5")
+                bot_recent_trades = [dict(r) for r in cur.fetchall()]
+                
+            conn.close()
+        except Exception as db_err:
+            st.error(f"trades.db 로드 중 오류 발생: {db_err}")
+            
+    # 1.2 실시간 봇 상태 파일 로드 (bot_status.json)
+    bot_live_status = None
+    local_status_path = os.path.join(os.path.dirname(os.path.abspath(__row__ if '_row__' in locals() else '__file__')), "bot_status.json")
+    if os.path.exists(local_status_path):
+        try:
+            import json
+            with open(local_status_path, "r", encoding="utf-8") as sf:
+                bot_live_status = json.load(sf)
+        except Exception:
+            pass
+            
+    # 🤖 KIS 자동매매봇 실시간 계좌 현황 출력
+    if bot_stats:
+        st.markdown("### 🤖 KIS 자동매매봇 계좌 현황")
+        
+        # 실시간 상태 파일 기반 값 보정
+        ending_balance = bot_stats['ending_balance']
+        regime_val = bot_stats['regime']
+        if bot_live_status:
+            if bot_live_status.get("total_equity") is not None and bot_live_status["total_equity"] > 0.0:
+                ending_balance = bot_live_status["total_equity"]
+            if bot_live_status.get("regime") is not None and bot_live_status["regime"] != "UNKNOWN":
+                regime_val = bot_live_status["regime"]
+                
+        col_bal1, col_bal2, col_bal3, col_bal4 = st.columns(4)
+        with col_bal1:
+            st.metric("자산 평가액 (Balance)", f"${ending_balance:,.2f}")
+        with col_bal2:
+            st.metric("일일 순손익", f"${today_net_pnl:+,.2f}")
+        with col_bal3:
+            w_rate = (today_wins / today_trades_count) if today_trades_count > 0 else 0.0
+            st.metric("일일 승률", f"{w_rate:.1%}", f"{today_wins}승 {today_losses}패")
+        with col_bal4:
+            st.metric("시장 상태 (Regime)", regime_val)
+            
+    # 📦 현재 봇 보유 포지션 출력 (실시간 손익 계산 포함)
+    if bot_positions:
+        st.markdown("#### 📦 현재 봇 보유 포지션")
+        pos_data = []
+        for pos in bot_positions:
+            sym = pos["symbol"]
+            qty = pos.get("quantity") or 0
+            avg_price = pos.get("avg_price") or 0.0
+            
+            # 실시간 가격 탐색 (raw_themes_df 캐시 사용)
+            curr_price = None
+            found = False
+            for _, row in raw_themes_df.iterrows():
+                for s in row.get("stock_data", []):
+                    if s["ticker"] == sym:
+                        curr_price = s.get("price")
+                        found = True
+                        break
+                if found:
+                    break
+            
+            # 캐시에 없는 경우 (미매핑 종목 등) yfinance로 실시간 가격 획득
+            if curr_price is None or curr_price == 0.0:
+                try:
+                    import yfinance as yf
+                    t_info = yf.Ticker(sym).fast_info
+                    curr_price = t_info.last_price
+                except Exception as yf_err:
+                    pass
+            
+            if curr_price is None or curr_price == 0.0:
+                curr_price = avg_price
+                    
+            pnl_val = (curr_price - avg_price) * qty
+            pnl_pct_val = (curr_price - avg_price) / avg_price if avg_price > 0 else 0.0
+            
+            pos_data.append({
+                "티커": sym,
+                "수량": f"{qty}주",
+                "평균 매수가": f"${avg_price:,.2f}",
+                "실시간 현재가": f"${curr_price:,.2f}",
+                "평가손익": f"${pnl_val:+,.2f}",
+                "수익률": f"{pnl_pct_val:+.2%}"
+            })
+        st.table(pd.DataFrame(pos_data))
+        
+    # 🕒 최근 청산 거래 내역 출력
+    if bot_recent_trades:
+        with st.expander("🕒 최근 봇 청산 내역 (최근 5건)"):
+            trade_data = []
+            for t in bot_recent_trades:
+                qty = t.get("quantity") or 0
+                price = t.get("price") or 0.0
+                pnl = t.get("pnl") or 0.0
+                pnl_pct = t.get("pnl_pct") or 0.0
+                trade_data.append({
+                    "티커": t["symbol"],
+                    "구분": t["side"],
+                    "수량": f"{qty}주",
+                    "체결가": f"${price:,.2f}",
+                    "손익(USD)": f"${pnl:+,.2f}",
+                    "수익률": f"{pnl_pct:+.2%}",
+                    "체결시간": t.get("exit_time", "N/A"),
+                    "사유": t.get("reason", "N/A")
+                })
+            st.table(pd.DataFrame(trade_data))
+            
+    st.markdown("<hr style='border-color:#1a3a5c;margin:24px 0;'>", unsafe_allow_html=True)
+    
+    # 🔍 5-Factor 실시간 종목 진단기 영역
+    st.markdown("### 🔍 5-Factor 실시간 종목 진단기")
+    
+    # 봇 보유 종목이 있으면 자동으로 기본 진단 리스트에 포함
+    bot_tickers = [pos["symbol"] for pos in bot_positions]
     
     if "my_tickers_input" not in st.session_state:
-        st.session_state.my_tickers_input = "NVDA, PLTD, AAPL"
+        st.session_state.my_tickers_input = ""
         
     user_tickers = st.text_input(
-        "🔍 보유 종목 티커 입력 (쉼표로 구분)", 
+        "🔍 진단할 종목 티커 입력 (쉼표로 구분, 봇 보유 종목은 자동 진단에 포함됩니다)", 
         value=st.session_state.my_tickers_input,
         help="예: NVDA, PLTD, AAPL, TSLA"
     )
     st.session_state.my_tickers_input = user_tickers
     
-    portfolio_tickers = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
+    manual_tickers = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
+    
+    # 봇 보유 종목과 수동 입력 종목 합산 (중복 제거)
+    portfolio_tickers = list(dict.fromkeys(bot_tickers + manual_tickers))
     
     if not portfolio_tickers:
-        st.info("진단할 종목 티커를 입력해 주세요.")
+        st.info("진단할 종목 티커를 입력하거나 봇의 포지션이 로드될 때까지 기다려 주세요.")
     else:
         # Inverse mapping (ticker -> list of theme IDs) using actual raw data
         ticker_to_theme = {}
@@ -1353,28 +1553,52 @@ with tab_portfolio:
                 if target_theme_row is not None and stock_metric is not None:
                     sig_type = target_theme_row["signal_type"]
                     quality = target_theme_row["quality"]
+                    theme_name = target_theme_row["name_ko"]
                     ret_5d = stock_metric["ret_5d"]
+                    rvol = stock_metric["rvol"]
+                    above_ma20 = stock_metric.get("above_ma20", True)
+                    above_ma50 = stock_metric.get("above_ma50", True)
                     
                     if sig_type == "TRUE_SIGNAL":
-                        status_title = "🟢 강력 보유 및 추매 가능"
-                        status_color = "#00d97e"
-                        status_desc = "소속 테마의 수급 분출이 강력하며 추세가 우상향 정배열을 유지하고 있습니다. 현재 매수 평단가 대비 목표가 도달 시까지 보유를 추천하며, 단기 눌림목 발생 시 비중 확대(추가 매수)도 매우 유리한 국면입니다."
+                        if above_ma20:
+                            status_title = f"🟢 강력 보유 (테마 주도 강세)"
+                            status_color = "#00d97e"
+                            status_desc = f"소속 테마인 **{theme_name}**의 상승 수급이 강력하게 분출 중(Q: {quality}점)이며, **{ticker}** 역시 20일 이동평균선 위에서 정배열 추세를 확고히 유지하고 있는 **대장주**입니다. 목표가 도달 시까지 편안하게 홀딩하시길 바라며, 단기 눌림목 발생 시 비중 확대(추가 매수)도 매우 유리합니다."
+                        else:
+                            status_title = f"🟡 관망 및 보유 (테마 강세 / 종목 단기 눌림)"
+                            status_color = "#f0b429"
+                            status_desc = f"소속 테마인 **{theme_name}**은 매우 강세이나, **{ticker}**는 단기적으로 20일선 아래로 밀려나며 일시적으로 테마 내에서 조정을 받거나 뒤처진 상태입니다. 테마 순환매 수급이 유입될 때까지 기존 물량은 보유하되, 신규 추가 매수는 주가가 20일선 위로 재안착하는 것을 확인한 후에 하십시오."
                     elif sig_type == "WATCH":
-                        status_title = "🟡 관망 및 보유 유지"
-                        status_color = "#f0b429"
-                        status_desc = "소속 테마가 단기 상승 후 숨고르기 또는 이평선 지지력 테스트를 진행 중입니다. 지지선을 이탈하지 않는 한 기존 물량은 보유하되, 신규 진입은 가격이 진정될 때까지 보수적으로 접근하십시오."
+                        if above_ma20:
+                            status_title = f"🟡 보유 유지 (테마 조정 / 종목 개별 강세)"
+                            status_color = "#f0b429"
+                            status_desc = f"소속 테마인 **{theme_name}**은 단기 상승 후 숨고르기 국면에 진입했으나, **{ticker}**는 개별적으로 강한 추세를 유지하고 있습니다. 손절가(기존 설정값)를 이탈하지 않는 한 보유를 유지하시고, 테마의 전반적인 탄력이 둔화되었으므로 신규 추격 매수는 자제하는 것이 안전합니다."
+                        else:
+                            status_title = f"⚪ 관망 유지 (테마 및 종목 지지선 테스트)"
+                            status_color = "#7aa3cc"
+                            status_desc = f"소속 테마와 **{ticker}** 모두 단기 조정세를 겪으며 이평선 지지력을 테스트하고 있습니다. 현재 구간에서는 무리하게 대응하기보다는 50일선 등의 기술적 지지선의 이탈 여부를 모니터링하며 관망할 것을 추천합니다."
                     elif sig_type in ["OVERHEATED", "PUMP"]:
-                        status_title = "🍊 단기 과열 / 분할 익절 권장"
-                        status_color = "#fb923c"
-                        status_desc = "소속 테마가 단기 과열 구간에 진입했거나 비정상적인 단기 수급 분출(펌핑)이 일어났습니다. 현재 수익권이라면 욕심을 버리고 일부 비중을 분할 익절하여 확실한 현금을 확보하시는 것을 추천합니다."
+                        if ret_5d > 10.0:
+                            status_title = f"🍊 단기 과열 / 분할 익절 강력 권장"
+                            status_color = "#fb923c"
+                            status_desc = f"소속 테마가 단기 과열에 진입했으며, **{ticker}** 또한 최근 5일간 **{ret_5d:+.1f}%** 급등하여 단기 고점 부담이 매우 큽니다. 현재 수익권이라면 욕심을 낮추고 보유 물량의 30~50%를 분할 익절하여 실시간으로 확실한 현금 수익을 확보하십시오."
+                        else:
+                            status_title = f"🍊 테마 과열 경계 / 보유분 익절 준비"
+                            status_color = "#fb923c"
+                            status_desc = f"소속 테마가 단기 과열(또는 투기적 펌핑) 상태이나, **{ticker}**는 탄력이 먼저 둔화되기 시작했습니다. 이는 고점 신호의 전조일 수 있으므로 신규 매수는 절대 금지하며, 추세가 완전히 꺾이기 전 분할 매도로 대응하십시오."
                     elif sig_type == "DEAD_CAT" or (quality < 25 and ret_5d < -2.0):
-                        status_title = "🚨 즉시 매도 / 탈출 권장"
-                        status_color = "#ff3b5c"
-                        status_desc = "소속 테마가 기술적 하락 추세로 복귀했거나(데드캣), 하방 이탈 속도가 빨라지고 있습니다. 추가적인 손실을 방지하고 자금을 보호하기 위해 즉각적인 손절 혹은 전량 매도를 강력히 권장합니다."
+                        if not above_ma20 or ret_5d < -3.0:
+                            status_title = f"🚨 즉시 매도 / 탈출 강력 권장"
+                            status_color = "#ff3b5c"
+                            status_desc = f"소속 테마가 하락 추세로 완전히 복귀(데드캣 바운스 종료)했거나 추세가 붕괴되었습니다. **{ticker}** 역시 단기 추세 파괴가 진행 중이므로, 추가적인 손실을 방지하고 투자금을 보호하기 위해 즉각적인 손절 혹은 전량 매도를 강력히 권장합니다."
+                        else:
+                            status_title = f"🚨 테마 붕괴 / 반등 시 매도 (비중 축소)"
+                            status_color = "#ff3b5c"
+                            status_desc = f"소속 테마의 추세가 붕괴되고 있으나 **{ticker}**가 개별적으로 일시적으로 버티는 중입니다. 테마가 무너지면 결국 시간차를 두고 동반 하락할 확률이 90% 이상이므로, 버텨줄 때 매도하여 현금을 확보하는 것이 유리합니다."
                     else:
-                        status_title = "⚪ 중립 / 개별 대응"
+                        status_title = f"⚪ 중립 / 개별 모멘텀 대응"
                         status_color = "#7aa3cc"
-                        status_desc = "소속 테마에 뚜렷한 주도 수급이나 방향성이 없는 관망 국면(NOISE)입니다. 테마의 영향력이 미미하므로 개별 종목의 자체 실적 발표 일정 및 지지선/저항선 차트 분석을 기준으로 매매를 진행하십시오."
+                        status_desc = f"소속 테마인 **{theme_name}**에 뚜렷한 주도 수급이나 모멘텀이 없는 관망 국면(NOISE)입니다. 테마의 영향력이 극히 적으므로, **{ticker}**의 개별 실적 발표 일정이나 개별 수급(RVOL: {rvol:.1f}x) 및 차트 지지선을 기준으로 단독 대응하십시오."
                 else:
                     status_title = "⚪ 테마 미매핑 종목"
                     status_color = "#a0aec0"

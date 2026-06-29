@@ -61,6 +61,33 @@ class BotOrchestrator:
         self._signal_executor = ThreadPoolExecutor(max_workers=10)
         
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
+        
+    def update_and_save_status(self):
+        try:
+            import os
+            import json
+            bp = self.trader.get_buying_power()
+            positions = self.strategy.get_all_positions()
+            total_equity = bp
+            for sym, pos in positions.items():
+                p_price = self.trader.get_price(sym)
+                if p_price > 0:
+                    total_equity += p_price * pos.quantity
+                else:
+                    total_equity += pos.entry_price * pos.quantity
+            
+            status_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_status.json")
+            status_data = {
+                "total_equity": total_equity,
+                "cash": bp,
+                "regime": self.state.current_regime,
+                "updated_at": datetime.now().isoformat()
+            }
+            with open(status_file, "w", encoding="utf-8") as f:
+                json.dump(status_data, f, ensure_ascii=False, indent=2)
+            logger.info("Saved bot status: Equity=${:.2f}, Regime={}", total_equity, self.state.current_regime)
+        except Exception as e:
+            logger.error("Failed to save bot status: {}", e)
     
     # Core watchlist: 50 quality stocks & ETFs across sectors
     FALLBACK_UNIVERSE = [
@@ -293,6 +320,7 @@ class BotOrchestrator:
                     self.state.max_exposure_pct, self.state.global_risk_level, self.state.current_regime)
         self.strategy._last_regime = self.state.current_regime
         logger.info("  -> strategy._last_regime synced to: {}", self.state.current_regime)
+        self.update_and_save_status()
 
     # ==========================================
     # PHASE 3: SCREENER & UNIVERSE REDUCTION
@@ -309,8 +337,22 @@ class BotOrchestrator:
             from macro import MarketRegime
             regime = MarketRegime.RISK_OFF if self.state.global_risk_level == "RISK_OFF" else MarketRegime.RISK_ON
             
+            current_positions = self.strategy.get_all_positions()
+            held_symbols = set(current_positions.keys())
+            
             result = screener.screen(regime=regime)
             self.state.target_universe = result.tickers if result and result.tickers else []
+            
+            # [Bear Market Inverse Hedging] 하락장 또는 RISK_OFF 시 인버스 ETF(SQQQ) 강제 진입 유니버스 주입
+            is_bear_regime = self.state.current_regime in {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
+            is_risk_off = self.state.global_risk_level == "RISK_OFF"
+            if (is_bear_regime or is_risk_off) and "SQQQ" not in held_symbols:
+                if not self.state.target_universe:
+                    self.state.target_universe = []
+                if "SQQQ" not in self.state.target_universe:
+                    self.state.target_universe.append("SQQQ")
+                    logger.info("🐻 BEAR MARKET / RISK_OFF detected. Forcing SQQQ into target universe for hedging.")
+                    
             logger.info("  -> screener.py: {} targets found", len(self.state.target_universe))
             
             # Apply additional liquidity filter
@@ -449,6 +491,8 @@ class BotOrchestrator:
                 total_equity += p_price * pos.quantity
             else:
                 total_equity += pos.entry_price * pos.quantity
+        
+        self.update_and_save_status()
         
         def _get_signal(symbol):
             try:
@@ -649,7 +693,8 @@ class BotOrchestrator:
                           self._daily_trade_count, config.MAX_DAILY_TRADES, symbol)
             return
         
-        if self.state.global_risk_level == "RISK_OFF" and action == "BUY":
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
+        if self.state.global_risk_level == "RISK_OFF" and action == "BUY" and not is_inverse:
             logger.warning("Trade BLOCKED by Macro Shield (RISK_OFF): {} {}", action, symbol)
             return
         
@@ -786,9 +831,15 @@ class BotOrchestrator:
                 # Threaded orders like TWAP/ICEBERG handle their own notifications)
                 if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT]:
                     try:
+                        pnl_pct = 0.0
+                        if action == "SELL" and symbol in self.strategy._positions:
+                            pos = self.strategy._positions[symbol]
+                            if pos.entry_price > 0:
+                                pnl_pct = ((order.avg_fill_price or price) - pos.entry_price) / pos.entry_price
+                                
                         from notifier import get_notifier
                         notifier = get_notifier()
-                        notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity)
+                        notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity, pnl_pct)
                     except Exception as ne:
                         logger.debug("Trade notification failed: {}", ne)
 
@@ -808,7 +859,10 @@ class BotOrchestrator:
                 if action == "BUY":
                     atr = self.strategy.get_current_atr(symbol)
                     self.strategy.add_position(symbol, price, qty, atr)
-                    self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                    try:
+                        self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                    except Exception as db_err:
+                        logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
                 else:
                     # Get actual entry price before removing position to calculate PNL correctly
                     entry_price = price  # fallback
@@ -823,7 +877,10 @@ class BotOrchestrator:
                         else:
                             self.strategy.remove_position(symbol)
                     
-                    self.db.record_exit(symbol, qty, price, entry_price, reason)
+                    try:
+                        self.db.record_exit(symbol, qty, price, entry_price, reason)
+                    except Exception as db_err:
+                        logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
             else:
                 logger.warning("??Order REJECTED for {} {}: {}", action, symbol, 
                               order.reason if hasattr(order, 'reason') else "unknown")

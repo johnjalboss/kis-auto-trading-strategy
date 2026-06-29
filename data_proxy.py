@@ -376,20 +376,26 @@ class KISTickerProxy:
         
         resolved_layer = "default"
         
-        # Layer 1: Live original yfinance
-        try:
-            orig_ticker_cls = getattr(yf, "_original_yf_Ticker", None) or getattr(yf, "_OriginalTicker", None)
-            if orig_ticker_cls:
-                orig_ticker = orig_ticker_cls(symbol)
-                orig_info = orig_ticker.info
-                if orig_info and isinstance(orig_info, dict) and orig_info.get("trailingPE", 0) > 0:
-                    for k, v in orig_info.items():
-                        if k in info:
-                            info[k] = v
-                    info['sector'] = orig_info.get('sector', '')
-                    resolved_layer = "yfinance"
-        except Exception as e:
-            logger.debug(f"Layer 1 (yfinance) failed for {symbol}: {e}")
+        # Layer 1: Live original yfinance (Skip for ETFs to avoid yfinance 404 errors)
+        IS_ETF = symbol in {
+            "SQQQ", "TQQQ", "SPY", "QQQ", "DIA", "IWM", "SOXL", "SOXS", "UVXY", "VIXY", 
+            "GLD", "SLV", "USO", "UNG", "TLT", "IEF", "SHY", "HYG", "LQD", "BIL"
+        } or symbol in getattr(config, 'INVERSE_ETFS', set())
+        
+        if not IS_ETF:
+            try:
+                orig_ticker_cls = getattr(yf, "_original_yf_Ticker", None) or getattr(yf, "_OriginalTicker", None)
+                if orig_ticker_cls:
+                    orig_ticker = orig_ticker_cls(symbol)
+                    orig_info = orig_ticker.info
+                    if orig_info and isinstance(orig_info, dict) and orig_info.get("trailingPE", 0) > 0:
+                        for k, v in orig_info.items():
+                            if k in info:
+                                info[k] = v
+                        info['sector'] = orig_info.get('sector', '')
+                        resolved_layer = "yfinance"
+            except Exception as e:
+                logger.debug(f"Layer 1 (yfinance) failed for {symbol}: {e}")
 
         # Layer 2: Finnhub API Backup
         if resolved_layer == "default":

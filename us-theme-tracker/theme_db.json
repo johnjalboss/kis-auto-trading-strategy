@@ -929,7 +929,8 @@
         "ERIC",
         "NOK",
         "VIAV",
-        "KEYS"
+        "KEYS",
+        "QCOM"
       ]
     },
     "cable_broadband": {
@@ -2850,7 +2851,14 @@
         "chip",
         "drug"
       ],
-      "premapped_tickers": []
+      "premapped_tickers": [
+        "BX",
+        "KKR",
+        "APO",
+        "CG",
+        "ARES",
+        "BLK"
+      ]
     },
     "reits_real_estate": {
       "name_ko": "부동산 리츠",

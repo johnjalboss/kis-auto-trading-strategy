@@ -243,9 +243,14 @@ class StrategyEngine:
         except Exception:
             pass
 
-        _bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
+        _bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
         current_regime = getattr(self, '_last_regime', '')
+
+        # [Inverse ETF Guard] 하락장 레짐이 아닐 때는 인버스 ETF(SQQQ 등) 진입을 원천 차단
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
+        if is_inverse and current_regime not in _bear_regimes:
+            return EntrySignal("HOLD", 0, f"INVERSE_BLOCK: Inverse ETF {symbol} is blocked in non-bear regime ({current_regime})", 0)
 
         # BEAR_REGIME_BLOCK moved to the end of check_entry to support High-Score Bypass
 
@@ -370,6 +375,12 @@ class StrategyEngine:
             comp_signal=comp_signal,
             symbol=symbol
         )
+
+        # [Bear Market Inverse Hedging] 하락장 국면에서 인버스 ETF 진입 보완을 위한 자신감 점수 보너스
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
+        if is_inverse and current_regime in _bear_regimes:
+            confidence += 15
+            setup_reason += " | Bear Market Hedge Boost"
 
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()

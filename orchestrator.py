@@ -70,6 +70,33 @@ class BotOrchestrator:
         
         _orchestrator_instance = self
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
+        
+    def update_and_save_status(self):
+        try:
+            import os
+            import json
+            bp = self.trader.get_buying_power()
+            positions = self.strategy.get_all_positions()
+            total_equity = bp
+            for sym, pos in positions.items():
+                p_price = self.trader.get_price(sym)
+                if p_price > 0:
+                    total_equity += p_price * pos.quantity
+                else:
+                    total_equity += pos.entry_price * pos.quantity
+            
+            status_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_status.json")
+            status_data = {
+                "total_equity": total_equity,
+                "cash": bp,
+                "regime": self.state.current_regime,
+                "updated_at": datetime.now().isoformat()
+            }
+            with open(status_file, "w", encoding="utf-8") as f:
+                json.dump(status_data, f, ensure_ascii=False, indent=2)
+            logger.info("Saved bot status: Equity=${:.2f}, Regime={}", total_equity, self.state.current_regime)
+        except Exception as e:
+            logger.error("Failed to save bot status: {}", e)
     
     # Core watchlist: Expanded to 150+ quality stocks & ETFs across sectors (2026-05)
     FALLBACK_UNIVERSE = [
@@ -361,6 +388,9 @@ class BotOrchestrator:
                 
                 # [Quant Feedback Loop] 뉴스 영향력을 실제 시장 가격 지표 반응으로 2차 필터링 및 보정
                 # 진짜 영향력 있는 뉴스라면 이미 VIX나 SPY 가격 움직임에 반영되었을 것임
+                # 상승장(BULL) 레짐일 때는 뉴스 페널티를 최대 15로 제한하여 단독으로 RISK_OFF를 유발하지 못하도록 함
+                is_bull_regime = self.state.current_regime in {"BULL_TRENDING", "BULL_VOLATILE"}
+                
                 vix_factor = 1.0
                 try:
                     vix_price = self.trader.get_price("^VIX")
@@ -374,6 +404,10 @@ class BotOrchestrator:
                     pass
                 
                 adjusted_penalty = int(raw_penalty * vix_factor)
+                if is_bull_regime:
+                    adjusted_penalty = min(15, adjusted_penalty)
+                    logger.info("[MACRO_NEWS] Bull regime detected. Capping news penalty to 15 to prevent false RISK_OFF.")
+                    
                 logger.info("  -> macro_news_analyzer.py: Level={}, Penalty={}(raw={}), Identified={}",
                             news_result.get("risk_level"), adjusted_penalty, raw_penalty, news_result.get("events_identified"))
                 penalty += adjusted_penalty
@@ -427,6 +461,7 @@ class BotOrchestrator:
         self.state.last_macro_refresh = datetime.now()
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 
                     self.state.max_exposure_pct, self.state.global_risk_level, self.state.current_regime)
+        self.update_and_save_status()
 
     # ==========================================
     # PHASE 3: SCREENER & UNIVERSE REDUCTION
@@ -466,6 +501,17 @@ class BotOrchestrator:
             
             result = screener.screen(regime=regime, exclude_symbols=held_symbols)
             self.state.target_universe = result.tickers if result and result.tickers else []
+            
+            # [Bear Market Inverse Hedging] 하락장 또는 RISK_OFF 시 인버스 ETF(SQQQ) 강제 진입 유니버스 주입
+            is_bear_regime = self.state.current_regime in {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
+            is_risk_off = self.state.global_risk_level == "RISK_OFF"
+            if (is_bear_regime or is_risk_off) and "SQQQ" not in held_symbols:
+                if not self.state.target_universe:
+                    self.state.target_universe = []
+                if "SQQQ" not in self.state.target_universe:
+                    self.state.target_universe.append("SQQQ")
+                    logger.info("🐻 BEAR MARKET / RISK_OFF detected. Forcing SQQQ into target universe for hedging.")
+                    
             logger.info("  -> screener.py: {} targets found (excluding {} held positions: {})",
                        len(self.state.target_universe), len(held_symbols), list(held_symbols))
             
@@ -614,6 +660,8 @@ class BotOrchestrator:
                 total_equity += p_price * pos.quantity
             else:
                 total_equity += pos.entry_price * pos.quantity
+        
+        self.update_and_save_status()
         
         def _get_signal(symbol):
             try:
@@ -1039,7 +1087,8 @@ class BotOrchestrator:
             logger.warning("PAUSED:  /    {}  ", symbol)
             return
 
-        if self.state.global_risk_level == "RISK_OFF" and action == "BUY":
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
+        if self.state.global_risk_level == "RISK_OFF" and action == "BUY" and not is_inverse:
             logger.warning("Trade BLOCKED by Macro Shield (RISK_OFF): {} {}", action, symbol)
             return
         
@@ -1218,6 +1267,12 @@ class BotOrchestrator:
                 # We wait briefly and check fill status to avoid phantom alerts
                 if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT, OrderType.TWAP]:
                     try:
+                        pnl_pct = 0.0
+                        if action == "SELL" and symbol in self.strategy._positions:
+                            pos = self.strategy._positions[symbol]
+                            if pos.entry_price > 0:
+                                pnl_pct = ((order.avg_fill_price or price) - pos.entry_price) / pos.entry_price
+                                
                         from notification import get_notifier
                         notifier = get_notifier()
                         # Check if order was confirmed filled (order.status == FILLED)
@@ -1231,7 +1286,7 @@ class BotOrchestrator:
                                         reason = f"{reason} | [Gemini] {sentiment.recommendation}"
                                 except Exception as se:
                                     logger.debug("Failed to append Gemini sentiment to trade alert for {}: {}", symbol, se)
-                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity)
+                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity, pnl_pct)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",
                                        symbol, order.status.value)
@@ -1255,7 +1310,10 @@ class BotOrchestrator:
                     if action == "BUY":
                         atr = self.strategy.get_current_atr(symbol)
                         self.strategy.add_position(symbol, price, qty, atr)
-                        self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                        try:
+                            self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                        except Exception as db_err:
+                            logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
                     else:
                         # Get actual entry price before removing position to calculate PNL correctly
                         entry_price = price  # fallback
@@ -1270,7 +1328,10 @@ class BotOrchestrator:
                             else:
                                 self.strategy.remove_position(symbol)
                         
-                        self.db.record_exit(symbol, qty, price, entry_price, reason)
+                        try:
+                            self.db.record_exit(symbol, qty, price, entry_price, reason)
+                        except Exception as db_err:
+                            logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
                         
                         # ============================================================
                         #      strategy._consecutive_losses_today 
@@ -1816,7 +1877,7 @@ class BotOrchestrator:
                             f"• 총 거래 횟수: {total_trades}회\n"
                             f"• 승률: {win_rate:.1%}\n"
                             f"• 평균 수익률: {avg_profit_rate:.2%}\n"
-                            f"• 총 손익: {total_profit:,.0f}원\n\n"
+                            f"• 총 손익: <b>${total_profit:+,.2f}</b>\n\n"
                             f"🔧 <b>조정 내역:</b>\n"
                             f"• ATR_TP_MULT: {current_tp_mult} -> {new_tp_mult:.1f}\n"
                             f"• 사유: {reason}"
@@ -1836,7 +1897,7 @@ class BotOrchestrator:
                         f"• 총 거래 횟수: {total_trades}회\n"
                         f"• 승률: {win_rate:.1%}\n"
                         f"• 평균 수익률: {avg_profit_rate:.2%}\n"
-                        f"• 총 손익: {total_profit:,.0f}원\n\n"
+                        f"• 총 손익: <b>${total_profit:+,.2f}</b>\n\n"
                         f"🔧 현재 파라미터 설정(ATR_TP_MULT={current_tp_mult})을 유지합니다."
                     )
                     get_notifier().send(msg)
