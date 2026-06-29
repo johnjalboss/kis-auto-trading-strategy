@@ -1269,13 +1269,15 @@ with tab_portfolio:
     if not portfolio_tickers:
         st.info("진단할 종목 티커를 입력해 주세요.")
     else:
-        # Inverse mapping (ticker -> list of theme IDs)
+        # Inverse mapping (ticker -> list of theme IDs) using actual raw data
         ticker_to_theme = {}
-        for tid, tinfo in themes_config.items():
-            for ticker in tinfo.get("tickers", []):
-                if ticker not in ticker_to_theme:
-                    ticker_to_theme[ticker] = []
-                ticker_to_theme[ticker].append(tid)
+        for _, row in raw_themes_df.iterrows():
+            tid = row["theme_id"]
+            for s in row.get("stock_data", []):
+                t_code = s["ticker"]
+                if t_code not in ticker_to_theme:
+                    ticker_to_theme[t_code] = []
+                ticker_to_theme[t_code].append(tid)
                 
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1286,7 +1288,8 @@ with tab_portfolio:
             stock_metric = None
             
             if mapped_themes:
-                matching_themes = themes_df[themes_df["theme_id"].isin(mapped_themes)]
+                # Use raw_themes_df to avoid UI filter issues (like min_stocks or show_traditional)
+                matching_themes = raw_themes_df[raw_themes_df["theme_id"].isin(mapped_themes)]
                 if not matching_themes.empty:
                     target_theme_row = matching_themes.sort_values("quality", ascending=False).iloc[0]
                     for s in target_theme_row["stock_data"]:
