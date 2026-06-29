@@ -1076,7 +1076,13 @@ themes_df = themes_df[themes_df["stock_count"] >= min_stocks].reset_index(drop=T
 # Split by signal type
 true_signals  = themes_df[themes_df["signal_type"] == "TRUE_SIGNAL"].head(10)
 watch_signals = themes_df[themes_df["signal_type"] == "WATCH"].head(8)
-fake_signals  = themes_df[themes_df["signal_type"].isin(["DEAD_CAT","PUMP","OVERHEATED"])].head(6)
+# 위험 매수 금지 (과열/펌핑 등 진입 위험)
+fake_signals  = themes_df[themes_df["signal_type"].isin(["PUMP", "OVERHEATED"])].head(6)
+# 추세 이탈 / 즉시 매도 권장 (끝난 테마: 데드캣 또는 감속 + 음수수익률 + 저점수)
+exit_signals  = themes_df[
+    (themes_df["signal_type"] == "DEAD_CAT") | 
+    ((themes_df["ret_5d"] < -1.5) & (themes_df["velocity_icon"] == "▼ 감속") & (themes_df["quality"] < 30))
+].sort_values("ret_5d", ascending=True).head(6)
 
 tab_signal, tab_board, tab_explorer = st.tabs(["🚨 실시간 매매 신호", "📊 전체 테마 순위", "🔍 테마 상세 탐색"])
 
@@ -1178,16 +1184,34 @@ with tab_signal:
 
         # 3. 위험 테마 (매수 금지)
         st.markdown("### 🔴 위험 — 매수 금지")
-        st.caption("데드캣 바운스, 비동조 펌핑, 60일 과열 테마 감지")
+        st.caption("비동조 펌핑, 60일 과열 테마 감지 (진입 금지)")
         if fake_signals.empty:
-            st.success("현재 감지된 위험신호 없음 ✅")
+            st.success("현재 감지된 진입 위험 테마 없음 ✅")
         else:
             for i, (_, row) in enumerate(fake_signals.iterrows()):
-                label_map = {"DEAD_CAT":"💀 데드캣","PUMP":"⚠️ 투기펌핑","OVERHEATED":"🌡️ 과열"}
+                label_map = {"PUMP":"⚠️ 투기펌핑","OVERHEATED":"🌡️ 과열"}
                 label = label_map.get(row["signal_type"], "❌")
                 clicked = st.button(
                     f"{label}  {row['name_ko']}  |  5D: {row['ret_5d']:+.1f}%",
                     key=f"sig_fake_{i}",
+                    use_container_width=True,
+                )
+                if clicked:
+                    st.session_state.selected_theme_tab1 = row["theme_id"]
+                    st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 4. 추세 이탈 / 즉시 매도 권장 (끝난 테마)
+        st.markdown("### 📉 추세 이탈 / 매도 권장 (끝난 테마)")
+        st.caption("데드캣 바운스, 거래량 급감 및 단기 하락 추세 전환 완료 테마 (보유 종목 청산 권장)")
+        if exit_signals.empty:
+            st.success("현재 감지된 매도 권장 테마 없음 ✅")
+        else:
+            for i, (_, row) in enumerate(exit_signals.iterrows()):
+                label = "💀 데드캣" if row["signal_type"] == "DEAD_CAT" else "📉 추세이탈"
+                clicked = st.button(
+                    f"{label}  {row['name_ko']} {row['velocity_icon']}  |  5D: {row['ret_5d']:+.1f}%  |  Q: {row['quality']}점",
+                    key=f"sig_exit_{i}",
                     use_container_width=True,
                 )
                 if clicked:
@@ -1200,22 +1224,22 @@ with tab_signal:
             tid = st.session_state.selected_theme_tab1
             cfg = themes_config.get(tid, {})
             theme_row = themes_df[themes_df["theme_id"] == tid]
-
+ 
             # 닫기 버튼 배치
             if st.button("✕ 상세분석 닫기", key="close_detail_tab1", use_container_width=True):
                 st.session_state.selected_theme_tab1 = None
                 st.rerun()
-
+ 
             _render_theme_detail(tid, theme_row, cfg, tab_name="tab1")
         else:
             st.markdown("""
             <div style="background:#0a1520;border:1px solid #1a3a5c;border-radius:12px;padding:48px 30px;text-align:center;margin-top:20px;">
-              <div style="font-size:54px;margin-bottom:16px;">👈</div>
-              <div style="color:#7ab8f5;font-weight:700;font-size:18px;margin-bottom:8px;">실시간 매매 신호 분석 대기 중</div>
-              <div style="color:#a0c4e8;font-size:13px;line-height:1.6;">
-                왼쪽 목록에서 <b>[🟢 즉시 진입 가능]</b>, <b>[⚠️ 관찰]</b>, 또는 <b>[🔴 위험]</b> 테마의 버튼을 클릭하십시오.<br>
-                해당 테마의 5-Factor 상세 분석 및 변동성 기반 익절/손절 추천 원픽 주도주 정보가 스크롤 없이 이곳에 즉시 출력됩니다.
-              </div>
+               <div style="font-size:54px;margin-bottom:16px;">👈</div>
+               <div style="color:#7ab8f5;font-weight:700;font-size:18px;margin-bottom:8px;">실시간 매매 신호 분석 대기 중</div>
+               <div style="color:#a0c4e8;font-size:13px;line-height:1.6;">
+                 왼쪽 목록에서 <b>[🟢 즉시 진입 가능]</b>, <b>[⚠️ 관찰]</b>, <b>[🔴 위험]</b>, 또는 <b>[📉 매도 권장]</b> 테마의 버튼을 클릭하십시오.<br>
+                 해당 테마의 5-Factor 상세 분석 및 변동성 기반 익절/손절 추천 원픽 주도주 정보가 스크롤 없이 이곳에 즉시 출력됩니다.
+               </div>
             </div>
             """, unsafe_allow_html=True)
 
