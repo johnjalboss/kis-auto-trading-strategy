@@ -1401,8 +1401,17 @@ with tab_portfolio:
             if curr_price is None or curr_price == 0.0:
                 try:
                     import yfinance as yf
-                    t_info = yf.Ticker(sym).fast_info
-                    curr_price = t_info.last_price
+                    ticker_obj = yf.Ticker(sym)
+                    try:
+                        curr_price = ticker_obj.fast_info.last_price
+                    except:
+                        curr_price = None
+                    if curr_price is None or curr_price == 0.0:
+                        hist = ticker_obj.history(period="1d")
+                        if not hist.empty:
+                            curr_price = hist["Close"].iloc[-1]
+                    if curr_price is None or curr_price == 0.0:
+                        curr_price = ticker_obj.info.get("regularMarketPrice")
                 except Exception as yf_err:
                     pass
             
@@ -1530,8 +1539,17 @@ with tab_portfolio:
                     price_val = 0.0
                     try:
                         import yfinance as yf
-                        t_info = yf.Ticker(ticker).fast_info
-                        price_val = t_info.last_price or 0.0
+                        ticker_obj = yf.Ticker(ticker)
+                        try:
+                            price_val = ticker_obj.fast_info.last_price or 0.0
+                        except:
+                            pass
+                        if price_val == 0.0:
+                            hist = ticker_obj.history(period="1d")
+                            if not hist.empty:
+                                price_val = hist["Close"].iloc[-1]
+                        if price_val == 0.0:
+                            price_val = ticker_obj.info.get("regularMarketPrice") or 0.0
                     except:
                         pass
                     

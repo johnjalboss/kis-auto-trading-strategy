@@ -1256,6 +1256,12 @@ class StrategyEngine:
             
         for pos in api_positions:
             symbol = pos.symbol
+            if db_mgr:
+                try:
+                    db_mgr.update_position(symbol, pos.quantity, pos.avg_price)
+                except Exception as de:
+                    logger.debug("Database update failed during sync for {}: {}", symbol, de)
+                    
             if symbol not in self._positions:
                 # Retrieve true entry state if possible
                 true_entry_time = datetime.now()
