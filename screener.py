@@ -360,6 +360,50 @@ class DynamicScreener:
                 if len(ma50.dropna()) > 0 and curr < float(ma50.dropna().iloc[-1]):
                     return
                 
+                # ── [GUARD 1] RSI 과열 방지 ─────────────────────────────
+                # RSI > 72면 이미 꼭대기 구간 → 진입하면 꼭대기 매수
+                delta = close.diff()
+                gain = delta.clip(lower=0).rolling(14).mean()
+                loss = (-delta.clip(upper=0)).rolling(14).mean()
+                rs_raw = gain / (loss + 1e-9)
+                rsi = 100 - (100 / (1 + rs_raw))
+                curr_rsi = float(rsi.iloc[-1]) if len(rsi) >= 14 else 50.0
+                if curr_rsi > 72:
+                    return  # 과매수 구간 — 꼭대기 매수 방지
+                
+                # ── [GUARD 2] 52주 고점 대비 괴리율 필터 ────────────────
+                # 꼭대기(52주 고점 5% 이내) = 이미 너무 오른 것
+                # 너무 내린(52주 고점 40% 이하) = 모멘텀 소멸
+                # 스윗스팟: 52주 고점 대비 5~35% 아래 (오르는 중이지만 공간 있음)
+                high_52w = float(close.tail(252).max()) if len(close) >= 252 else float(close.max())
+                dist_from_high = (high_52w - curr) / high_52w * 100  # % below 52w high
+                if dist_from_high < 3.0:
+                    # 52주 신고가 3% 이내 = 완전 과열, 리스크 너무 높음
+                    return
+                
+                # ── [GUARD 3] 어닝 블랙아웃 (7일 이내 실적발표 종목 제외) ──
+                # 실적발표 전 7일은 갭하락 리스크가 가장 높은 구간
+                try:
+                    from finnhub_client import get_finnhub_client
+                    fh = get_finnhub_client()
+                    if fh.is_enabled():
+                        from datetime import datetime as _dt, timedelta as _td
+                        _today = _dt.now().date()
+                        earnings = fh.get_earnings_calendar(sym)
+                        if earnings:
+                            for e in earnings:
+                                edate_str = e.get('date', '')
+                                if edate_str:
+                                    try:
+                                        edate = _dt.strptime(edate_str, '%Y-%m-%d').date()
+                                        days_to_earnings = (edate - _today).days
+                                        if 0 <= days_to_earnings <= 7:
+                                            return  # 7일 이내 어닝 → 제외
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass  # Finnhub 없으면 생략
+                
                 # 3개월(약 65거래일) 수익률
                 ret_3m = 0.0
                 if len(close) >= 65:
@@ -374,20 +418,24 @@ class DynamicScreener:
                 if len(close) >= 130:
                     ret_6m = (curr / float(close.iloc[-130]) - 1) * 100
                 else:
-                    ret_6m = ret_3m  # 데이터 부족 시 3M으로 대체
+                    ret_6m = ret_3m
                 
                 # 거래량 확인 (20일 평균 대비 현재 거래량)
                 if 'Volume' in df.columns and len(df) >= 20:
                     avg_vol = float(df['Volume'].iloc[-20:].mean())
                     curr_vol = float(df['Volume'].iloc[-1])
                     vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
-                    if vol_ratio < 0.5:  # 거래량 너무 낮으면 제외
+                    if vol_ratio < 0.5:
                         return
                 
                 # SPY 대비 상대강도 점수 (3M 가중치 0.6, 6M 가중치 0.4)
                 rs_score = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
                 
-                # SPY보다 못한 종목 제외 (하위 RS는 계속 하위)
+                # [보너스] 52주 고점 대비 10~25% 조정된 종목에 RS 보너스 (최적 진입 구간)
+                if 10 <= dist_from_high <= 25:
+                    rs_score += 3.0  # 조정 후 반등 스윗스팟 보너스
+                
+                # SPY보다 못한 종목 제외
                 if rs_score < -2.0:
                     return
                 
@@ -396,6 +444,7 @@ class DynamicScreener:
                     
             except Exception:
                 pass
+
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             try:
