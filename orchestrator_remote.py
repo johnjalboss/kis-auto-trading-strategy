@@ -86,6 +86,14 @@ class BotOrchestrator:
             with open(status_file, "w", encoding="utf-8") as f:
                 json.dump(status_data, f, ensure_ascii=False, indent=2)
             logger.info("Saved bot status: Equity=${:.2f}, Regime={}", total_equity, self.state.current_regime)
+            
+            # Update drawdown controller state with latest total equity
+            try:
+                from drawdown_controller import get_drawdown_controller
+                dc = get_drawdown_controller(total_equity)
+                dc.update_capital(total_equity)
+            except Exception as dc_err:
+                logger.error("Failed to update drawdown controller: {}", dc_err)
         except Exception as e:
             logger.error("Failed to save bot status: {}", e)
     
@@ -309,11 +317,14 @@ class BotOrchestrator:
             logger.info("  -> stress_test.py: worst={}", scenario)
         self._safe_import("stress_test", _stress)
         
-        # 10. Macro Shield (aggregate decision)
         if penalty >= 50:
             self.state.global_risk_level = "RISK_OFF"
             self.state.max_exposure_pct *= 0.2
             logger.warning("  -> MACRO SHIELD ENGAGED: RISK_OFF (penalty={})", penalty)
+        else:
+            if self.state.global_risk_level == "RISK_OFF":
+                self.state.global_risk_level = "NORMAL"
+                logger.info("  -> MACRO SHIELD DISENGAGED: NORMAL (penalty={})", penalty)
             
         self.state.last_macro_refresh = datetime.now()
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 

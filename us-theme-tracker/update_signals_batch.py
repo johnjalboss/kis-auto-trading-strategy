@@ -41,6 +41,29 @@ def get_volume_scale_factor(last_date_str):
     
     return 390.0 / elapsed
 
+
+def is_us_market_hours() -> bool:
+    """
+    Check if the US stock market is currently open (Monday-Friday, 09:30-16:00 EST).
+    """
+    try:
+        import pytz
+        tz = pytz.timezone('US/Eastern')
+        now_est = datetime.datetime.now(tz)
+        
+        # Weekday check (0=Monday, ..., 4=Friday)
+        if now_est.weekday() >= 5:
+            return False
+            
+        current_minutes = now_est.hour * 60 + now_est.minute
+        open_minutes = 9 * 60 + 30  # 09:30
+        close_minutes = 16 * 60     # 16:00
+        
+        return open_minutes <= current_minutes < close_minutes
+    except Exception:
+        return False
+
+
 THEME_CATEGORIES = {
     "🤖 AI & 반도체": [
         "custom_ai_chips","nand_memory","dram_memory","optical_interconnects",
@@ -332,6 +355,7 @@ def main():
         print(f"Warning: could not load previous signals for hysteresis: {e}")
 
     results = []
+    is_market_open = is_us_market_hours()
     for tid, ticks in theme_tickers.items():
         stock_metrics = []
         for t in ticks:
@@ -469,7 +493,11 @@ def main():
               above_ma_pct >= req_ma_true and 
               above_ma50_pct >= req_ma50_true and 
               med_ret5d >= req_ret5d_true):
-            sig_type = "TRUE_SIGNAL"
+            if is_market_open and not is_true_prev:
+                # Upgrades are locked during market hours to prevent wobbly/fake buy signals
+                sig_type = "WATCH"
+            else:
+                sig_type = "TRUE_SIGNAL"
         elif (quality >= req_quality_watch and 
               (med_rvol >= req_rvol_watch or med_ret5d >= req_ret5d_watch)):
             sig_type = "WATCH"

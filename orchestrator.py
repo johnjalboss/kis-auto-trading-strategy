@@ -95,6 +95,14 @@ class BotOrchestrator:
             with open(status_file, "w", encoding="utf-8") as f:
                 json.dump(status_data, f, ensure_ascii=False, indent=2)
             logger.info("Saved bot status: Equity=${:.2f}, Regime={}", total_equity, self.state.current_regime)
+            
+            # Update drawdown controller state with latest total equity
+            try:
+                from drawdown_controller import get_drawdown_controller
+                dc = get_drawdown_controller(total_equity)
+                dc.update_capital(total_equity)
+            except Exception as dc_err:
+                logger.error("Failed to update drawdown controller: {}", dc_err)
         except Exception as e:
             logger.error("Failed to save bot status: {}", e)
     
@@ -447,6 +455,7 @@ class BotOrchestrator:
                     pass
         else:
             if prev_risk_level == "RISK_OFF":
+                self.state.global_risk_level = "NORMAL"
                 try:
                     from watchdog import send_tg
                     send_tg(
@@ -1131,6 +1140,7 @@ class BotOrchestrator:
                 return
         except ImportError:
             pass
+        except Exception as dc_err:
             logger.error("Drawdown controller error: {}", dc_err)
 
         # 3.5. RiskManager Gate (Daily/Weekly stops, Cooldowns, Position Slots)

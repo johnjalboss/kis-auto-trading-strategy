@@ -1004,13 +1004,13 @@ class DynamicScreener:
                 try:
                     price = kis_data.get_current_price(symbol)
                     if price and price.get("last", 0) > 5:
-                        # 하락폭이 작은 종목 선호 (절대값)
-                        safe_stocks.append((symbol, abs(price.get("rate", 0))))
+                        # Prefer defensive stocks showing positive relative strength (green)
+                        safe_stocks.append((symbol, price.get("rate", 0)))
                 except Exception:
                     continue
             
-            # Sort by lowest volatility (least price distance from 0)
-            safe_stocks.sort(key=lambda x: x[1])
+            # Sort by highest relative strength first
+            safe_stocks.sort(key=lambda x: x[1], reverse=True)
             return [s[0] for s in safe_stocks[:30]] # 전달 최대 30개
             
         except Exception as e:

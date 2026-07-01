@@ -126,6 +126,7 @@ class DynamicStopManager:
             'lowest_price': current_price,
             'current_stop': current_price * 0.97,
         })
+        self._positions[symbol] = position
         
         entry_price = position['entry_price']
         
@@ -234,9 +235,12 @@ class DynamicStopManager:
         tr3 = abs(low - close.shift())
         
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(period).mean().iloc[-1]
+        atr_series = tr.rolling(period).mean()
+        if atr_series.empty or pd.isna(atr_series.iloc[-1]):
+            # Fallback: 2% of current price as default ATR
+            return float(close.iloc[-1] * 0.02)
         
-        return atr
+        return float(atr_series.iloc[-1])
     
     def _determine_regime(self, atr_pct: float) -> VolatilityRegime:
         """Determine volatility regime"""

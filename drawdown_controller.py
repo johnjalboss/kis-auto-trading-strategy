@@ -116,6 +116,13 @@ class DrawdownController:
             return self._calculate_state()
 
         prev_capital = self.current_capital
+        
+        # Check for structural capital changes (e.g. deposit, withdrawal, account switch)
+        if prev_capital > 0 and abs(new_capital - prev_capital) / prev_capital > 0.30:
+            logger.warning(f"[DRAWDOWN] Detected significant capital change from ${prev_capital:,.2f} to ${new_capital:,.2f}. Resetting peak and thresholds.")
+            self.reset(new_capital)
+            return self._calculate_state()
+            
         self.current_capital = new_capital
         
         # Update peak
@@ -124,22 +131,6 @@ class DrawdownController:
         
         # Check if new period
         self._check_period_reset()
-        
-        # Track consecutive days (debounced to once per day)
-        try:
-            et = pytz.timezone('US/Eastern')
-            today_str = str(datetime.now(et).date())
-        except Exception:
-            today_str = str(datetime.now().date())
-
-        daily_change = new_capital - self.daily_start
-        if daily_change > 0:
-            if self.last_green_day_date != today_str:
-                self.consecutive_green_days += 1
-                self.last_green_day_date = today_str
-        elif daily_change < 0:
-            self.consecutive_green_days = 0
-            self.last_green_day_date = ""
         
         # Calculate metrics
         return self._calculate_state()
@@ -268,7 +259,22 @@ class DrawdownController:
             today = datetime.now().date()
         
         # Daily reset
+        try:
+            if isinstance(self.day_start_date, str):
+                self.day_start_date = datetime.strptime(self.day_start_date, "%Y-%m-%d").date()
+        except Exception:
+            pass
+
         if today != self.day_start_date:
+            # EOD evaluation of consecutive green days
+            if self.day_start_date is not None:
+                prev_day_change = self.current_capital - self.daily_start
+                if prev_day_change > 0:
+                    self.consecutive_green_days += 1
+                    self.last_green_day_date = str(self.day_start_date)
+                elif prev_day_change < 0:
+                    self.consecutive_green_days = 0
+            
             self.daily_start = self.current_capital
             self.day_start_date = today
         
@@ -366,6 +372,23 @@ class DrawdownController:
                 self.is_stopped = state.get('is_stopped', False)
                 self.stop_reason = state.get('stop_reason', '')
                 self.max_drawdown_recorded = state.get('max_drawdown_recorded', 0.0)
+                
+                # Restore date states
+                try:
+                    self.day_start_date = datetime.strptime(state.get('day_start_date', ''), "%Y-%m-%d").date()
+                except Exception:
+                    self.day_start_date = datetime.now().date()
+                
+                try:
+                    self.week_start_date = datetime.strptime(state.get('week_start_date', ''), "%Y-%m-%d").date()
+                except Exception:
+                    self.week_start_date = datetime.now().date()
+                
+                try:
+                    self.month_start_date = datetime.strptime(state.get('month_start_date', ''), "%Y-%m-%d").date()
+                except Exception:
+                    self.month_start_date = datetime.now().date()
+                
                 logger.info(f"Loaded state: capital=${self.current_capital:,.2f}")
         except Exception as e:
             logger.error(f"Failed to load state: {e}")

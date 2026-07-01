@@ -393,7 +393,7 @@ class CompositeSignalEngine:
     
     def _calculate_macro_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
         """Calculate macro environment score"""
-        score = 20
+        score = 0
         signals = []
         
         # Async run all MACRO modules (e.g. regime_detector, fed_watch)

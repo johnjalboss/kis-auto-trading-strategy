@@ -144,7 +144,7 @@ class MomentumRanker:
         # Calculate percentiles
         n = len(rankings)
         for i, r in enumerate(rankings):
-            percentile = (1 - i / n) * 100
+            percentile = (n - 1 - i) / (n - 1) * 100 if n > 1 else 100.0
             
             if percentile >= 90:
                 tier = "TOP"

@@ -201,18 +201,25 @@ class RegimeDetector:
         try:
             # Check 200-day and 50-day SMA crossovers over the last 5 days
             spy_close_5d = close.tail(5)
-            sma200_5d = close.rolling(200).mean().tail(5) if len(close) >= 200 else pd.Series([sma200]*5, index=spy_close_5d.index)
-            sma50_5d = close.rolling(50).mean().tail(5)
+            sma200_5d = close.rolling(200).mean().tail(5) if len(close) >= 200 else pd.Series([sma200]*len(spy_close_5d), index=spy_close_5d.index)
+            sma50_5d = close.rolling(50).mean().tail(5) if len(close) >= 50 else pd.Series([spy_close_5d.iloc[-1]]*len(spy_close_5d), index=spy_close_5d.index)
             
-            # Did we cross above 200-day SMA? (Bullish CTA Buy Cascade)
-            crossed_above_200 = (spy_close_5d.iloc[-5] < sma200_5d.iloc[-5]) and (spy_close_5d.iloc[-1] > sma200_5d.iloc[-1])
-            # Did we cross below 200-day SMA? (Bearish CTA Liquidation)
-            crossed_below_200 = (spy_close_5d.iloc[-5] > sma200_5d.iloc[-5]) and (spy_close_5d.iloc[-1] < sma200_5d.iloc[-1])
+            # Did we cross above/below SMAs?
+            crossed_above_200 = False
+            crossed_below_200 = False
+            crossed_above_50 = False
+            crossed_below_50 = False
             
-            # Did we cross above 50-day SMA?
-            crossed_above_50 = (spy_close_5d.iloc[-5] < sma50_5d.iloc[-5]) and (spy_close_5d.iloc[-1] > sma50_5d.iloc[-1])
-            # Did we cross below 50-day SMA?
-            crossed_below_50 = (spy_close_5d.iloc[-5] > sma50_5d.iloc[-5]) and (spy_close_5d.iloc[-1] < sma50_5d.iloc[-1])
+            if len(spy_close_5d) >= 5 and len(sma200_5d) >= 5 and len(sma50_5d) >= 5:
+                # Did we cross above 200-day SMA? (Bullish CTA Buy Cascade)
+                crossed_above_200 = (spy_close_5d.iloc[0] < sma200_5d.iloc[0]) and (spy_close_5d.iloc[-1] > sma200_5d.iloc[-1])
+                # Did we cross below 200-day SMA? (Bearish CTA Liquidation)
+                crossed_below_200 = (spy_close_5d.iloc[0] > sma200_5d.iloc[0]) and (spy_close_5d.iloc[-1] < sma200_5d.iloc[-1])
+                
+                # Did we cross above 50-day SMA?
+                crossed_above_50 = (spy_close_5d.iloc[0] < sma50_5d.iloc[0]) and (spy_close_5d.iloc[-1] > sma50_5d.iloc[-1])
+                # Did we cross below 50-day SMA?
+                crossed_below_50 = (spy_close_5d.iloc[0] > sma50_5d.iloc[0]) and (spy_close_5d.iloc[-1] < sma50_5d.iloc[-1])
             
             if crossed_above_200:
                 cta_signal = "BULLISH_BUY_CASCADE"
