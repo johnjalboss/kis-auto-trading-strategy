@@ -1184,9 +1184,9 @@ class StrategyEngine:
         # 손절/익절 대기 없이 시장가 즉시 매도하여 인버스/헤징 ETF 매수 체력(Buying Power)을 확보함
         _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
         if current_regime in bear_regimes or current_regime in choppy_regimes:
-            if symbol not in _allowed_in_bear:
+            if pos.symbol not in _allowed_in_bear:
                 reason = f"REGIME_ROTATION_EXIT: Market turned to {current_regime}. Freeing up cash for inverse/hedging."
-                logger.warning("🚨 [REGIME_GUARD] Force exiting long position {} | Reason: {}", symbol, reason)
+                logger.warning("🚨 [REGIME_GUARD] Force exiting long position {} | Reason: {}", pos.symbol, reason)
                 return ExitSignal("SELL_ALL", reason, price, pnl_pct)
 
         return None
