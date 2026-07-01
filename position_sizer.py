@@ -188,11 +188,9 @@ class PositionSizer:
             
         # 5. Blend & Calculate Optimal Size
         optimal = (half_kelly * 0.55 + vol_position * 0.25 + risk_parity * 0.20)
-        
-        # 6. Apply REGIME-AWARE Portfolio Risk Scaling (The Quant Shield)
-        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
-        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
-        
+                # 6. Apply REGIME-AWARE Portfolio Risk Scaling (The Quant Shield)
+        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
+        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE", "RANGE_BOUND"}
         if current_regime in bear_regimes:
             optimal *= 0.50
             details.append("BEAR_REGIME_SCALE (Risk halved to 50%)")

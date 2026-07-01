@@ -1134,17 +1134,13 @@ class StrategyEngine:
 
         return ExitSignal("HOLD", f"SWING_HOLD: {pnl_pct:+.1%} ({_hold_hours:.0f}h)", price, pnl_pct)
 
-    
     def _check_stop_loss(self, pos: Position, price: float, 
                          atr: float, cfg: PhaseConfig) -> Optional[ExitSignal]:
         """ATR-based stop loss with regime-aware hard fallback"""
         pnl_pct = (price - pos.entry_price) / pos.entry_price
-        
-        # Dynamic HMM Regime Scaling for ATR stop multiplier
         current_regime = getattr(self, '_last_regime', '')
-        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
-        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
-        
+        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
+        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE", "RANGE_BOUND"}
         stop_mult = getattr(cfg, 'stop_loss_atr', 1.5)
         
         # Scale stop multiplier based on regime
@@ -1154,7 +1150,7 @@ class StrategyEngine:
             stop_mult *= 1.25   # Wider ATR stop to absorb chop whipsaws
         elif "BULL" in current_regime:
             stop_mult *= 0.85   # Tighter ATR stop in clean bull trends
-            
+
         # ATR-based stop
         if pos.atr_at_entry > 0:
             stop_price = pos.entry_price - (pos.atr_at_entry * stop_mult)
@@ -1233,11 +1229,11 @@ class StrategyEngine:
                           pnl_pct: float, cfg: PhaseConfig) -> Optional[ExitSignal]:
         """Take profit check with Scale-Out (1.5R half-sell, 3.0R final sell) and regime scaling"""
         current_regime = getattr(self, '_last_regime', '')
-        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE"}
-        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
-        
+        bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
+        choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE", "RANGE_BOUND"}
         tp_pct = cfg.take_profit_pct
         tp_mult = 1.0
+        
         if current_regime in bear_regimes:
             tp_mult = 0.65       # Fast cash-outs in bear markets
         elif current_regime in choppy_regimes:

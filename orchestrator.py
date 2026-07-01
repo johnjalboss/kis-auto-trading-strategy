@@ -1131,8 +1131,17 @@ class BotOrchestrator:
                 return
         except ImportError:
             pass
-        except Exception as dc_err:
             logger.error("Drawdown controller error: {}", dc_err)
+
+        # 3.5. RiskManager Gate (Daily/Weekly stops, Cooldowns, Position Slots)
+        if action == "BUY":
+            try:
+                allowed, rm_reason = self.rm.can_trade()
+                if not allowed:
+                    logger.warning("🚨 [QUANT_RISK] Trade BLOCKED by RiskManager: {} {} | Reason: {}", action, symbol, rm_reason)
+                    return
+            except Exception as rm_err:
+                logger.error("[QUANT_RISK] Failed to check RiskManager gate: {}", rm_err)
 
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer
         if action == "BUY":
@@ -1314,6 +1323,17 @@ class BotOrchestrator:
                             self.db.record_entry(symbol, qty, price, self.state.current_regime)
                         except Exception as db_err:
                             logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
+                        
+                        # [RiskManager Sync] Track new position in RiskManager
+                        try:
+                            bp = self.trader.get_buying_power()
+                            actual_positions = self.trader.get_positions()
+                            total_portfolio = bp + sum(p.quantity * p.current_price for p in actual_positions)
+                            exposure_pct = (qty * price) / total_portfolio if total_portfolio > 0 else 0
+                            self.rm.add_position(symbol, price, qty, exposure_pct)
+                            logger.info("[QUANT_RISK] Real-time position added to RiskManager: {} (exp={:.1%})", symbol, exposure_pct)
+                        except Exception as rm_err:
+                            logger.error("[QUANT_RISK] Failed to sync RiskManager for entry: {}", rm_err)
                     else:
                         # Get actual entry price before removing position to calculate PNL correctly
                         entry_price = price  # fallback
@@ -1327,12 +1347,24 @@ class BotOrchestrator:
                                 logger.info("Partial sell: {} remaining {} -> {}", symbol, pos.quantity + qty, pos.quantity)
                             else:
                                 self.strategy.remove_position(symbol)
+                                try:
+                                    self.rm.remove_position(symbol)
+                                    logger.info("[QUANT_RISK] Real-time position removed from RiskManager: {}", symbol)
+                                except Exception as rm_err:
+                                    logger.error("[QUANT_RISK] Failed to remove from RiskManager: {}", rm_err)
                         
                         try:
                             self.db.record_exit(symbol, qty, price, entry_price, reason)
                         except Exception as db_err:
                             logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
                         
+                        # [RiskManager Sync] Record realized trade results in RiskManager Daily & Weekly Stats
+                        try:
+                            _realized_pnl = (price - entry_price) * qty
+                            self.rm.record_trade(_realized_pnl, _realized_pnl >= 0)
+                            logger.info("[QUANT_RISK] Realized trade recorded in RiskManager: PnL=${:+.2f}", _realized_pnl)
+                        except Exception as rm_err:
+                            logger.error("[QUANT_RISK] Failed to record trade in RiskManager: {}", rm_err)
                         # ============================================================
                         #      strategy._consecutive_losses_today 
                         # ============================================================

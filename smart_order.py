@@ -463,11 +463,12 @@ class SmartOrderExecutor:
                 'price': fill_price,
                 'time': datetime.now().isoformat()
             })
-            
-            order.status = OrderStatus.PARTIAL if total_filled < order.total_quantity else OrderStatus.FILLED
+            if total_filled == 0:
+                order.status = OrderStatus.FAILED
+            else:
+                order.status = OrderStatus.PARTIAL if total_filled < order.total_quantity else OrderStatus.FILLED
             order.filled_quantity = total_filled
             order.updated_at = datetime.now()
-            
             # Wait between slices (only if there are remaining slices)
             if i < plan.num_slices - 1 and total_filled < order.total_quantity:
                 logger.info("⏳ Waiting {}s before placing next TWAP slice...", plan.interval_seconds)
