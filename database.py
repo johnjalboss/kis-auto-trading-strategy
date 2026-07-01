@@ -179,10 +179,20 @@ class TradeDatabase:
                 conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
                 logger.debug("Removed position via update: {}", symbol)
             else:
-                conn.execute("""
-                    INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, updated_at)
-                    VALUES (?, ?, ?, ?)
-                """, (symbol, quantity, avg_price, datetime.now()))
+                # [CRITICAL FIX] 기존에는 INSERT OR REPLACE를 사용하여 기존 entry_time을 NULL로 덮어쓰고 있었음.
+                # 이로 인해 매 재시작마다 보유 시간이 0으로 초기화되어 업그레이드(교체매매) 로직이 영구 작동 불능 상태였음.
+                row = conn.execute("SELECT entry_time FROM positions WHERE symbol = ?", (symbol,)).fetchone()
+                now_dt = datetime.now()
+                if row and row[0] is not None:
+                    conn.execute("""
+                        UPDATE positions SET quantity = ?, avg_price = ?, updated_at = ?
+                        WHERE symbol = ?
+                    """, (quantity, avg_price, now_dt, symbol))
+                else:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, entry_time, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (symbol, quantity, avg_price, now_dt, now_dt))
                 logger.debug("Updated position via sync: {} x {} @ ${:.2f}", symbol, quantity, avg_price)
     
     def record_exit(self, symbol: str, quantity: int, price: float,
