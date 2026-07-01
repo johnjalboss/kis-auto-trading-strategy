@@ -105,30 +105,31 @@ class MacroNewsAnalyzer:
         
         # 퀀트 가중치 사전 정의 (단어별 영향력 점수 세분화)
         # 긍정 수치는 리스크 증가(페널티 상승), 부정 수치는 리스크 감소(페널티 하락/시장 안정)
+        # [CRITICAL FIX] 기존 가중치가 너무 커 평상시 헤드라인에도 리스크 오프가 영구 잠금되던 현상 해결 (가중치 1/4로 하향 조정)
         WEIGHTS = {
             # 지정학적 갈등 (공포 및 실질 위협 요인 분리)
             # 고위험 중동/물류 요충지 (에너지/물류 쇼크 연계)
-            'iran': 15.0, 'israel': 15.0, 'lebanon': 12.0, 'hezbollah': 12.0, 
-            'hormuz': 18.0, 'red sea': 10.0, 'gaza': 8.0, 'yemen': 8.0, 'houthi': 8.0,
+            'iran': 3.75, 'israel': 3.75, 'lebanon': 3.0, 'hezbollah': 3.0, 
+            'hormuz': 4.5, 'red sea': 2.5, 'gaza': 2.0, 'yemen': 2.0, 'houthi': 2.0,
             
             # 선반영된 지정학적 갈등 (우크라이나/러시아 등 저위험)
-            'russia': 3.0, 'ukraine': 3.0, 'putin': 3.0,
+            'russia': 0.75, 'ukraine': 0.75, 'putin': 0.75,
             
             # 기타 지정학 단어
-            'war': 8.0, 'conflict': 5.0, 'bomb': 8.0, 'missile': 8.0, 
-            'airstrike': 7.0, 'invasion': 10.0, 'sanction': 6.0, 'tariff': 8.0, 
-            'escalat': 5.0, 'attack': 6.0, 'tension': 4.0, 'military': 4.0,
+            'war': 2.0, 'conflict': 1.25, 'bomb': 2.0, 'missile': 2.0, 
+            'airstrike': 1.75, 'invasion': 2.5, 'sanction': 1.5, 'tariff': 2.0, 
+            'escalat': 1.25, 'attack': 1.5, 'tension': 1.0, 'military': 1.0,
             
             # 평화 / 완화 (안정 요인)
-            'ceasefire': -20.0, 'peace agreement': -20.0, 'peace treaty': -25.0, 
-            'diplomatic resolution': -15.0, 'peace talk': -10.0, 'accord': -12.0, 
-            'de-escalat': -12.0, 'negotiation success': -15.0, 'peace': -10.0,
+            'ceasefire': -5.0, 'peace agreement': -5.0, 'peace treaty': -6.25, 
+            'diplomatic resolution': -3.75, 'peace talk': -2.5, 'accord': -3.0, 
+            'de-escalat': -3.0, 'negotiation success': -3.75, 'peace': -2.5,
             
             # 중앙은행 통화정책 및 거시 경제 (변동성 요인)
-            'fomc': 8.0, 'rate hike': 12.0, 'fed hike': 12.0, 'hawkish': 10.0, 
-            'tightening': 10.0, 'powell hawkish': 15.0, 'boj': 8.0, 'bank of japan': 8.0, 
-            'interest rate': 6.0, 'rate cut': -8.0, 'central bank': 5.0, 'fed decision': 8.0, 
-            'ecb': 6.0, 'inflation': 10.0, 'cpi': 10.0, 'pce': 8.0, 'recession': 15.0
+            'fomc': 2.0, 'rate hike': 3.0, 'fed hike': 3.0, 'hawkish': 2.5, 
+            'tightening': 2.5, 'powell hawkish': 3.75, 'boj': 2.0, 'bank of japan': 2.0, 
+            'interest rate': 1.5, 'rate cut': -2.0, 'central bank': 1.25, 'fed decision': 2.0, 
+            'ecb': 1.5, 'inflation': 2.5, 'cpi': 2.5, 'pce': 2.0, 'recession': 3.75
         }
         
         risk_score = 0.0
@@ -137,23 +138,27 @@ class MacroNewsAnalyzer:
         peace_count = 0
         fed_count = 0
         
+        import re
         # 헤드라인 별로 가중치 매칭 수행 (대소문자 구분 없음 - 키워드별 단 1회만 가중치 적용되도록 중복 방지)
+        # [CRITICAL FIX] software -> war 오인매칭 등 부분 일치 오동작을 정규식 단어 경계(\b) 매칭으로 완벽 차단
         matched_words = set()
         for h in headlines:
             h_lower = h.lower()
             for word, weight in WEIGHTS.items():
-                if word in h_lower and word not in matched_words:
-                    risk_score += weight
-                    matched_words.add(word)
-                    # 통계용 카운트
-                    if weight >= 10.0:
-                        conflict_count += 1
-                        if "Geopolitical Risk" not in events:
-                            events.append("Geopolitical Risk")
-                    elif weight <= -15.0:
-                        peace_count += 1
-                        if "Ceasefire/Peace Relief" not in events:
-                            events.append("Ceasefire/Peace Relief")
+                if word not in matched_words:
+                    pattern = r'\b' + re.escape(word) + r'\b'
+                    if re.search(pattern, h_lower):
+                        risk_score += weight
+                        matched_words.add(word)
+                        # 통계용 카운트
+                        if weight >= 2.5:
+                            conflict_count += 1
+                            if "Geopolitical Risk" not in events:
+                                events.append("Geopolitical Risk")
+                        elif weight <= -3.75:
+                            peace_count += 1
+                            if "Ceasefire/Peace Relief" not in events:
+                                events.append("Ceasefire/Peace Relief")
                     elif abs(weight) >= 8.0 and word in ['fomc', 'rate hike', 'powell', 'boj', 'central bank', 'inflation', 'cpi', 'rate cut']:
                         fed_count += 1
                         if "Central Bank Policy" not in events:
