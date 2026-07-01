@@ -367,13 +367,13 @@ class PositionSizer:
 
         # Ensure we utilize the slot allocation fully as requested by the user
         slot_pct = 1.0 / config.MAX_POSITIONS
-        min_pos_pct = slot_pct * 0.75
-        if current_regime in bear_regimes:
-            min_pos_pct = slot_pct * 0.50
-            
-        optimal = max(min_pos_pct, optimal)
+        # [CRITICAL FIX] min_pos_pct 강제 보정 제거
+        # 이전에는 Kelly 공식, 변동성 가중, 상관관계 페널티로 optimal 비중을 3%로 줄여놓아도
+        # max(min_pos_pct, optimal) 에 막혀 무조건 15% 이상 강제 진입하게 만드는 리스크 폭발 버그가 있었음.
+        # 이제 하한선 제한을 없애 리스크 모델이 산출한 미세 비중(1%~5%) 그대로 진입을 유도함.
         optimal = min(optimal, slot_pct * 1.5)
         details.append(f"SLOT_CLAMPED (optimal={optimal:.1%}, slot_cap={slot_pct*1.5:.1%})")
+
         
         # Dollar amounts
         position_dollars = self.portfolio * optimal

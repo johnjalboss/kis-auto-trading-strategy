@@ -397,14 +397,18 @@ class MacroRiskManager:
         dxy_sma = 0
         
         if dxy is not None and len(dxy) >= self.DXY_SMA_PERIOD:
-            dxy_value = dxy.iloc[-1]
+            dxy_value = float(dxy.iloc[-1])
             dxy_sma = calculate_sma(dxy, self.DXY_SMA_PERIOD).iloc[-1]
-            dxy_trend = dxy.iloc[-1] > dxy.iloc[-5]  # Rising over 5 days
+            # [CRITICAL FIX] 0.1% 미세상승으로 상시 페널티 부과하던 논리 수정.
+            # 최근 5일 대비 달러인덱스(UUP)가 1.5% 이상 유의미하게 급등할 때만 '역풍'으로 규정.
+            dxy_change_5d = (dxy_value - float(dxy.iloc[-5])) / float(dxy.iloc[-5]) * 100
+            dxy_trend = dxy_change_5d >= 1.5
             
             if dxy_value > dxy_sma and dxy_trend:
                 dxy_headwind = True
                 penalty_count += 1
-                headwinds.append(f"DXY {dxy_value:.1f} > 50d SMA {dxy_sma:.1f} ↑")
+                headwinds.append(f"DXY {dxy_value:.1f} > 50d SMA {dxy_sma:.1f} (5d Surge: {dxy_change_5d:+.1f}%)")
+
         
         # Check TNX RSI
         tnx_headwind = False
