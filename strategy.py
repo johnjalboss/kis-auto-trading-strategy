@@ -1162,12 +1162,12 @@ class StrategyEngine:
             stop_price = pos.entry_price * 0.95
             
         # Regime-aware hard stop:
-        # Bear market = tight 3% stop (was 5%  this was killing the R:R)
-        # Bull/Neutral = 5% stop as before
+        # [CRITICAL FIX] config.py에 정의된 손절률(7%)을 강제로 존중하도록 연동. 
+        # 이전에는 config에서 7%로 늘렸으나 내부 하드코딩 5%/4%에 막혀 오동작 중이었음.
         if current_regime in bear_regimes:
-            hard_stop_pct = getattr(config, 'BEAR_HARD_STOP_PCT', 0.04)  # 4%
+            hard_stop_pct = float(getattr(config, 'BEAR_HARD_STOP_PCT', 0.07))
         else:
-            hard_stop_pct = 0.05  # 5%
+            hard_stop_pct = float(getattr(config, 'STOP_LOSS_PCT', 0.07))
         
         hard_stop_price = pos.entry_price * (1 - hard_stop_pct)
         effective_stop = max(stop_price, hard_stop_price)
@@ -1183,7 +1183,18 @@ class StrategyEngine:
                 
             return ExitSignal("SELL_ALL", reason, price, pnl_pct)
             
+        # ── [STRATEGY UPGRADE] 레짐 전환 시 즉시 강제 청산 (현금 확보) ──
+        # 시장이 하락/횡보장 레짐으로 바뀌었는데 상승장용 롱 포지션을 보유 중인 경우
+        # 손절/익절 대기 없이 시장가 즉시 매도하여 인버스/헤징 ETF 매수 체력(Buying Power)을 확보함
+        _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
+        if current_regime in bear_regimes or current_regime in choppy_regimes:
+            if symbol not in _allowed_in_bear:
+                reason = f"REGIME_ROTATION_EXIT: Market turned to {current_regime}. Freeing up cash for inverse/hedging."
+                logger.warning("🚨 [REGIME_GUARD] Force exiting long position {} | Reason: {}", symbol, reason)
+                return ExitSignal("SELL_ALL", reason, price, pnl_pct)
+
         return None
+
     
     def _check_trailing_stop(self, pos: Position, price: float,
                             atr: float, cfg: PhaseConfig) -> Optional[ExitSignal]:

@@ -171,21 +171,17 @@ class DynamicScreener:
         except Exception as tr_err:
             logger.error("Failed to inject theme radar candidates: {}", tr_err)
 
-        # Dynamic Downtrend Ticker Injection (Relative Strength & Hedging)
-        try:
-            import kis_data as _kd
-            _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
-            if _spy_df is not None and len(_spy_df) >= 22:
-                _spy_close = _spy_df['Close']
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
                 if _spy_current < _spy_sma20:
                     inverse_cands = self._screen_inverse()
                     defensive_cands = self._screen_defensive()
-                    candidates = list(set(candidates + inverse_cands + defensive_cands))
-                    logger.info("Downtrend detected in screener (SPY < SMA20). Injected {} inverse/defensive candidates.", len(inverse_cands) + len(defensive_cands))
+                    # [STRATEGY UPGRADE] 하락장 진입 시 일반 종목 매수 방지를 위해 후보 풀 전체를 인버스/방어주로 강제 치환
+                    candidates = list(dict.fromkeys(inverse_cands + defensive_cands))
+                    logger.warning("⚠️ [DOWNTREND_GUARD] SPY (${:.2f}) < SMA20 (${:.2f}). Force replacing screener pool with {} inverse/defensive candidates.", _spy_current, _spy_sma20, len(candidates))
         except Exception as e:
-            logger.debug("Failed to inject downtrend candidates in screener: {}", e)
+            logger.debug("Failed to check SPY downtrend guard: {}", e)
+
 
         # 제외 목록 적용 — 보유/최근 거래 종목 제거
         candidates = [c for c in candidates if c not in _exclude]
