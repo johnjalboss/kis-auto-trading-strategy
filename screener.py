@@ -427,14 +427,16 @@ class DynamicScreener:
                     return
                     
                 dist_from_ema20 = ((today_close - today_ema20) / today_ema20) * 100
-                if dist_from_ema20 > 5.0: # max 5% extension from EMA20
+                if dist_from_ema20 > 12.0:  # [FIX] 5% -> 12%: 모멘텀이 강한 성장주는 EMA20 위 8~12%도 정상
                     return
                 
-                # 3. Consolidation Squeeze Volatility (prior 20 days daily volatility <= 1.8%)
+                # 3. Consolidation Squeeze Volatility
+                # [CRITICAL FIX] 1.8% 제한 삭제 → 성장주(NVDA, META 등) ATR 2~4% 정상 진동폭 허용
+                # 구) 1.8% 제한 = 담배, 코카콜라, 유틸리티 자연선택 -> 폼프/잡주 주식만 5% 이상으로 차단
                 prior_close = prior_history["Close"].tail(20)
                 daily_returns = prior_close.pct_change().dropna()
                 prior_volatility = float(daily_returns.std() * 100)
-                if prior_volatility > 1.8:
+                if prior_volatility > 5.0:  # 극단적 포지/턌니주식만 제외, 일반 성장주 수용
                     return
                 
                 # 4. Breakouts & Crosses
