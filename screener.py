@@ -133,14 +133,31 @@ class DynamicScreener:
             mode = ScreenMode.BREAKOUT
             candidates = self._screen_breakout()
 
+        # ============================================================
+        # [RS MOMENTUM ENGINE] 상대강도(Relative Strength) 모멘텀 랭킹
+        # ============================================================
+        # 30년간 학술적으로 검증된 가장 단순하고 강력한 종목 선정 기준:
+        # SPY 대비 3개월 + 6개월 동안 가장 강하게 오른 종목 = 앞으로도 계속 오를 확률 최고
+        # (Jegadeesh & Titman 1993 모멘텀 팩터 - 업계 표준)
+        rs_top_candidates = []
+        if regime != MarketRegime.RISK_OFF:  # 상승/중립장에서만 RS 모멘텀 적용
+            try:
+                rs_top_candidates = self._rank_by_relative_strength(exclude=_exclude)
+                if rs_top_candidates:
+                    logger.info("[RS_ENGINE] Relative Strength top {} stocks: {}", len(rs_top_candidates), rs_top_candidates[:10])
+                    candidates = list(dict.fromkeys(rs_top_candidates + candidates))
+            except Exception as rs_err:
+                logger.warning("[RS_ENGINE] RS ranking failed: {}", rs_err)
+
         # Inject Local Smart Money candidates first (yield maximization)
         try:
             smart_money_cands = self._gather_smart_money_candidates()
             if smart_money_cands:
-                logger.info("🔑 Local Smart Money Screener: Found {} candidates. Injecting at top.", len(smart_money_cands))
+                logger.info("Local Smart Money Screener: Found {} candidates. Injecting.", len(smart_money_cands))
                 candidates = list(dict.fromkeys(smart_money_cands + candidates))
         except Exception as sm_err:
             logger.error("Failed to inject local smart money candidates: {}", sm_err)
+
 
         # 🎯 Inject Theme Radar recommended candidates (Top picks)
         try:
@@ -277,6 +294,129 @@ class DynamicScreener:
             timestamp=datetime.now()
         )
     
+    def _rank_by_relative_strength(self, top_n: int = 30, exclude: set = None) -> List[str]:
+        """
+        [핵심] 상대강도(RS) 모멘텀 랭킹 엔진
+        
+        Jegadeesh & Titman(1993) 모멘텀 팩터 구현:
+        - 3개월 + 6개월 수익률 기준 SPY 대비 상대강도 계산
+        - 상위 종목 = 계속 오를 확률 가장 높음
+        - 50일선 위 + 거래량 확인 필터 추가
+        
+        Args:
+            top_n: 반환할 상위 종목 수
+            exclude: 제외할 종목 집합 (현재 보유 종목 등)
+        
+        Returns:
+            RS 상위 종목 티커 리스트 (점수 높은 순)
+        """
+        import kis_data
+        import concurrent.futures
+        import threading
+        import random
+        
+        exclude = exclude or set()
+        
+        # SPY 기준 데이터 로드
+        spy_ret_3m = 0.0
+        spy_ret_6m = 0.0
+        try:
+            spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
+            if spy_df is not None and len(spy_df) >= 65:
+                spy_ret_3m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-65]) - 1) * 100
+                spy_ret_6m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[0]) - 1) * 100
+        except Exception:
+            pass
+        
+        # 유니버스에서 방어주/인버스ETF 제외 (RS 모멘텀은 성장/시클리컬 섹터가 대상)
+        defensive_set = {
+            "KO", "PEP", "WMT", "PG", "JNJ", "MO", "PM", "SJM", "K", "GIS", "CL",
+            "NEE", "DUK", "SO", "ED", "AEP", "XEL", "WEC", "ES", "EXC", "D",
+            "T", "VZ", "CMCSA", "MRK", "PFE", "BMY", "ABBV",
+            "SQQQ", "PSQ", "SPXU", "SH", "SDS", "SOXS", "TZA", "TECS", "FAZ"
+        }
+        all_symbols = [s for s in list(BASE_UNIVERSE) if s not in exclude and s not in defensive_set]
+        
+        # 샘플링: 최대 400종목 (API 부하 방지)
+        import config as _cfg
+        max_scan = min(400, getattr(_cfg, 'SCREENER_MAX_CANDIDATES', 330))
+        random.shuffle(all_symbols)
+        symbols_to_scan = all_symbols[:max_scan]
+        
+        rs_scores = []  # (symbol, rs_score)
+        _lock = threading.Lock()
+        
+        def _compute_rs(sym: str):
+            try:
+                df = kis_data.get_daily_ohlcv(sym, days=135)
+                if df is None or len(df) < 25:
+                    return
+                
+                close = df['Close']
+                curr = float(close.iloc[-1])
+                
+                # 50일 이동평균선 위에 있어야 함 (추세 확인)
+                ma50 = close.rolling(50).mean()
+                if len(ma50.dropna()) > 0 and curr < float(ma50.dropna().iloc[-1]):
+                    return
+                
+                # 3개월(약 65거래일) 수익률
+                ret_3m = 0.0
+                if len(close) >= 65:
+                    ret_3m = (curr / float(close.iloc[-65]) - 1) * 100
+                elif len(close) >= 20:
+                    ret_3m = (curr / float(close.iloc[0]) - 1) * 100
+                else:
+                    return
+                
+                # 6개월(약 130거래일) 수익률
+                ret_6m = 0.0
+                if len(close) >= 130:
+                    ret_6m = (curr / float(close.iloc[-130]) - 1) * 100
+                else:
+                    ret_6m = ret_3m  # 데이터 부족 시 3M으로 대체
+                
+                # 거래량 확인 (20일 평균 대비 현재 거래량)
+                if 'Volume' in df.columns and len(df) >= 20:
+                    avg_vol = float(df['Volume'].iloc[-20:].mean())
+                    curr_vol = float(df['Volume'].iloc[-1])
+                    vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
+                    if vol_ratio < 0.5:  # 거래량 너무 낮으면 제외
+                        return
+                
+                # SPY 대비 상대강도 점수 (3M 가중치 0.6, 6M 가중치 0.4)
+                rs_score = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
+                
+                # SPY보다 못한 종목 제외 (하위 RS는 계속 하위)
+                if rs_score < -2.0:
+                    return
+                
+                with _lock:
+                    rs_scores.append((sym, rs_score, ret_3m, ret_6m))
+                    
+            except Exception:
+                pass
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            try:
+                list(concurrent.futures.as_completed(
+                    {executor.submit(_compute_rs, sym): sym for sym in symbols_to_scan},
+                    timeout=90
+                ))
+            except concurrent.futures.TimeoutError:
+                pass
+        
+        # RS 점수 기준 내림차순 정렬
+        rs_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        if rs_scores:
+            top = rs_scores[:5]
+            logger.info("[RS_ENGINE] Top RS stocks: " + 
+                       " | ".join(f"{s}(RS:{r:.1f}, 3M:{m:.1f}%, 6M:{n:.1f}%)" 
+                                  for s, r, m, n in top))
+        
+        return [s for s, *_ in rs_scores[:top_n]]
+
     # ==============================================
     # Screening Methods (KIS API 기반)
     # ==============================================
