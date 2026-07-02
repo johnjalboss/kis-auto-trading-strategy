@@ -5,6 +5,8 @@ from typing import Dict, List, Any, Tuple
 
 # US Theme Tracker DB Path
 DB_PATH = r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\us_stocks_data.db"
+if not os.path.exists(DB_PATH):
+    DB_PATH = "/home/ubuntu/us-theme-tracker/us_stocks_data.db"
 
 class ThemeRadarAdapter:
     """

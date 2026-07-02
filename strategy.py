@@ -608,8 +608,8 @@ class StrategyEngine:
 
         # 5. Market Breadth Guard with High-Score (>= 95) Bypass
         try:
-            import kis_data as _kd
-            _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
+            import yfinance as yf
+            _spy_df = yf.download("SPY", period="1mo")
             if _spy_df is not None and len(_spy_df) >= 22:
                 _spy_close = _spy_df['Close']
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
@@ -1180,10 +1180,10 @@ class StrategyEngine:
             return ExitSignal("SELL_ALL", reason, price, pnl_pct)
             
         # ── [STRATEGY UPGRADE] 레짐 전환 시 즉시 강제 청산 (현금 확보) ──
-        # 시장이 하락/횡보장 레짐으로 바뀌었는데 상승장용 롱 포지션을 보유 중인 경우
+        # 시장이 하락장 레짐으로 바뀌었는데 상승장용 롱 포지션을 보유 중인 경우
         # 손절/익절 대기 없이 시장가 즉시 매도하여 인버스/헤징 ETF 매수 체력(Buying Power)을 확보함
         _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
-        if current_regime in bear_regimes or current_regime in choppy_regimes:
+        if current_regime in bear_regimes:
             if pos.symbol not in _allowed_in_bear:
                 reason = f"REGIME_ROTATION_EXIT: Market turned to {current_regime}. Freeing up cash for inverse/hedging."
                 logger.warning("🚨 [REGIME_GUARD] Force exiting long position {} | Reason: {}", pos.symbol, reason)

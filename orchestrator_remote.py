@@ -59,6 +59,7 @@ class BotOrchestrator:
         self._daily_upgrade_count = 0
         self._last_trade_date = None
         self._signal_executor = ThreadPoolExecutor(max_workers=10)
+        self._recently_sold = {}  # symbol -> datetime of sale
         
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
         
@@ -348,10 +349,20 @@ class BotOrchestrator:
             from macro import MarketRegime
             regime = MarketRegime.RISK_OFF if self.state.global_risk_level == "RISK_OFF" else MarketRegime.RISK_ON
             
+            # Exclude currently held symbols + recently sold symbols (within 4-hour cooldown)
             current_positions = self.strategy.get_all_positions()
             held_symbols = set(current_positions.keys())
             
-            result = screener.screen(regime=regime)
+            cooldown_period = timedelta(hours=4)
+            recently_sold_exclude = {
+                sym for sym, sold_time in getattr(self, '_recently_sold', {}).items()
+                if datetime.now() - sold_time < cooldown_period
+            }
+            exclude_symbols = held_symbols | recently_sold_exclude
+            if recently_sold_exclude:
+                logger.info("Excluding recently sold symbols from screener: {}", recently_sold_exclude)
+            
+            result = screener.screen(regime=regime, exclude_symbols=exclude_symbols)
             self.state.target_universe = result.tickers if result and result.tickers else []
             
             # [Bear Market Inverse Hedging] 하락장 또는 RISK_OFF 시 인버스 ETF(SQQQ) 강제 진입 유니버스 주입
@@ -611,6 +622,19 @@ class BotOrchestrator:
                         except Exception:
                             existing_score = 0
                         
+                        # [FIX] PnL-adjusted scoring: penalize losing positions
+                        # Penalty: each 1% loss = -5 points (capped at -30 for >6% loss)
+                        if curr_price > 0:
+                            pnl_pct = (curr_price - pos.entry_price) / pos.entry_price
+                            if pnl_pct < 0:
+                                pnl_penalty = min(30, int(abs(pnl_pct) * 100 * 5))
+                                existing_score -= pnl_penalty
+                                logger.debug(
+                                    "UPGRADE re-score: {} raw={} pnl={:.1%} penalty={} adjusted={}",
+                                    sym, existing_score + pnl_penalty,
+                                    pnl_pct, pnl_penalty, existing_score
+                                )
+                        
                         if existing_score < worst_score:
                             worst_score = existing_score
                             worst_sym = sym
@@ -641,17 +665,22 @@ class BotOrchestrator:
                             import time
                             time.sleep(1)  # Brief pause for order processing
                             bp = self.trader.get_buying_power()
-                            if bp > 5 and best_buy_signal.entry_price > 0:
+                            
+                            # [LOGICAL BUG FIX] Account for KIS API delay in updating buying power after sell.
+                            approx_proceeds = worst_pos.quantity * sell_price
+                            expected_bp = bp + approx_proceeds * 0.985  # 1.5% margin for slippage/fees
+                            
+                            if expected_bp > 5 and best_buy_signal.entry_price > 0:
                                 # Re-calculate Total Portfolio Value (Net Liquidation) after sell
                                 positions_after = self.strategy.get_all_positions()
-                                total_equity = bp
+                                total_equity = bp + approx_proceeds  # Use expected total equity
                                 for s, p in positions_after.items():
                                     ep = self.trader.get_price(s)
                                     total_equity += (ep if ep > 0 else p.entry_price) * p.quantity
 
                                 # Recalculate empty slots after sell (it should be at least 1)
                                 empty_slots_after_sell = max(1, config.MAX_POSITIONS - len(self.strategy.get_all_positions()))
-                                target_capital = bp / empty_slots_after_sell
+                                target_capital = expected_bp / empty_slots_after_sell
 
                                 # Safety cap: Max 40% of total equity per position
                                 max_position_value = total_equity * 0.40
@@ -659,11 +688,11 @@ class BotOrchestrator:
                                     target_capital = max_position_value
 
                                 raw_qty = int(target_capital / best_buy_signal.entry_price)
-                                max_by_bp = int(bp / best_buy_signal.entry_price)
+                                max_by_bp = int(expected_bp / best_buy_signal.entry_price)  # Use expected_bp
                                 qty = min(raw_qty, max_by_bp)
                                 
                                 # Allow minor limit violation (up to 50% over target capital) for 1-share entry
-                                if qty == 0 and best_buy_signal.entry_price <= target_capital * 1.5:
+                                if qty == 0 and best_buy_signal.entry_price <= target_capital * 1.5 and best_buy_signal.entry_price <= expected_bp:
                                     qty = 1
                                     logger.info("UPGRADE Sizer override for {}: 1 share allowed via minor limit violation", best_buy_signal.symbol)
 
@@ -837,6 +866,9 @@ class BotOrchestrator:
             if order.status != OrderStatus.REJECTED:
                 logger.info("??Trade Executed: {} {} x {} via smart_order ({})", 
                            action, symbol, qty, order.order_type.value)
+                
+                if action == "SELL":
+                    self._recently_sold[symbol] = datetime.now()
                 
                 # Send Trade Notification (Immediate for ADAPTIVE/MARKET, 
                 # Threaded orders like TWAP/ICEBERG handle their own notifications)
@@ -1120,7 +1152,7 @@ class BotOrchestrator:
                     # EOD Close All Check (5 minutes before close: 15:55 US/Eastern)
                     now_est = scheduler.now_est()
                     is_eod_close_time = (now_est.hour == 15 and now_est.minute >= 55)
-                    if is_eod_close_time:
+                    if is_eod_close_time and getattr(config, 'EOD_CLOSE_ALL_ENABLED', False):
                         if not getattr(self, '_eod_closed_today', False):
                             logger.warning("🚨 [EOD_CLOSE_ALL] 15:55 ET reached! Enforcing EOD close all positions...")
                             try:

@@ -172,8 +172,8 @@ class DynamicScreener:
             logger.error("Failed to inject theme radar candidates: {}", tr_err)
         # [STRATEGY UPGRADE] 하락장 진입 시 일반 종목 매수 방지를 위해 후보 풀 전체를 인버스/방어주로 강제 치환
         try:
-            import kis_data as _kd
-            _spy_df = _kd.get_daily_ohlcv("SPY", days=25)
+            import yfinance as yf
+            _spy_df = yf.download("SPY", period="1mo")
             if _spy_df is not None and len(_spy_df) >= 22:
                 _spy_close = _spy_df['Close']
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
@@ -1116,13 +1116,21 @@ class DynamicScreener:
                 return None
             
             # ============================================================
-            # 🔵 LIQUIDITY FILTER — 유동성 낮은 종목 제거
-            # 평균 거래량 200,000 미만 → 스크리너에서 제외 (수수료/스프레드 과다)
+            # 🔵 LIQUIDITY FILTER — 유동성 낮은 종목 및 페니주 제거
+            # - 주가 $5.0 미만 페니주 제외 (스프레드 비율 과다 및 작전 방지)
+            # - 20일 평균 거래대금(Dollar Volume) $2M 미만 제외 (슬리피지 최소화)
             # ============================================================
+            last_close = float(hist['Close'].iloc[-1])
             avg_volume_20d = float(hist['Volume'].tail(20).mean())
-            if avg_volume_20d < 200_000:
-                logger.debug("LIQUIDITY_FILTER: {} avg vol {:.0f} < 200k — skipped",
-                             symbol, avg_volume_20d)
+            avg_dollar_volume_20d = last_close * avg_volume_20d
+            
+            if last_close < 5.0:
+                logger.debug("LIQUIDITY_FILTER: {} price ${:.2f} < 5.0 — skipped", symbol, last_close)
+                return None
+                
+            if avg_dollar_volume_20d < 2_000_000:
+                logger.debug("LIQUIDITY_FILTER: {} avg dollar vol ${:.0f} < 2M — skipped",
+                             symbol, avg_dollar_volume_20d)
                 return None
             
             # ============================================================
@@ -1139,7 +1147,6 @@ class DynamicScreener:
                 pass
             
             # Build info dict from OHLCV data (proxy for yf.Ticker.info)
-            last_close = float(hist['Close'].iloc[-1])
             avg_volume = float(hist['Volume'].mean())
             current_volume = float(hist['Volume'].iloc[-1])
             price_data = kis_data.get_current_price(symbol)

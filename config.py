@@ -62,17 +62,15 @@ if MAX_POSITION_PCT >= 1.0:
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 스윙 최대 5종목 동시 보유
 
 # ==============================================
-# Position Upgrade (교체 매매)
-# ==============================================
+# [FIX] UPGRADE 교체매매 비활성화 — gap 25 -> 999 (사실상 비활성화)
+# 이전에 UPGRADE가 수시로 발동하여 멀쩡한 포지션을 소손실로 강제 청산하고 있었음
+UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "999"))  # [DISABLED]
 
-# 새 종목 점수가 보유 종목 점수보다 이 이상 높으면 교체
-UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "25"))
-
-# 매수 후 최소 보유 시간 (분) — 이 시간 전에는 교체 불가
+# 매수 후 최소 보유 시간 (분)
 UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "120"))
 
 # 하루 최대 교체 횟수
-UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "5"))
+UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "2"))
 
 # 수익중인 종목은 교체하지 않음 (이 %이상 수익이면 보호)
 UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02"))  # 2%
@@ -81,22 +79,19 @@ UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02
 # Strategy Parameters
 # ==============================================
 
-# Take profit and stop loss — 스윙 트레이딩 기준
-# SL: 5% — 대형주 ATR 2~3%의 2배 = 노이즈 흡수하면서 리스크 통제
-# TP: 12% — R/R 2.4:1 유지 (승률 42% 이상이면 기댓값 양수)
-# BEAR_HARD_STOP: 5% — 약세장에서도 스윙 노이즈 흡수 필요 (3%는 1xATR = 단타 기준)
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.12"))       # 12% TP (스윙 표준, 유지)
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.05"))           # 5% SL (2x ATR, 4%→5%)
-BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.05")) # 5% (약세장도 동일, 3%→5%)
-ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.0")) # 2x ATR (1.5→2.0)
-ECON_EVENT_GUARD_ENABLED = False  # Disable daily econ calendar block to trade normally on CPI/PCE days
+# [FIX] Stop-loss 5% -> 7%: 성장주(NVDA, META 등) 일중 변동성 2~4%를 노이즈로 흡수
+# 이전: 1.2%~1.5% 수준에서 손절 당하는 사례 15건+ 확인 (순수 노이즈 손절)
+TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.12"))       # 12% TP (유지)
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.07"))           # [FIX] 5% -> 7% SL
+BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.07")) # [FIX] 5% -> 7%
+ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.5")) # [FIX] 2.0 -> 2.5x ATR
+ECON_EVENT_GUARD_ENABLED = False
 
+# Trailing Stop — [FIX] 8% 수익 이상부터 트레일링 (기존 6%)
+TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.08"))  # [FIX] 6% -> 8%
+TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.035"))        # [FIX] 3% -> 3.5%
 
-# Trailing Stop — 수익이 충분히 쌓인 후에 트레일링 시작
-TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.06"))  # 6% 수익부터 트레일링 (4%→6%)
-TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.03"))         # 고점 -3% 트레일링 (2%→3%)
-
-# Daily trade limit — 스윙 진입 기회 충분히 허용
+# Daily trade limit
 MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "15"))
 
 # ==============================================
