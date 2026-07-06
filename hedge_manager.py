@@ -132,11 +132,17 @@ class HedgeManager:
             # Determine regime based on VIX
             import yfinance as yf
             vix_df = yf.Ticker("^VIX").history(period="1d")
-            vix = vix_df["Close"].iloc[-1] if not vix_df.empty else 15.0
+            if not vix_df.empty:
+                vix_series = vix_df["Close"]
+                if type(vix_series).__name__ == 'DataFrame':
+                    vix_series = vix_series.iloc[:, 0]
+                vix = float(vix_series.iloc[-1])
+            else:
+                vix = 15.0
             
-            if vix > 30:
+            if vix > 30.0:
                 regime = "CRASH"
-            elif vix > 22:
+            elif vix > 22.0:
                 regime = "FEAR"
             else:
                 regime = "BULL"

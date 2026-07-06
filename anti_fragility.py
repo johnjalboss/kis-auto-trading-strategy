@@ -143,20 +143,32 @@ class AntiFrагility:
         try:
             import yfinance as yf
             vix_df = yf.Ticker("^VIX").history(period="5d")
-            vix = vix_df["Close"].iloc[-1] if not vix_df.empty else 15.0
+            if not vix_df.empty:
+                vix_series = vix_df["Close"]
+                if type(vix_series).__name__ == 'DataFrame':
+                    vix_series = vix_series.iloc[:, 0]
+                vix = float(vix_series.iloc[-1])
+            else:
+                vix = 15.0
             
             spy_df = yf.Ticker("SPY").history(period="10d")
             if not spy_df.empty:
-                spy_max = spy_df["High"].max()
-                spy_curr = spy_df["Close"].iloc[-1]
+                spy_high = spy_df["High"]
+                if type(spy_high).__name__ == 'DataFrame':
+                    spy_high = spy_high.iloc[:, 0]
+                spy_close = spy_df["Close"]
+                if type(spy_close).__name__ == 'DataFrame':
+                    spy_close = spy_close.iloc[:, 0]
+                spy_max = float(spy_high.max())
+                spy_curr = float(spy_close.iloc[-1])
                 drawdown = (spy_max - spy_curr) / spy_max * 100
             else:
                 drawdown = 0.0
                 
             score = 0.0
-            if vix > 35:
+            if vix > 35.0:
                 score -= 60.0
-            elif vix > 25:
+            elif vix > 25.0:
                 score -= 30.0
                 
             if drawdown > 8.0:
