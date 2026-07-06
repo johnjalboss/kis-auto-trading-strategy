@@ -33,8 +33,8 @@ class HiddenMarkovRegime:
         result = {'regime': MarketRegime.UNKNOWN.value, 'risk_score': 50, 'signals': []}
         
         try:
-            # We need broader context for regime detection (6mo of daily data)
-            df = yf.download(self.index_symbol, period='6mo', interval='1d', progress=False)
+            # We need broader context for regime detection (1yr of daily data to calculate 200 SMA)
+            df = yf.download(self.index_symbol, period='1y', interval='1d', progress=False)
             
             if df is None or len(df) < 50:
                 logger.warning("HiddenMarkovRegime: Insufficient data to build model.")
@@ -54,6 +54,11 @@ class HiddenMarkovRegime:
             
             vol_ratio = short_vol / (long_vol if long_vol > 0 else 0.01)
             
+            # 200-day SMA를 구하여 장기 추세 필터링
+            sma200 = df['Close'].rolling(200).mean().iloc[-1] if len(df) >= 200 else df['Close'].mean()
+            curr_price = float(df['Close'].iloc[-1])
+            is_above_200ma = curr_price > sma200
+
             # State mapping matrix logic
             if short_trend > 0:
                 if vol_ratio > 1.3:
@@ -66,15 +71,22 @@ class HiddenMarkovRegime:
                     state = MarketRegime.CHOPPY
                     risk = 30
             else:
-                if vol_ratio > 2.0:
-                    state = MarketRegime.BEAR_PANIC
-                    risk = 90  # Critical Risk-Off
-                elif short_trend < long_trend:
-                    state = MarketRegime.BEAR_NORMAL
-                    risk = 70
-                else:
+                # [CRITICAL FIX] 지수가 200일선 위에 있으면 단기 하락이 있어도 절대 BEAR로 판정하지 않음.
+                # 단순 조정(CHOPPY)으로 우회시켜 인버스 매수 방지 및 롱 포지션 유지.
+                if is_above_200ma:
                     state = MarketRegime.CHOPPY
-                    risk = 50
+                    risk = 40
+                else:
+                    if vol_ratio > 2.0:
+                        state = MarketRegime.BEAR_PANIC
+                        risk = 90  # Critical Risk-Off
+                    elif short_trend < long_trend:
+                        state = MarketRegime.BEAR_NORMAL
+                        risk = 70
+                    else:
+                        state = MarketRegime.CHOPPY
+                        risk = 50
+
                     
             result['regime'] = state.value
             result['risk_score'] = risk
