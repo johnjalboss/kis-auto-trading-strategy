@@ -1341,10 +1341,16 @@ class DynamicScreener:
             except Exception as tr_err:
                 logger.debug("Failed to calculate Theme Radar bonus for {}: {}", symbol, tr_err)
 
+            # If not in RISK_OFF, heavily penalize defensive stocks to avoid sluggish value traps
+            defensive_penalty = 0
+            if regime != MarketRegime.RISK_OFF and symbol in DEFENSIVE_UNIVERSE:
+                defensive_penalty = -25
+                logger.info("🛡️ [DEFENSIVE_PENALTY] {} is a defensive stock. Applying -25 penalty to prioritize growth/momentum.", symbol)
+
             # Clamp total score between 0 and 100
             total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
                        tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
-                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus))
+                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + defensive_penalty))
             
             # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
             if news_blacklist or pead_blacklist:

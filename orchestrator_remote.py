@@ -608,12 +608,18 @@ class BotOrchestrator:
                         if hold_minutes < config.UPGRADE_MIN_HOLD_MINUTES:
                             continue
                         
-                        # Check profit protection ??don't swap profitable positions
+                        # Check profit protection and loss lock-in prevention
                         curr_price = self.trader.get_price(sym)
                         if curr_price > 0:
                             pnl_pct = (curr_price - pos.entry_price) / pos.entry_price
                             if pnl_pct >= config.UPGRADE_PROFIT_PROTECT_PCT:
-                                continue  # 2%+ ? ???
+                                continue  # 2%+ profit protection: don't touch high-performing positions
+                            
+                            # [BUGFIX] Prevent selling losing positions to upgrade
+                            # - We should only upgrade flat or slightly profitable positions.
+                            # - If a position is at a loss of more than -1%, let it hit its stop loss; do not lock in losses via upgrade.
+                            if pnl_pct < -0.01:
+                                continue
                         
                         # Re-score existing position
                         try:
