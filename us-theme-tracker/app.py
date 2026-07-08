@@ -576,7 +576,20 @@ def sync_from_vps():
         return False
 
 
-@st.cache_data(ttl=900, show_spinner=False)   # 15분 캐시
+@st.cache_data(show_spinner=False)
+def _load_theme_cache_from_disk(cache_path, mtime):
+    try:
+        with open(cache_path, "r", encoding="utf-8") as f:
+            results = json.load(f)
+        if results:
+            df = pd.DataFrame(results)
+            df = df.sort_values("quality", ascending=False).reset_index(drop=True)
+            return df
+    except Exception as e:
+        raise RuntimeError(f"캐시 파일 파싱 오류: {e}")
+    return pd.DataFrame()
+
+
 def compute_theme_signals(max_themes=80, force_refresh=False, cache_mtime=0):
     """
     ★ 가속화 캐시 신호 엔진 ★
@@ -604,6 +617,7 @@ def compute_theme_signals(max_themes=80, force_refresh=False, cache_mtime=0):
                 if success:
                     st.toast("✅ VPS 동기화 성공!", icon="🟢")
                     st.cache_data.clear()
+                    cache_mtime = os.path.getmtime(cache_path)
                 else:
                     st.toast("⚠️ VPS 동기화 실패. 로컬 연산을 구동합니다.", icon="🟡")
                     run_local_batch = True
@@ -627,19 +641,16 @@ def compute_theme_signals(max_themes=80, force_refresh=False, cache_mtime=0):
             try:
                 subprocess.run([python_bin, batch_script], check=True)
                 st.cache_data.clear()
+                cache_mtime = os.path.getmtime(cache_path)
             except Exception as e:
                 st.error(f"실시간 배치 구동 실패: {e}")
                 
     if os.path.exists(cache_path):
         try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                results = json.load(f)
-            if results:
-                df = pd.DataFrame(results)
-                df = df.sort_values("quality", ascending=False).reset_index(drop=True)
-                return df
+            mtime = os.path.getmtime(cache_path)
+            return _load_theme_cache_from_disk(cache_path, mtime)
         except Exception as e:
-            st.error(f"캐시 파일 파싱 오류: {e}")
+            st.error(str(e))
             
     return pd.DataFrame()
 
