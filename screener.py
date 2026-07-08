@@ -170,19 +170,20 @@ class DynamicScreener:
                 candidates = list(dict.fromkeys(theme_cands + candidates))
         except Exception as tr_err:
             logger.error("Failed to inject theme radar candidates: {}", tr_err)
-        # [STRATEGY UPGRADE] 하락장 진입 시 일반 종목 매수 방지를 위해 후보 풀 전체를 인버스/방어주로 강제 치환
+        # [STRATEGY UPGRADE] 중장기 하락장 진입 시 일반 종목 매수 방지를 위해 후보 풀 전체를 인버스/방어주로 강제 치환
+        # - 단기 노이즈(SMA20) 대신 중기 추세(SMA50)를 기준으로 하여 불필요한 공포 매수 및 밸류트랩(방어주) 강제 전환 방지
         try:
             import yfinance as yf
-            _spy_df = yf.download("SPY", period="1mo")
-            if _spy_df is not None and len(_spy_df) >= 22:
+            _spy_df = yf.download("SPY", period="6mo")
+            if _spy_df is not None and len(_spy_df) >= 50:
                 _spy_close = _spy_df['Close']
-                _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
+                _spy_sma50 = float(_spy_close.rolling(50).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
-                if _spy_current < _spy_sma20:
+                if _spy_current < _spy_sma50:
                     inverse_cands = self._screen_inverse()
                     defensive_cands = self._screen_defensive()
                     candidates = list(dict.fromkeys(inverse_cands + defensive_cands))
-                    logger.warning("⚠️ [DOWNTREND_GUARD] SPY (${:.2f}) < SMA20 (${:.2f}). Force replacing screener pool with {} inverse/defensive candidates.", _spy_current, _spy_sma20, len(candidates))
+                    logger.warning("⚠️ [DOWNTREND_GUARD] SPY (${:.2f}) < SMA50 (${:.2f}). Force replacing screener pool with {} inverse/defensive candidates.", _spy_current, _spy_sma50, len(candidates))
         except Exception as e:
             logger.debug("Failed to check SPY downtrend guard: {}", e)
 
