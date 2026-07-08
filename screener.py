@@ -1341,16 +1341,48 @@ class DynamicScreener:
             except Exception as tr_err:
                 logger.debug("Failed to calculate Theme Radar bonus for {}: {}", symbol, tr_err)
 
-            # If not in RISK_OFF, heavily penalize defensive stocks to avoid sluggish value traps
-            defensive_penalty = 0
-            if regime != MarketRegime.RISK_OFF and symbol in DEFENSIVE_UNIVERSE:
-                defensive_penalty = -25
-                logger.info("🛡️ [DEFENSIVE_PENALTY] {} is a defensive stock. Applying -25 penalty to prioritize growth/momentum.", symbol)
+            # ── [CRITICAL FIX] Dynamic Relative Strength (RS) Bonus/Penalty ──
+            # - Evaluates if the stock is actually outperforming SPY (strong trend leader)
+            # - Overcomes static defensive blocks by naturally favoring leaders in bull markets, 
+            #   and defensive plays ONLY if they are genuinely outperforming in bear/choppy markets.
+            rs_bonus = 0
+            try:
+                # Load SPY data
+                spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
+                if spy_df is not None and len(spy_df) >= 65 and len(hist) >= 65:
+                    # SPY returns
+                    spy_close = spy_df['Close']
+                    spy_ret_3m = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-65]) - 1) * 100
+                    spy_ret_6m = (float(spy_close.iloc[-1]) / float(spy_close.iloc[0]) - 1) * 100 if len(spy_close) >= 130 else spy_ret_3m
+                    
+                    # Stock returns
+                    close = hist['Close']
+                    curr = float(close.iloc[-1])
+                    ret_3m = (curr / float(close.iloc[-65]) - 1) * 100
+                    ret_6m = (curr / float(close.iloc[0]) - 1) * 100 if len(close) >= 130 else ret_3m
+                    
+                    # RS Score (3M 60% / 6M 40%)
+                    rs_val = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
+                    
+                    if rs_val > 15:
+                        rs_bonus = 20  # Alpha leader (explosive momentum)
+                        logger.info("🔥 [RS_BONUS] {} is leading SPY by {:.1f}%! Applying +20 bonus.", symbol, rs_val)
+                    elif rs_val > 5:
+                        rs_bonus = 10  # Moderate outperformance
+                        logger.info("📈 [RS_BONUS] {} is outperforming SPY by {:.1f}%! Applying +10 bonus.", symbol, rs_val)
+                    elif rs_val < -10:
+                        rs_bonus = -30  # Stagnant value trap / severe underperformance
+                        logger.info("🚨 [RS_PENALTY] {} is lagging SPY by {:.1f}%! Applying -30 penalty.", symbol, rs_val)
+                    elif rs_val < -3:
+                        rs_bonus = -10  # Weak performer
+                        logger.info("⚠️ [RS_PENALTY] {} is lagging SPY by {:.1f}%! Applying -10 penalty.", symbol, rs_val)
+            except Exception as e:
+                logger.debug("Failed to calculate RS bonus for {}: {}", symbol, e)
 
             # Clamp total score between 0 and 100
             total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
                        tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
-                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + defensive_penalty))
+                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + rs_bonus))
             
             # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
             if news_blacklist or pead_blacklist:
@@ -1449,6 +1481,14 @@ class DynamicScreener:
             return 0
             
         close = hist['Close']
+        
+        # [CRITICAL FIX] Only award VCP score if stock is above its 50-day SMA.
+        # This prevents awarding points for tight consolidation in a downtrend (bear flags).
+        if len(hist) >= 50:
+            sma50 = close.rolling(50).mean().iloc[-1]
+            if close.iloc[-1] < sma50:
+                return 0
+                
         sma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
         
