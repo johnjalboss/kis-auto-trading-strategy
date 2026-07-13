@@ -912,16 +912,20 @@ class BotOrchestrator:
                                 #  =   
                                 _atr_qty = int(_risk_amount / _stop_dist) if _stop_dist > 0 else 1
                                 
-                                #        
-                                _slot_qty = int(bp / empty_slots / signal.entry_price) if signal.entry_price > 0 else 1
+                                # Sizing: Equal-weight slot capital allocation based on Total Equity (not temporary cash/BP)
+                                # This avoids under-sizing positions due to T+2 settlement delays.
+                                _target_capital = total_equity / config.MAX_POSITIONS
+                                _slot_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 1
                                 raw_qty = min(_atr_qty, _slot_qty)
                                 logger.debug("ATR_SIZING {}: risk=${:.0f} atr={:.2f}  qty={} (slot={} atr={})",
                                              symbol, _risk_amount, _atr, raw_qty, _slot_qty, _atr_qty)
                             else:
-                                raw_qty = int(bp / empty_slots / signal.entry_price) if signal.entry_price > 0 else 0
+                                _target_capital = total_equity / config.MAX_POSITIONS
+                                raw_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 0
                         except Exception as _atr_e:
                             logger.debug("ATR sizing failed: {}", _atr_e)
-                            raw_qty = int(bp / empty_slots / signal.entry_price) if signal.entry_price > 0 else 0
+                            _target_capital = total_equity / config.MAX_POSITIONS
+                            raw_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 0
                         
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
                         # [v1.1.8] Raised from 30% → 55% — 30% was rejecting most quality stocks on small accounts
@@ -937,7 +941,6 @@ class BotOrchestrator:
                         qty = min(raw_qty, max_by_bp)
                         
                         # Allow minor limit violation (up to 50% over target capital) for 1-share entry, but never exceed max concentration
-                        _target_capital = bp / empty_slots
                         if qty == 0 and signal.entry_price <= _target_capital * 2.0 and signal.entry_price <= total_equity * MAX_STOCK_CONCENTRATION_PCT:
                             qty = 1
                             logger.info("Sizer override for {}: 1 share allowed via minor limit violation", symbol)
@@ -1045,12 +1048,8 @@ class BotOrchestrator:
                             expected_bp = bp + approx_proceeds * 0.985  # 1.5% margin for slippage/fees
                             
                             if expected_bp > 5 and best_buy_signal.entry_price > 0:
-                                # Recalculate empty slots after sell with dynamic max positions (Macro Shield bypassed)
-                                current_regime = getattr(self.strategy, '_last_regime', '')
-                                dynamic_max_positions = config.MAX_POSITIONS
-                                
-                                empty_slots_after_sell = max(1, dynamic_max_positions - len(self.strategy.get_all_positions()))
-                                target_capital = expected_bp / empty_slots_after_sell
+                                # Sizing: Equal-weight slot capital allocation based on Total Equity
+                                target_capital = total_equity / config.MAX_POSITIONS
 
                                 # Safety cap: Max 40% of total equity per position
                                 max_position_value = total_equity * 0.40
@@ -1097,6 +1096,77 @@ class BotOrchestrator:
         # Note: Primary exit check moved to top, but we keep this as a rapid safety sweep
         # after any buying activity.
         pass
+
+    # ==========================================
+    # PHASE 6: QUANT REBALANCING & SCALE-UP
+    # ==========================================
+    def phase_6_rebalance_underallocated_positions(self):
+        """
+        T+2 정산 지연으로 인해 매수 당일 1주만 사지고 현금이 남는 현상을 방지합니다.
+        예수금이 정산되어 들어오면, 목표 슬롯 비중(20%)보다 현저히 적게 담긴 종목들을 
+        남는 Buying Power 범위 내에서 자동으로 추가 매수(Scale-up)하여 슬롯을 가득 채웁니다.
+        """
+        logger.info("=" * 60)
+        logger.info("[PHASE 6] Rebalancing Under-allocated Positions")
+        logger.info("=" * 60)
+        
+        try:
+            positions = self.strategy.get_all_positions()
+            if not positions:
+                logger.info("No held positions to rebalance.")
+                return
+                
+            from composite_signal import get_composite_engine, ActionType
+            engine = get_composite_engine()
+            
+            bp = self.trader.get_buying_power()
+            # Calculate total equity
+            total_equity = bp
+            for sym, pos in positions.items():
+                p_price = self.trader.get_price(sym)
+                if p_price > 0:
+                    total_equity += p_price * pos.quantity
+                else:
+                    total_equity += pos.entry_price * pos.quantity
+            
+            # Target capital per slot (e.g. 20% of portfolio for 5 positions)
+            target_slot_val = total_equity / config.MAX_POSITIONS
+            max_limit_val = total_equity * config.MAX_POSITION_PCT
+            target_val = min(target_slot_val, max_limit_val)
+            
+            logger.info("Target value per slot: ${:.2f} (Portfolio Equity: ${:.2f}, BP: ${:.2f})", 
+                        target_val, total_equity, bp)
+            
+            for symbol, pos in positions.items():
+                curr_price = self.trader.get_price(symbol)
+                if curr_price <= 0:
+                    continue
+                    
+                current_val = pos.quantity * curr_price
+                # If the position holds less than 75% of the target slot value
+                if current_val < target_val * 0.75:
+                    # Check signal score/action to prevent scaling up weak positions
+                    is_screened = symbol in getattr(self.state, 'screened_symbols', [])
+                    signal = engine.analyze(symbol, is_screened=is_screened)
+                    if signal.action not in [ActionType.STRONG_BUY, ActionType.BUY]:
+                        logger.info("SKIP REBALANCE {}: current action is {} (score: {}). No active buy edge.", 
+                                    symbol, signal.action.name, signal.composite_score)
+                        continue
+                        
+                    gap_dollars = target_val - current_val
+                    # Ensure we don't exceed remaining buying power and leave a $30 buffer
+                    allowed_dollars = min(gap_dollars, bp - 30.0)
+                    if allowed_dollars >= curr_price:
+                        buy_qty = int(allowed_dollars / curr_price)
+                        if buy_qty > 0:
+                            logger.info("🔍 [REBALANCE] {} under-allocated (${:.2f} < ${:.2f}) with score {} ({}). Scaling up by {} shares.", 
+                                        symbol, current_val, target_val, signal.composite_score, signal.action.name, buy_qty)
+                            self.phase_5_execute_trade(symbol, "BUY", buy_qty, curr_price, 
+                                                       f"REBALANCE_SCALE_UP: Fill slot to target ${target_val:.1f} (score: {signal.composite_score})")
+                            # Deduct from bp for subsequent loop items
+                            bp -= (buy_qty * curr_price)
+        except Exception as e:
+            logger.error("Failed to run phase 6 rebalancing: {}", e)
 
     # ==========================================
     # PHASE 5: EXECUTION & RISK MANAGEMENT
@@ -1801,6 +1871,14 @@ class BotOrchestrator:
                         logger.error("Periodic position sync failed: {}", se)
 
                     self._run_phase_4_cycle(engine)
+                    
+                    # ✦ PHASE 6: Position Rebalancing & Scale-up
+                    try:
+                        if not hasattr(self, '_last_rebalance_time') or (now - self._last_rebalance_time).total_seconds() > 900:
+                            self._last_rebalance_time = now
+                            self.phase_6_rebalance_underallocated_positions()
+                    except Exception as re_err:
+                        logger.error("Periodic rebalancing failed: {}", re_err)
                     
                     #  Phase 4.5: FAST EXIT LOOP 
                     # Instead of sleeping blindly for 10+ minutes (which causes 7% slippage on ),

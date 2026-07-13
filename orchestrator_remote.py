@@ -557,8 +557,9 @@ class BotOrchestrator:
                         if bp < 10: # Minimum cash for any trade
                             continue
                             
-                        # SIZE BY REMAINING SLOTS & BP (with safety cap)
-                        target_capital = bp / empty_slots
+                        # Sizing: Equal-weight slot capital allocation based on Total Equity (not temporary cash/BP)
+                        # This avoids under-sizing positions due to T+2 settlement delays.
+                        target_capital = total_equity / config.MAX_POSITIONS
                         
                         # Safety cap: Max 40% of total equity per position
                         max_position_value = total_equity * 0.40
@@ -726,6 +727,77 @@ class BotOrchestrator:
         # Note: Primary exit check moved to top, but we keep this as a rapid safety sweep
         # after any buying activity.
         pass
+
+    # ==========================================
+    # PHASE 6: QUANT REBALANCING & SCALE-UP
+    # ==========================================
+    def phase_6_rebalance_underallocated_positions(self):
+        """
+        T+2 정산 지연으로 인해 매수 당일 1주만 사지고 현금이 남는 현상을 방지합니다.
+        예수금이 정산되어 들어오면, 목표 슬롯 비중(20%)보다 현저히 적게 담긴 종목들을 
+        남는 Buying Power 범위 내에서 자동으로 추가 매수(Scale-up)하여 슬롯을 가득 채웁니다.
+        """
+        logger.info("=" * 60)
+        logger.info("[PHASE 6] Rebalancing Under-allocated Positions")
+        logger.info("=" * 60)
+        
+        try:
+            positions = self.strategy.get_all_positions()
+            if not positions:
+                logger.info("No held positions to rebalance.")
+                return
+                
+            from composite_signal import get_composite_engine, ActionType
+            engine = get_composite_engine()
+            
+            bp = self.trader.get_buying_power()
+            # Calculate total equity
+            total_equity = bp
+            for sym, pos in positions.items():
+                p_price = self.trader.get_price(sym)
+                if p_price > 0:
+                    total_equity += p_price * pos.quantity
+                else:
+                    total_equity += pos.entry_price * pos.quantity
+            
+            # Target capital per slot (e.g. 20% of portfolio for 5 positions)
+            target_slot_val = total_equity / config.MAX_POSITIONS
+            max_limit_val = total_equity * config.MAX_POSITION_PCT
+            target_val = min(target_slot_val, max_limit_val)
+            
+            logger.info("Target value per slot: ${:.2f} (Portfolio Equity: ${:.2f}, BP: ${:.2f})", 
+                        target_val, total_equity, bp)
+            
+            for symbol, pos in positions.items():
+                curr_price = self.trader.get_price(symbol)
+                if curr_price <= 0:
+                    continue
+                    
+                current_val = pos.quantity * curr_price
+                # If the position holds less than 75% of the target slot value
+                if current_val < target_val * 0.75:
+                    # Check signal score/action to prevent scaling up weak positions
+                    is_screened = symbol in getattr(self.state, 'screened_symbols', [])
+                    signal = engine.analyze(symbol, is_screened=is_screened)
+                    if signal.action not in [ActionType.STRONG_BUY, ActionType.BUY]:
+                        logger.info("SKIP REBALANCE {}: current action is {} (score: {}). No active buy edge.", 
+                                    symbol, signal.action.name, signal.composite_score)
+                        continue
+                        
+                    gap_dollars = target_val - current_val
+                    # Ensure we don't exceed remaining buying power and leave a $30 buffer
+                    allowed_dollars = min(gap_dollars, bp - 30.0)
+                    if allowed_dollars >= curr_price:
+                        buy_qty = int(allowed_dollars / curr_price)
+                        if buy_qty > 0:
+                            logger.info("🔍 [REBALANCE] {} under-allocated (${:.2f} < ${:.2f}) with score {} ({}). Scaling up by {} shares.", 
+                                        symbol, current_val, target_val, signal.composite_score, signal.action.name, buy_qty)
+                            self.phase_5_execute_trade(symbol, "BUY", buy_qty, curr_price, 
+                                                       f"REBALANCE_SCALE_UP: Fill slot to target ${target_val:.1f} (score: {signal.composite_score})")
+                            # Deduct from bp for subsequent loop items
+                            bp -= (buy_qty * curr_price)
+        except Exception as e:
+            logger.error("Failed to run phase 6 rebalancing: {}", e)
 
     # ==========================================
     # PHASE 5: EXECUTION & RISK MANAGEMENT
@@ -1171,6 +1243,14 @@ class BotOrchestrator:
                         continue
 
                     self._run_phase_4_cycle(engine)
+                    
+                    # ✦ PHASE 6: Position Rebalancing & Scale-up
+                    try:
+                        if not hasattr(self, '_last_rebalance_time') or (now - self._last_rebalance_time).total_seconds() > 900:
+                            self._last_rebalance_time = now
+                            self.phase_6_rebalance_underallocated_positions()
+                    except Exception as re_err:
+                        logger.error("Periodic rebalancing failed: {}", re_err)
                     
                     time.sleep(scan_interval)
                 else:
