@@ -62,9 +62,9 @@ if MAX_POSITION_PCT >= 1.0:
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 스윙 최대 5종목 동시 보유
 
 # ==============================================
-# [FIX] UPGRADE 교체매매 비활성화 — gap 25 -> 999 (사실상 비활성화)
-# 이전에 UPGRADE가 수시로 발동하여 멀쩡한 포지션을 소손실로 강제 청산하고 있었음
-UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "999"))  # [DISABLED]
+# [ENABLED] UPGRADE 교체매매 활성화 — 최소 25점 차이날 때만 교체
+# 너무 자주 발생하는 것을 방지하기 위해 큰 점수 격차(25점)를 설정하여 무분별한 교체를 방지합니다.
+UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "25"))  # [ENABLED]
 
 # 매수 후 최소 보유 시간 (분)
 UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "120"))
