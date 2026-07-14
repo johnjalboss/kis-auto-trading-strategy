@@ -316,7 +316,7 @@ class RiskManager:
                 self.cooldown_mins
             )
     
-    def can_trade(self) -> tuple:
+    def can_trade(self, symbol: str = None) -> tuple:
         """
         Check if trading is allowed
         
@@ -340,9 +340,10 @@ class RiskManager:
             else:
                 self._cooldown_until = None
         
-        # Check max positions
+        # Check max positions (ignore if we already hold the symbol and are scaling up)
         if len(self._positions) >= self.max_positions:
-            return False, f"Max positions reached ({self.max_positions})"
+            if symbol is None or symbol not in self._positions:
+                return False, f"Max positions reached ({self.max_positions})"
         
         return True, "OK"
     

@@ -1193,13 +1193,11 @@ class BotOrchestrator:
             logger.warning("Trade BLOCKED by Macro Shield (RISK_OFF): {} {}", action, symbol)
             return
         
-        # ??Anti-Conflict Filter: ?  ?? ETF ?  ?
-        conflicts = getattr(config, 'CONFLICTING_PAIRS', {})
-        if action == "BUY" and symbol in conflicts:
-            conflict_symbol = conflicts[symbol]
-            if conflict_symbol in self.strategy._positions:
-                logger.warning("CONFLICT BLOCKED: {} already holds {}",
-                               symbol, conflict_symbol)
+        # 2. Trade Frequency Control (Exits, Upgrades, and Rebalances always allowed)
+        if action == "BUY" and not is_upgrade and not reason.startswith("REBALANCE"):
+            window = self._freq_controller.can_trade(is_upgrade=is_upgrade)
+            if not window.can_trade:
+                logger.info("Trade delayed by frequency: {}", window.reason)
                 return
 
         # 1. Emergency Stop / Circuit Breaker
@@ -1213,14 +1211,6 @@ class BotOrchestrator:
                 pass
             except Exception as cb_err:
                 logger.error("Circuit breaker error: {}", cb_err)
-
-        # 2. Frequency Controller gate
-        if self._freq_controller:
-            is_upgrade = "UPGRADE" in reason.upper()
-            window = self._freq_controller.can_trade(is_upgrade=is_upgrade)
-            if not window.can_trade:
-                logger.info("Trade delayed by frequency: {}", window.reason)
-                return
 
         # 3. Drawdown Controller
         try:
@@ -1238,15 +1228,16 @@ class BotOrchestrator:
         # 3.5. RiskManager Gate (Daily/Weekly stops, Cooldowns, Position Slots)
         if action == "BUY":
             try:
-                allowed, rm_reason = self.rm.can_trade()
+                # Pass symbol to allow rebalancing/scale-up on existing positions even if max positions reached
+                allowed, rm_reason = self.rm.can_trade(symbol)
                 if not allowed:
                     logger.warning("🚨 [QUANT_RISK] Trade BLOCKED by RiskManager: {} {} | Reason: {}", action, symbol, rm_reason)
                     return
             except Exception as rm_err:
                 logger.error("[QUANT_RISK] Failed to check RiskManager gate: {}", rm_err)
 
-        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer
-        if action == "BUY":
+        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer (Bypassed for rebalancing)
+        if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
                 from position_sizer import get_position_sizer
                 bp = self.trader.get_buying_power()

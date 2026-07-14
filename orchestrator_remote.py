@@ -837,8 +837,8 @@ class BotOrchestrator:
             except Exception as cb_err:
                 logger.error("Circuit breaker error: {}", cb_err)
 
-        # 2. Frequency Controller gate
-        if self._freq_controller:
+        # 2. Frequency Controller gate (Bypassed for rebalancing)
+        if self._freq_controller and not reason.startswith("REBALANCE"):
             is_upgrade = "UPGRADE" in reason.upper()
             window = self._freq_controller.can_trade(is_upgrade=is_upgrade)
             if not window.can_trade:
@@ -858,8 +858,8 @@ class BotOrchestrator:
         except Exception as dc_err:
             logger.error("Drawdown controller error: {}", dc_err)
 
-        # 4. Kelly Criterion + Position Sizing
-        if action == "BUY":
+        # 4. Kelly Criterion + Position Sizing (Bypassed for rebalancing)
+        if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
                 from position_sizer import calculate_optimal_size
                 from kelly_criterion import get_kelly_fraction
