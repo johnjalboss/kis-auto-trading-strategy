@@ -38,6 +38,13 @@ def main():
     load_dotenv()
     setup_logging()
     
+    # 🌟 무인 원격 자동 업데이트 체크 (부팅 시 깃허브 최신 전략 파일 자동 패치)
+    try:
+        from updater import check_and_update
+        check_and_update()
+    except Exception as _up_err:
+        logger.debug("Auto-update check skipped/bypassed: {}", _up_err)
+    
     logger.info("="*60)
     logger.info("🚀 KIS AUTO-TRADING BOT INITIALIZING (DRY RUN: {})", args.dry_run)
     logger.info("="*60)
