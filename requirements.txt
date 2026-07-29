@@ -18,6 +18,9 @@ sqlalchemy>=2.0.0
 # System monitoring
 psutil>=5.9.0
 
+# Remote Deployment & SSH
+paramiko>=3.4.0
+
 # Data (legacy compat - shimmed by data_proxy.py)
 yfinance>=0.2.30
 
