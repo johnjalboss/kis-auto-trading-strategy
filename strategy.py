@@ -647,24 +647,27 @@ class StrategyEngine:
         """Check all entry filters"""
         failed = []
         
+        # Inverse ETF exemption for standard long-only overbought & OBV filters
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set()) if symbol else False
+
         # ADX - Trend strength
-        if ind.adx < cfg.min_adx:
+        if not is_inverse and ind.adx < cfg.min_adx:
             failed.append(f"ADX:{ind.adx:.0f}<{cfg.min_adx}")
         
-        # RSI - Not extreme
-        if ind.rsi < 30 or ind.rsi > 75:
+        # RSI - Not extreme (Exempt inverse ETFs)
+        if not is_inverse and (ind.rsi < 30 or ind.rsi > 75):
             failed.append(f"RSI:{ind.rsi:.0f}")
         
-        # Bollinger - Not overbought
-        if ind.bollinger.percent_b > 0.95:
+        # Bollinger - Not overbought (Exempt inverse ETFs)
+        if not is_inverse and ind.bollinger.percent_b > 0.95:
             failed.append(f"BB%:{ind.bollinger.percent_b:.2f}")
         
-        # MACD or Stochastic RSI must be favorable
-        if not ind.macd.is_bullish and ind.stoch_rsi > 0.7:
+        # MACD or Stochastic RSI must be favorable (Exempt inverse ETFs)
+        if not is_inverse and (not ind.macd.is_bullish and ind.stoch_rsi > 0.7):
             failed.append("MACD_bearish+StochRSI_high")
         
-        # OBV trend
-        if ind.obv_trend == "DOWN":
+        # OBV trend (Exempt inverse ETFs)
+        if not is_inverse and ind.obv_trend == "DOWN":
             failed.append("OBV_down")
         
         # Options: Block entry when pinned at max pain on expiry week
