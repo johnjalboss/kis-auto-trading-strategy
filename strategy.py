@@ -560,6 +560,10 @@ class StrategyEngine:
             setup_reason = f"MEAN_REVERSION_BOUNCE: RSI {indicators.rsi:.1f}, BB% {indicators.bollinger.percent_b:.2f}"
         elif is_quant_accumulation:
             setup_reason = f"SWING_QUANT_ACCUMULATION: Score {comp_signal.composite_score:.0f}"
+        elif is_inverse:
+            setup_reason = f"SWING_INVERSE_HEDGE: Bear market inverse protection (Score {confidence:.0f})"
+        elif comp_signal and comp_signal.composite_score >= 75:
+            setup_reason = f"HIGH_CONVICTION_QUANT: Institutional score {comp_signal.composite_score:.0f}"
         else:
             return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant)", current_price)
 
