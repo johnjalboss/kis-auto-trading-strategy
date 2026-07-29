@@ -38,6 +38,7 @@ class EstimateRevisionAnalyzer(BaseAnalyzer):
         signals = []
 
         try:
+            import config
             ticker = yf.Ticker(symbol)
             info = ticker.info if hasattr(ticker, "info") else {}
 
