@@ -120,7 +120,9 @@ class TradeDatabase:
                     quantity INTEGER,
                     avg_price REAL,
                     entry_time TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    high_since_entry REAL DEFAULT 0.0,
+                    stop_price REAL DEFAULT 0.0
                 );
                 
                 CREATE TABLE IF NOT EXISTS sent_reports (
@@ -146,6 +148,17 @@ class TradeDatabase:
                 CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(entry_time);
                 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
             """)
+            
+            # positions 테이블의 트레일링 스탑 상태 컬럼 마이그레이션 (재시작 시 상태 손실 방지)
+            try:
+                existing_cols = [x[1] for x in conn.execute("PRAGMA table_info(positions)").fetchall()]
+                if "high_since_entry" not in existing_cols:
+                    conn.execute("ALTER TABLE positions ADD COLUMN high_since_entry REAL DEFAULT 0.0")
+                if "stop_price" not in existing_cols:
+                    conn.execute("ALTER TABLE positions ADD COLUMN stop_price REAL DEFAULT 0.0")
+            except Exception as e:
+                logger.error("Failed to migrate positions table schema: {}", e)
+                
         logger.debug("Database initialized: {}", self.db_path)
     
     # ==============================================
@@ -194,6 +207,16 @@ class TradeDatabase:
                         VALUES (?, ?, ?, ?, ?)
                     """, (symbol, quantity, avg_price, now_dt, now_dt))
                 logger.debug("Updated position via sync: {} x {} @ ${:.2f}", symbol, quantity, avg_price)
+                
+    def update_position_tracking(self, symbol: str, high_since_entry: float, stop_price: float):
+        """Update position tracking values (high_since_entry, stop_price) to prevent state loss on restart"""
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE positions 
+                SET high_since_entry = ?, stop_price = ?, updated_at = ?
+                WHERE symbol = ?
+            """, (high_since_entry, stop_price, datetime.now(), symbol))
+        logger.debug("Updated position tracking: {} (High: ${:.2f}, Stop: ${:.2f})", symbol, high_since_entry, stop_price)
     
     def record_exit(self, symbol: str, quantity: int, price: float,
                    entry_price: float, reason: str = "") -> int:

@@ -10,6 +10,7 @@ Scoring:
 - High short interest + downtrend → bearish (shorts winning)
 - Low short interest → neutral
 """
+import config
 import pandas as pd
 import numpy as np
 import yfinance as yf

@@ -349,9 +349,15 @@ class SmartOrderExecutor:
                                     order.status = OrderStatus.REJECTED
                                     order.reason = f"Chase SELL order placement failed: {chase_result.message if chase_result else ''}"
                             else:
-                                logger.error("Cancel failed for SELL order {} ({}). Keeping original order active, skipping chase.", order_id_from_kis, order.symbol)
-                                is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=15)
-                                if is_filled:
+                                logger.warning("Cancel request returned non-zero for SELL order {} ({}). Checking live broker positions...", order_id_from_kis, order.symbol)
+                                is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=10)
+                                
+                                # 이중 확인: KIS API 취소 전문 오류 시에도 실제 실계좌 잔고에서 수량이 감소했는지 확인
+                                live_pos = {p.symbol: p.quantity for p in self.trader.get_positions()}
+                                current_held_qty = live_pos.get(order.symbol, 0)
+                                
+                                if is_filled or current_held_qty < order.total_quantity:
+                                    logger.info("✅ FULFILLMENT VERIFIED: {} order filled on broker (remaining qty: {})", order.symbol, current_held_qty)
                                     order.status = OrderStatus.FILLED
                                     order.filled_quantity = order.total_quantity
                                     order.avg_fill_price = limit

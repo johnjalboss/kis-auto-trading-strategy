@@ -565,11 +565,15 @@ class StrategyEngine:
         # 11. Dynamic score requirements based on Regime
         min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
         
-        # Add buffer in choppy regimes to avoid whipsaws
+        # Add buffer in choppy regimes to avoid whipsaws (Exempt Defensive stocks so rotation targets pass easily)
+        _defensive_set = getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
         if current_regime in _choppy_regimes:
-            min_required += 15
-            setup_reason = f"[CHOPPY SELECTIVE] {setup_reason}"
-            logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for {} to {}", symbol, min_required)
+            if symbol not in _defensive_set:
+                min_required += 15
+                setup_reason = f"[CHOPPY SELECTIVE] {setup_reason}"
+                logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for tech symbol {} to {}", symbol, min_required)
+            else:
+                logger.info("CHOPPY DEFENSIVE FAVOR: Defensive symbol {} exempted from choppy threshold penalty (threshold: {})", symbol, min_required)
 
         # Enforce technical filter checks for Setup A (Setup B bypasses some filters due to flow momentum)
         if not is_quant_accumulation and not filter_res['passed']:
@@ -608,10 +612,12 @@ class StrategyEngine:
 
         # 5. Market Breadth Guard with High-Score (>= 95) Bypass
         try:
-            import yfinance as yf
-            _spy_df = yf.download("SPY", period="1mo")
-            if _spy_df is not None and len(_spy_df) >= 22:
+            import kis_data
+            _spy_df = kis_data.get_daily_ohlcv("SPY", days=25)
+            if _spy_df is not None and len(_spy_df) >= 20:
                 _spy_close = _spy_df['Close']
+                if isinstance(_spy_close, pd.DataFrame):
+                    _spy_close = _spy_close.iloc[:, 0]
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
                 if _spy_current < _spy_sma20 * 0.995:
@@ -913,7 +919,14 @@ class StrategyEngine:
             logger.warning("Price lookup failed for {}. Defaulting to Daily Close: ${:.2f}", symbol, price)
         
         # Update tracking
+        old_high = pos.high_since_entry
         pos.high_since_entry = max(pos.high_since_entry, price)
+        if pos.high_since_entry != old_high:
+            try:
+                db_mgr = get_database()
+                db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price)
+            except Exception as e:
+                pass
         pnl_pct = (price - pos.entry_price) / pos.entry_price
         
         #  / ETF    (  )
@@ -1179,15 +1192,22 @@ class StrategyEngine:
                 
             return ExitSignal("SELL_ALL", reason, price, pnl_pct)
             
-        # ── [STRATEGY UPGRADE] 레짐 전환 시 즉시 강제 청산 (현금 확보) ──
-        # 시장이 하락장 레짐으로 바뀌었는데 상승장용 롱 포지션을 보유 중인 경우
-        # 손절/익절 대기 없이 시장가 즉시 매도하여 인버스/헤징 ETF 매수 체력(Buying Power)을 확보함
+        # ── [QUANT ENGINE] 전면적 시장 패닉(Systemic Panic) vs 섹터 순환매(Sector Rotation) 정밀 구분 ──
+        # 1) 전면적 시장 패닉(BEAR_PANIC / VIX > 28): 시장 전체 폭락 시에만 기술주 롱 포지션 강제 현금화
+        # 2) 섹터 순환매(BEAR_NORMAL / Sector Shift): 기술주에서 방어주/가치주로 자금이 이동하는 순환매 장세에서는
+        #    무조건 강제 청산하지 않고, 개별 종목의 손절가/익절가/트레일링스탑 지표에 따라서만 정밀 매도 수행!
+        panic_bear_regimes = {"BEAR_PANIC", "CRASH", "SYSTEMIC_RISK"}
         _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
-        if current_regime in bear_regimes:
-            if pos.symbol not in _allowed_in_bear:
-                reason = f"REGIME_ROTATION_EXIT: Market turned to {current_regime}. Freeing up cash for inverse/hedging."
-                logger.warning("🚨 [REGIME_GUARD] Force exiting long position {} | Reason: {}", pos.symbol, reason)
+        
+        if current_regime in panic_bear_regimes:
+            # 전면적 시장 폭락 패닉 시에만 방어주가 아닌 손실 포지션 현금화
+            if pnl_pct < 0 and pos.symbol not in _allowed_in_bear:
+                reason = f"SYSTEMIC_PANIC_EXIT: Market in {current_regime}. Securing capital for crash protection."
+                logger.warning("🚨 [PANIC_GUARD] Force exiting position {} during broad crash | Reason: {}", pos.symbol, reason)
                 return ExitSignal("SELL_ALL", reason, price, pnl_pct)
+        elif current_regime in bear_regimes:
+            # 단순 약세/섹터 순환매 장세에서는 강제 매도하지 않고 순환매 수급 및 트레일링 스탑에만 의존함
+            logger.debug("SECTOR_ROTATION_MODE: Holding {} during {} (SL/TP/Trailing active)", pos.symbol, current_regime)
 
         return None
 
@@ -1279,11 +1299,13 @@ class StrategyEngine:
             atr_pct_log = (atr_at_entry / pos.entry_price) if atr_at_entry > 0 and pos.entry_price > 0 else 0
             logger.debug("[ATR_TP] {} | ATR={:.1%} → MinTP={:.1%} (raw 30R was {:.1%})", pos.symbol, atr_pct_log, min_tp_pct, target_30r_pct)
             
-        # Scale-Out TP Exits
+        # Scale-Out TP Exits (50% 분할 익절 및 100% 무위험 거래 전환)
+        # 고정 %가 아닌 각 종목 고유의 변동성(ATR 1.5R) 타겟에 도달 시 1차 분할 익절 실행
         if not pos.half_sold:
             if price >= target_15r:
+                t15r_pct = (target_15r - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
                 return ExitSignal("SELL_HALF",
-                                f"SCALE_OUT_1.5R: {pnl_pct:+.1%} >= 1.5R target (${target_15r:.2f})",
+                                f"SCALE_OUT_50%: {pnl_pct:+.1%} >= 1.5R ATR target (${target_15r:.2f}, +{t15r_pct:.1%})",
                                 price, pnl_pct)
         else:
             if price >= target_30r:
@@ -1377,6 +1399,11 @@ class StrategyEngine:
             trailing_stop=entry_price,
             phase_at_entry=get_market_phase()
         )
+        try:
+            db_mgr = get_database()
+            db_mgr.update_position_tracking(symbol, entry_price, stop_price)
+        except Exception as e:
+            pass
         logger.info("Position added: {} @ ${:.2f}, stop ${:.2f}", 
                    symbol, entry_price, stop_price)
     
@@ -1418,27 +1445,38 @@ class StrategyEngine:
                 # Retrieve true entry state if possible
                 true_entry_time = datetime.now()
                 true_high = max(pos.avg_price, pos.current_price)
+                stop_price = None
                 
                 if db_mgr:
                     try:
-                        # Find entry time from database
+                        # Find entry time and tracking states from database
                         open_positions = db_mgr.get_open_positions()
                         matching = [p for p in open_positions if p['symbol'] == symbol]
                         if matching:
-                            # entry_time in DB is a TIMESTAMP or iso-string
                             db_pos = matching[0]
+                            
+                            # Recover entry time
                             db_entry_time = db_pos.get('entry_time')
                             if isinstance(db_entry_time, str):
                                 try:
                                     db_entry_time = datetime.fromisoformat(db_entry_time)
                                 except Exception as e:
                                     logger.error("Failed to parse DB entry time string '{}': {}", db_entry_time, e)
-                            
                             if isinstance(db_entry_time, datetime):
                                 true_entry_time = db_entry_time
                                 logger.info("Recovered true entry time for {}: {}", symbol, true_entry_time)
+                                
+                            # Recover tracking values (high_since_entry, stop_price) to prevent state loss on restart
+                            db_high = db_pos.get('high_since_entry', 0.0)
+                            db_stop = db_pos.get('stop_price', 0.0)
+                            if db_high and db_high > pos.avg_price * 0.5:
+                                true_high = max(true_high, db_high)
+                                logger.info("Recovered true high since entry for {}: ${:.2f}", symbol, true_high)
+                            if db_stop and db_stop > pos.avg_price * 0.5:
+                                stop_price = db_stop
+                                logger.info("Recovered stop price from DB for {}: ${:.2f}", symbol, stop_price)
                     except Exception as e:
-                        logger.debug("Could not query true entry time for {}: {}", symbol, e)
+                        logger.debug("Could not query true entry state for {}: {}", symbol, e)
 
                 # ATR  
                 df = self.fetch_data(symbol)
@@ -1449,7 +1487,8 @@ class StrategyEngine:
                     atr = float(atr_series.iloc[-1]) if len(atr_series) > 0 else 0.0
                 
                 cfg = self.get_phase_config()
-                stop_price = pos.avg_price - (atr * cfg.stop_loss_atr) if atr > 0 else pos.avg_price * 0.95
+                if stop_price is None:
+                    stop_price = pos.avg_price - (atr * cfg.stop_loss_atr) if atr > 0 else pos.avg_price * 0.95
                 
                 self._positions[symbol] = Position(
                     symbol=symbol,

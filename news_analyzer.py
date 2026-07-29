@@ -232,11 +232,18 @@ class NewsAnalyzer:
         sentiment_score = max(-100, min(100, total_score))
         
         # 룰 기반 파멸적 리스크 필터링 (Bankruptcy, Delisting 등)
+        # [CRITICAL FIX] 반드시 보유 종목 티커가 헤드라인에 직접 언급된 경우만 발동.
+        # 타 기업(예: Saks, Camp Mystic) 파산 뉴스에 의한 오탐지 강제 청산 방지.
         catastrophic_keywords = ['bankruptcy', 'chapter 11', 'delisting', 'delisted', 'insolvency', 'insolvent', 'accounting fraud', 'indictment', 'liquidation', 'receivership']
         has_catastrophic = False
         catastrophic_reason = None
+        symbol_lower = symbol.lower()
         for item in news_items:
             h_lower = item.title.lower()
+            # 헤드라인에 보유 종목 티커 자체가 명시적으로 언급되어야만 파멸적 리스크로 간주
+            ticker_in_headline = symbol_lower in h_lower or f' {symbol_lower} ' in h_lower
+            if not ticker_in_headline:
+                continue
             for kw in catastrophic_keywords:
                 if kw in h_lower:
                     has_catastrophic = True

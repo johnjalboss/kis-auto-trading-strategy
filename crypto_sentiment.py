@@ -108,6 +108,8 @@ class CryptoSentimentIndicator:
                     if isinstance(btc_close, pd.DataFrame):
                         btc_close = btc_close.iloc[:, 0]
                         
+                    qqq_close.index = qqq_close.index.tz_localize(None)
+                    btc_close.index = btc_close.index.tz_localize(None)
                     df_aligned = pd.DataFrame({'QQQ': qqq_close, 'BTC': btc_close}).dropna()
                     returns = df_aligned.pct_change().dropna()
                     if len(returns) >= 15:

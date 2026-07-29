@@ -489,9 +489,10 @@ class BotOrchestrator:
         # ---- Dynamic screener result cache ----
         now = datetime.now()
         cache_seconds = getattr(config, 'SCREENER_CACHE_MINUTES', 15) * 60
+        # 타겟 유니버스가 5개 이상 충실하게 차 있을 때만 캐시를 사용 (1개만 남아 매매가 멈추는 현상 원천 방지)
         if (self.state.last_screen_refresh is not None and
                 (now - self.state.last_screen_refresh).total_seconds() < cache_seconds and
-                self.state.target_universe):
+                self.state.target_universe and len(self.state.target_universe) >= 5):
             logger.info("  -> Screener result cached ({} symbols, cache: {}s). Skipping re-scan.",
                         len(self.state.target_universe), cache_seconds)
             return
@@ -520,16 +521,27 @@ class BotOrchestrator:
             
             result = screener.screen(regime=regime, exclude_symbols=exclude_symbols)
             self.state.target_universe = result.tickers if result and result.tickers else []
+            self.state.last_screen_refresh = now
             
-            # [Bear Market Inverse Hedging] 하락장 또는 RISK_OFF 시 인버스 ETF(SQQQ) 강제 진입 유니버스 주입
+            # [Proactive Rotation Engine] 하락장 또는 약세/순환매 레짐 시 인버스 ETF(SQQQ) + 경기방어 1등주(DEFENSIVE) 자동 선제 주입
             is_bear_regime = self.state.current_regime in {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
             is_risk_off = self.state.global_risk_level == "RISK_OFF"
-            if (is_bear_regime or is_risk_off) and "SQQQ" not in held_symbols:
+            if is_bear_regime or is_risk_off:
                 if not self.state.target_universe:
                     self.state.target_universe = []
-                if "SQQQ" not in self.state.target_universe:
+                if "SQQQ" not in held_symbols and "SQQQ" not in self.state.target_universe:
                     self.state.target_universe.append("SQQQ")
-                    logger.info("🐻 BEAR MARKET / RISK_OFF detected. Forcing SQQQ into target universe for hedging.")
+                
+            # [UNIVERSE GUARANTEE] 스크리닝 결과가 적거나 비어있을 경우, 방어주/우량주 1등주 유니버스를 항시 최소 10개 이상 자동으로 보충 주입
+            def_candidates = [s for s in getattr(config, 'DEFENSIVE_UNIVERSE_SET', set()) if s not in held_symbols and s not in recently_sold_exclude]
+            for def_sym in def_candidates:
+                if len(self.state.target_universe) >= 12:
+                    break
+                if def_sym not in self.state.target_universe:
+                    self.state.target_universe.append(def_sym)
+                    
+            logger.info("  -> screener.py: {} active targets ready (excluding {} held positions: {})",
+                       len(self.state.target_universe), len(held_symbols), list(held_symbols))
                     
             logger.info("  -> screener.py: {} targets found (excluding {} held positions: {})",
                        len(self.state.target_universe), len(held_symbols), list(held_symbols))
@@ -637,19 +649,9 @@ class BotOrchestrator:
                     
                     if total_value > 0:
                         current_exposure = (total_value - bp) / total_value
-                        target_exposure = self.state.max_exposure_pct
-                        
-                        if current_exposure > target_exposure + 0.05:  # >5% over target
-                            excess_ratio = 1.0 - (target_exposure / current_exposure)
-                            logger.warning("? Exposure {:.0%} > Target {:.0%}. Reducing positions by {:.0%}",
-                                         current_exposure, target_exposure, excess_ratio)
-                            
-                            for sym, (val, price, qty) in pos_values.items():
-                                sell_qty = max(1, int(qty * excess_ratio))
-                                if sell_qty > 0 and sell_qty < qty:  # Partial sell
-                                    reason = f"MACRO EXPOSURE: {current_exposure:.0%} ??{target_exposure:.0%} (regime={self.state.current_regime})"
-                                    self.phase_5_execute_trade(sym, "SELL", sell_qty, price, reason)
-                                    logger.info("  ??Selling {} x {} @ ${:.2f} to reduce exposure", sell_qty, sym, price)
+                        # [SWING PROTECTION] 매크로 노출도 임시 변동으로 인한 중간 강제 매도(Churning) 원천 차단
+                        # 스윙 포지션은 손절/익절/시그널매도/UPGRADE 교체 시에만 정상 매도 처리함.
+                        pass
             except Exception as e:
                 logger.debug("Exposure enforcement error: {}", e)
         
@@ -838,12 +840,31 @@ class BotOrchestrator:
                     except Exception as _sc:
                         logger.debug("Sector concentration guard failed: {}", _sc)
                     
-                    # Same-day cooldown: never rebuy a stock we just sold today (in-memory)
+                    # Same-day cooldown (DB-backed): 봇 재시작 후에도 당일 매도 종목 재매수 차단
+                    # in-memory 방식은 watchdog 재시작 시 초기화되는 버그가 있어 DB로 교체
+                    _sold_today_blocked = False
                     if symbol in getattr(self, '_sold_today', set()):
-                        logger.debug("COOLDOWN: {} was already sold today (in-memory), skipping rebuy", symbol)
+                        _sold_today_blocked = True
+                    else:
+                        try:
+                            import sqlite3 as _sqlite3
+                            from datetime import date as _date
+                            _today_str = _date.today().isoformat()
+                            _conn = _sqlite3.connect("trades.db")
+                            _cur = _conn.execute(
+                                "SELECT COUNT(*) FROM trades WHERE symbol=? AND side='SELL' AND DATE(exit_time)=?",
+                                (symbol, _today_str)
+                            )
+                            _sold_today_blocked = _cur.fetchone()[0] > 0
+                            _conn.close()
+                        except Exception:
+                            pass  # DB 조회 실패 시 in-memory 결과 사용
+                    if _sold_today_blocked:
+                        logger.debug("COOLDOWN: {} was already sold today (DB+memory), skipping rebuy", symbol)
                         continue
 
                     # DB 16-hour cooldown removed for Swing Trading
+
 
                     #  DB-backed dedup: Also check DB for open positions (prevents KLAC5 bug)
                     # In-memory dict can desync from actual orders; DB is the source of truth.
@@ -985,8 +1006,9 @@ class BotOrchestrator:
                             
                             # [BUGFIX] Prevent selling losing positions to upgrade
                             # - We should only upgrade flat or slightly profitable positions.
-                            # - If a position is at a loss of more than -1%, let it hit its stop loss; do not lock in losses via upgrade.
-                            if pnl_pct < -0.01:
+                            # - If a position is at a loss of more than UPGRADE_LOSS_LIMIT_PCT, let it hit its stop loss; do not lock in losses via upgrade.
+                            loss_limit = float(getattr(config, 'UPGRADE_LOSS_LIMIT_PCT', -0.002))
+                            if pnl_pct < loss_limit:
                                 continue
                         
                         # Re-score existing position
@@ -1137,33 +1159,41 @@ class BotOrchestrator:
             logger.info("Target value per slot: ${:.2f} (Portfolio Equity: ${:.2f}, BP: ${:.2f})", 
                         target_val, total_equity, bp)
             
+            # 보유 종목들의 퀀트 점수 재평가 및 상위 MAX_POSITIONS(3개) 필터링
+            scored_positions = []
             for symbol, pos in positions.items():
                 curr_price = self.trader.get_price(symbol)
                 if curr_price <= 0:
                     continue
-                    
+                is_screened = symbol in getattr(self.state, 'screened_symbols', [])
+                signal = engine.analyze(symbol, is_screened=is_screened)
+                scored_positions.append((symbol, pos, curr_price, signal))
+            
+            # 퀀트 점수 내림차순 정렬
+            scored_positions.sort(key=lambda x: x[3].composite_score, reverse=True)
+            
+            # 상위 MAX_POSITIONS (3개) 종목만 추매(Scale-Up) 대상에 포함
+            top_eligible = scored_positions[:config.MAX_POSITIONS]
+            
+            for symbol, pos, curr_price, signal in top_eligible:
                 current_val = pos.quantity * curr_price
-                # If the position holds less than 75% of the target slot value
+                # 목표 슬롯 금액의 75% 미만으로 부족하게 담긴 경우만 추매
                 if current_val < target_val * 0.75:
-                    # Check signal score/action to prevent scaling up weak positions
-                    is_screened = symbol in getattr(self.state, 'screened_symbols', [])
-                    signal = engine.analyze(symbol, is_screened=is_screened)
+                    # 퀀트 분석 Action이 BUY 또는 STRONG_BUY (고득점)인 종목만 추매 승인
                     if signal.action not in [ActionType.STRONG_BUY, ActionType.BUY]:
-                        logger.info("SKIP REBALANCE {}: current action is {} (score: {}). No active buy edge.", 
+                        logger.info("SKIP REBALANCE {}: action is {} (score: {}). No active buy edge.", 
                                     symbol, signal.action.name, signal.composite_score)
                         continue
                         
                     gap_dollars = target_val - current_val
-                    # Ensure we don't exceed remaining buying power and leave a $30 buffer
                     allowed_dollars = min(gap_dollars, bp - 30.0)
                     if allowed_dollars >= curr_price:
                         buy_qty = int(allowed_dollars / curr_price)
                         if buy_qty > 0:
-                            logger.info("🔍 [REBALANCE] {} under-allocated (${:.2f} < ${:.2f}) with score {} ({}). Scaling up by {} shares.", 
+                            logger.info("🔍 [REBALANCE] {} top-scored under-allocated (${:.2f} < ${:.2f}) with score {} ({}). Scaling up by {} shares.", 
                                         symbol, current_val, target_val, signal.composite_score, signal.action.name, buy_qty)
                             self.phase_5_execute_trade(symbol, "BUY", buy_qty, curr_price, 
                                                        f"REBALANCE_SCALE_UP: Fill slot to target ${target_val:.1f} (score: {signal.composite_score})")
-                            # Deduct from bp for subsequent loop items
                             bp -= (buy_qty * curr_price)
         except Exception as e:
             logger.error("Failed to run phase 6 rebalancing: {}", e)
@@ -1189,7 +1219,8 @@ class BotOrchestrator:
             return
 
         is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
-        if self.state.global_risk_level == "RISK_OFF" and action == "BUY" and not is_inverse:
+        is_rebalance = "REBALANCE" in reason.upper()
+        if self.state.global_risk_level == "RISK_OFF" and action == "BUY" and not is_inverse and not is_rebalance:
             logger.warning("Trade BLOCKED by Macro Shield (RISK_OFF): {} {}", action, symbol)
             return
         
@@ -1212,13 +1243,13 @@ class BotOrchestrator:
             except Exception as cb_err:
                 logger.error("Circuit breaker error: {}", cb_err)
 
-        # 3. Drawdown Controller
+        # 3. Drawdown Controller (신규 매수만 차단, 손절/청산 매도는 항시 허용)
         try:
             from drawdown_controller import get_drawdown_controller
             bp = self.trader.get_buying_power()
             dc = get_drawdown_controller(bp + sum(p.market_value for p in self.trader.get_positions()))
-            if dc.is_halted():
-                logger.warning("DRAWDOWN HALT — trade blocked: {} {}", action, symbol)
+            if action == "BUY" and dc.is_halted():
+                logger.warning("DRAWDOWN HALT — new BUY entry blocked: {} {}", action, symbol)
                 return
         except ImportError:
             pass

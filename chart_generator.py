@@ -23,10 +23,10 @@ from loguru import logger
 
 def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: float) -> dict:
     """
-    QQQ의 기간별 달러 환산 수익을 반환합니다.
+    QQQ의 기간별 달러 환산 수익을 반환합니다. (yfinance + KIS API 이중 보장)
     base_capital 만큼 start_date에 QQQ를 샀을 때의 일별 평가이익($)
-    {date_str: dollar_pnl_vs_start}
     """
+    df = None
     try:
         import yfinance as yf
         start_fetch = start_date - timedelta(days=7)
@@ -35,9 +35,22 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
                          start=start_fetch.strftime('%Y-%m-%d'),
                          end=end_fetch.strftime('%Y-%m-%d'),
                          progress=False, auto_adjust=True)
-        if df is None or df.empty:
-            return {}
+    except Exception as e:
+        logger.debug("yfinance QQQ benchmark fetch failed: {}", e)
 
+    # 폴백: KIS API에서 QQQ 일봉 수집
+    if df is None or df.empty:
+        try:
+            import kis_data
+            days_needed = (end_date - start_date).days + 15
+            df = kis_data.get_daily_ohlcv("QQQ", days=days_needed)
+        except Exception as k_err:
+            logger.debug("KIS API QQQ fallback failed: {}", k_err)
+
+    if df is None or df.empty:
+        return {}
+
+    try:
         if hasattr(df.columns, 'get_level_values'):
             try:
                 df.columns = df.columns.get_level_values(0)
@@ -49,7 +62,7 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
         # 기준 가격: start_date 이전(포함) 중 가장 최근 거래일 종가
         base_rows = df[df.index <= str(start_date)]
         if base_rows.empty:
-            return {}
+            base_rows = df  # fallback
         base_price = float(base_rows['Close'].iloc[-1])
         if base_price <= 0:
             return {}
@@ -66,7 +79,7 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
             cur_d += timedelta(days=1)
         return result
     except Exception as e:
-        logger.debug("QQQ benchmark fetch failed: {}", e)
+        logger.debug("QQQ benchmark calc failed: {}", e)
         return {}
 
 
@@ -109,12 +122,12 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         db_range = cur.fetchone()
 
         if not db_range or not db_range['min_date']:
-            logger.warning("No sell trades found in database, skipping chart generation")
-            conn.close()
-            return ""
-
-        db_min_date = datetime.strptime(db_range['min_date'], '%Y-%m-%d').date()
-        db_max_date = datetime.strptime(db_range['max_date'], '%Y-%m-%d').date()
+            logger.info("No sell trades found in database yet. Generating Standby Equity Baseline chart.")
+            db_min_date = datetime.now().date() - timedelta(days=7)
+            db_max_date = datetime.now().date()
+        else:
+            db_min_date = datetime.strptime(db_range['min_date'], '%Y-%m-%d').date()
+            db_max_date = datetime.strptime(db_range['max_date'], '%Y-%m-%d').date()
 
         is_all_time = False
         if days is None or days <= 0:
@@ -155,22 +168,42 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         else:
             dates = [d[5:] for d in dates_raw]  # MM-DD
 
-        # 누적 달러 P&L
+        # ── 보유 포지션 미실현 손익 (Unrealized P&L) 실시간 합산 ──
+        unrealized_pnl = 0.0
+        try:
+            from trader import get_trader
+            t = get_trader()
+            open_pos = t.get_positions()
+            for p in open_pos:
+                qty = getattr(p, 'quantity', 0)
+                avg_p = getattr(p, 'avg_price', 0)
+                curr_p = getattr(p, 'current_price', avg_p)
+                if qty > 0 and avg_p > 0 and curr_p > 0:
+                    unrealized_pnl += (curr_p - avg_p) * qty
+            logger.info("Chart unrealized P&L calculated: ${:+.2f}", unrealized_pnl)
+        except Exception as u_err:
+            logger.debug("Unrealized P&L calculation failed: {}", u_err)
+
+        # 누적 달러 P&L (실현 손익 + 현재 미실현 손익)
         cum_pnls = []
         s = 0.0
-        for p in pnls:
+        for idx, p in enumerate(pnls):
             s += p
-            cum_pnls.append(s)
+            # 오늘(차트 마지막 날짜)에는 오픈 포지션 미실현 손익을 반영하여 총자산 수익 표시
+            if idx == len(pnls) - 1:
+                cum_pnls.append(s + unrealized_pnl)
+            else:
+                cum_pnls.append(s)
 
         # ── 기준 자본금: 실계좌 총자산에서 누적 P&L 차감 = 투자 원금 추정 ──
         # 가장 정확한 방법: 현재 총자산 - 누적수익 = 초기자본
         account_equity = _get_account_equity()
-        all_time_pnl_total = sum(pnl_map.values())  # DB 전체 기간 합산
+        all_time_pnl_total = sum(pnl_map.values()) + unrealized_pnl  # DB 전체 + 미실현 P&L
 
         if account_equity and account_equity > 0:
-            # 현재 계좌 총자산 - 전체 누적 실현 수익 = 투입 원금 추정
+            # 현재 계좌 총자산 - 전체 누적 실현/미실현 수익 = 투입 원금 추정
             base_capital = max(account_equity - all_time_pnl_total, account_equity * 0.5)
-            logger.info("Chart base_capital estimated from API: ${:.2f} (equity=${:.2f}, all_time_pnl=${:.2f})",
+            logger.info("Chart base_capital estimated from API: ${:.2f} (equity=${:.2f}, total_pnl=${:.2f})",
                         base_capital, account_equity, all_time_pnl_total)
         else:
             # 폴백: config 또는 환경변수

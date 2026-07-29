@@ -66,15 +66,15 @@ class DrawdownController:
     - Position size increases gradually
     """
     
-    # Default limits
-    DAILY_CAUTION = -0.02   # -2%
-    DAILY_STOP = -0.03       # -3%
-    WEEKLY_CAUTION = -0.05   # -5%
-    WEEKLY_STOP = -0.07      # -7%
-    MONTHLY_CAUTION = -0.08  # -8%
-    MONTHLY_STOP = -0.12     # -12%
-    MAX_DD_CAUTION = -0.10   # -10%
-    MAX_DD_STOP = -0.15      # -15%
+    # Default limits (소액 계좌 일중 평가액 파동 오탐 방지를 위한 안전 한도 조정)
+    DAILY_CAUTION = -0.04   # -4%
+    DAILY_STOP = -0.06       # -6%
+    WEEKLY_CAUTION = -0.10   # -10%
+    WEEKLY_STOP = -0.15      # -15% (기존 -7% 오탐 차단)
+    MONTHLY_CAUTION = -0.15  # -15%
+    MONTHLY_STOP = -0.20     # -20%
+    MAX_DD_CAUTION = -0.15   # -15%
+    MAX_DD_STOP = -0.25      # -25%
     
     def __init__(self, initial_capital: float = 100000, 
                  state_file: str = "drawdown_state.json"):

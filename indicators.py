@@ -153,7 +153,11 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     tr3 = abs(low - close)
     
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    return tr.ewm(span=period, adjust=False).mean()
+    atr = tr.ewm(span=period, adjust=False).mean()
+    
+    # Fill NaN values with a default of 2% of the close price
+    fallback = df['Close'] * 0.02
+    return atr.fillna(fallback)
 
 
 # ==============================================

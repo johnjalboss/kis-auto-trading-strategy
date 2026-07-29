@@ -135,7 +135,7 @@ class PositionSizer:
        BULL (1.2x) | BEAR (0.5x) | CHOPPY (0.4x)
     """
     
-    MAX_SINGLE_POSITION = 0.40  # [v1.1.8] 20% → 40%: small account needs concentration
+    MAX_SINGLE_POSITION = float(getattr(config, 'MAX_POSITION_PCT', 0.35))  # 3슬롯 집중투자 (종목당 최대 35%)
     RISK_PER_TRADE = 0.02       # Risk 2% per trade
     
     def __init__(self, portfolio_value: float = 100000):

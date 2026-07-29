@@ -55,35 +55,40 @@ if DAILY_STOP_LOSS_PCT >= 1.0:
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "3"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "60"))
 
-# Position limits
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.30"))  # 30% max per position
+# Position limits (소액 계좌 수익 극대화를 위해 3개 핵심 주도주 집중 재편)
+MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 35% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 스윙 최대 5종목 동시 보유
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "3"))  # 1등 주도주 3종목 집중 투자
 
 # ==============================================
 # [ENABLED] UPGRADE 교체매매 활성화 — 최소 25점 차이날 때만 교체
 # 너무 자주 발생하는 것을 방지하기 위해 큰 점수 격차(25점)를 설정하여 무분별한 교체를 방지합니다.
-UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "25"))  # [ENABLED]
+UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "35"))  # [v1.2] 25→35: 고득점 스윙 포지션 무분별 교체 방지
 
 # 매수 후 최소 보유 시간 (분)
 UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "120"))
 
 # 하루 최대 교체 횟수
-UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "2"))
+UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "1"))  # [v1.2] 2→1: 스윙 포지션 안정성 최우선
 
 # 수익중인 종목은 교체하지 않음 (이 %이상 수익이면 보호)
 UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02"))  # 2%
 
+# 손실중인 종목 교체 매도 금지 기준선 (이 % 초과 손실이면 교체 금지, 예: -0.002 = -0.2% 손실 이하일 때만 교체 허용)
+UPGRADE_LOSS_LIMIT_PCT = float(os.getenv("UPGRADE_LOSS_LIMIT_PCT", "-0.002"))
+
 # ==============================================
-# Strategy Parameters
+# Strategy & Profit Execution Parameters
 # ==============================================
 
-# [FIX] Stop-loss 5% -> 7%: 성장주(NVDA, META 등) 일중 변동성 2~4%를 노이즈로 흡수
-# 이전: 1.2%~1.5% 수준에서 손절 당하는 사례 15건+ 확인 (순수 노이즈 손절)
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.12"))       # 12% TP (유지)
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.07"))           # [FIX] 5% -> 7% SL
-BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.07")) # [FIX] 5% -> 7%
+# [PROFIT MAXIMIZER] 분할 익절 및 무위험 본절 스탑 파라미터
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.09"))  # +9.0% 50% 분할익절
+BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.05"))   # +5.0% 달성 시 손절가를 본절가로 상향
+
+TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.15"))       # 15% 최종 TP
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.07"))           # 7% 기본 SL
+BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.07"))
 ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.5")) # [FIX] 2.0 -> 2.5x ATR
 ECON_EVENT_GUARD_ENABLED = False
 
@@ -142,11 +147,12 @@ INVERSE_ETFS = {
     "UVXY", "VIXY",  # VIX / Volatility
 }
 
-# 방어주 목록 (하락장/약세장 대응용)
+# 방어주 및 헬스케어/금융/가치주 목록 (하락장/약세장 수급 유입주 — 강제 청산 대상 제외)
 DEFENSIVE_UNIVERSE_SET = {
     "PG", "KO", "PEP", "JNJ", "WMT", "COST", "CL", "GIS", "K", "SJM",
     "MO", "PM", "NEE", "DUK", "SO", "ED", "AEP", "XEL", "WEC", "ES",
-    "T", "VZ", "CMCSA", "BMY", "ABBV", "MRK", "PFE", "LLY", "ABT"
+    "T", "VZ", "CMCSA", "BMY", "ABBV", "MRK", "PFE", "LLY", "ABT",
+    "AVTR", "NVO", "FNB", "GEO", "UNH", "CVS", "GILD", "AMGN", "REGN", "CI", "HUM", "MCK", "CAH"
 }
 
 

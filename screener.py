@@ -1327,15 +1327,15 @@ class DynamicScreener:
             except Exception:
                 pass
 
-            # Theme Radar Bonus
+            # Theme Radar Bonus (테마 레이더 1등주 우선순위 강제)
             theme_radar_bonus = 0
             try:
                 from theme_radar_adapter import ThemeRadarAdapter
                 adapter = ThemeRadarAdapter()
                 recs = adapter.get_recommendations()
                 if symbol in recs:
-                    # 탑픽 추천 종목이면 가중치 부여 (Leader Pick = +15, Setup Pick = +8)
-                    theme_radar_bonus = 15 if recs[symbol]["pick_type"] == "LEADER" else 8
+                    # 탑픽 추천 종목이면 가중치 부여 (Leader Pick = +25, Setup Pick = +15)
+                    theme_radar_bonus = 25 if recs[symbol]["pick_type"] == "LEADER" else 15
                     logger.info("🎯 [THEME_RADAR_BONUS] {} is a Theme Radar {}! Bonus: +{}", 
                                 symbol, recs[symbol]["pick_type"], theme_radar_bonus)
             except Exception as tr_err:

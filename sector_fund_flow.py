@@ -13,6 +13,7 @@ Scoring:
 - Stock's sector is in bottom 3 outflows → -25
 - Neutral sectors → 0
 """
+import config
 import pandas as pd
 import numpy as np
 import yfinance as yf

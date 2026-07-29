@@ -102,9 +102,17 @@ class SignalAggregator:
             result.details.extend(inst_details)
         except Exception as e:
             logger.debug(f"Institutional analysis failed: {e}")
+
+        try:
+            # 7. [INSTITUTIONAL QUANT] Sharpe-Weighted Volatility-Adjusted Momentum (+/-15)
+            sharpe_score, sharpe_details = self._check_sharpe_vol_momentum(df)
+            result.bonus_score += sharpe_score
+            result.details.extend(sharpe_details)
+        except Exception as e:
+            logger.debug(f"Sharpe Vol Momentum analysis failed: {e}")
         
-        # Clamp final score
-        result.bonus_score = max(-55, min(55, result.bonus_score))
+        # Clamp final score (-60 to +60)
+        result.bonus_score = max(-60, min(60, result.bonus_score))
         
         if result.details:
             logger.debug(f"Signal aggregator: bonus={result.bonus_score:+d} {result.details}")
@@ -318,6 +326,42 @@ class SignalAggregator:
         
         final_score = int(score / 15.0)
         return max(-12, min(12, final_score)), details
+
+    # ===============================================
+    # 7. SHARPE-WEIGHTED VOLATILITY-ADJUSTED MOMENTUM
+    # ===============================================
+    def _check_sharpe_vol_momentum(self, df: pd.DataFrame) -> tuple:
+        """Calculates risk-adjusted Sharpe momentum (63-day Sharpe Ratio)."""
+        score = 0
+        details = []
+        if df is None or len(df) < 30:
+            return 0, []
+        
+        try:
+            close = df['Close']
+            daily_returns = close.pct_change().dropna()
+            if len(daily_returns) < 20:
+                return 0, []
+            
+            recent_returns = daily_returns.tail(63)
+            mean_ret = recent_returns.mean()
+            std_ret = recent_returns.std()
+            
+            if std_ret > 0:
+                ann_sharpe = (mean_ret * 252) / (std_ret * np.sqrt(252))
+                if ann_sharpe >= 2.0:
+                    score = 15
+                    details.append(f"SMOOTH_SHARPE_LEADER:{ann_sharpe:.1f}")
+                elif ann_sharpe >= 1.2:
+                    score = 8
+                    details.append(f"SOLID_SHARPE_UPTREND:{ann_sharpe:.1f}")
+                elif ann_sharpe < -0.5:
+                    score = -10
+                    details.append(f"HIGH_VOL_DOWNTREND:{ann_sharpe:.1f}")
+        except Exception:
+            pass
+            
+        return score, details
 
     # ===============================================
     # UTILITY

@@ -244,6 +244,50 @@ def get_current_price(symbol: str, exchange: str = None) -> Optional[Dict]:
     return None
 
 
+def _cleanse_ohlcv_data(df: pd.DataFrame) -> pd.DataFrame:
+    """[QUANT DATA INTEGRITY] 데이터 무결성 검증 및 이상치 클렌징 엔진
+    
+    1. NaN 및 0 이하 가격 처리 (전진/후진 채우기)
+    2. 이상치 불량 틱 (Bad-Tick: 3-Sigma 초과 스파이크) 보정
+    3. 거래량 0 무효 데이터 보정
+    """
+    if df is None or df.empty:
+        return df
+    
+    df = df.copy()
+    
+    # 1. NaN 및 비정상 가격 보정
+    cols = ['Open', 'High', 'Low', 'Close']
+    for c in cols:
+        if c in df.columns:
+            df[c] = df[c].replace(0, np.nan)
+            df[c] = df[c].ffill().bfill()
+            
+    if 'Volume' in df.columns:
+        df['Volume'] = df['Volume'].fillna(0).apply(lambda x: max(0, x))
+        
+    # 2. 불량 틱 (Spurious Bad-Tick) 3-Sigma 이상치 보정
+    if len(df) >= 20 and 'Close' in df.columns:
+        returns = df['Close'].pct_change()
+        mean_ret = returns.mean()
+        std_ret = returns.std()
+        
+        if std_ret > 0:
+            # 3.5 표준편차 초과 일시적 스파이크 감지 및 억제
+            outliers = (returns - mean_ret).abs() > (3.5 * std_ret)
+            for idx in df.index[outliers]:
+                # 연속 데이터인 경우 이전 종가 기준으로 스파이크 캡 적용
+                prev_idx = df.index.get_loc(idx) - 1
+                if prev_idx >= 0:
+                    prev_close = df['Close'].iloc[prev_idx]
+                    capped_close = prev_close * (1 + np.clip(returns.loc[idx], -0.20, 0.20))
+                    df.loc[idx, 'Close'] = capped_close
+                    if 'High' in df.columns: df.loc[idx, 'High'] = max(df.loc[idx, 'High'], capped_close)
+                    if 'Low' in df.columns: df.loc[idx, 'Low'] = min(df.loc[idx, 'Low'], capped_close)
+                    
+    return df
+
+
 def get_daily_ohlcv(symbol: str, exchange: str = None, 
                      days: int = 100, period_type: str = "0",
                      adjusted: bool = True) -> Optional[pd.DataFrame]:
@@ -370,8 +414,10 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
         elif days <= 1250: period_str = "5y"
         elif days <= 2500: period_str = "10y"
 
-        df = ticker.history(period=period_str)
+        df = ticker.history(period=period_str, auto_adjust=True)
         if df is not None and not df.empty:
+            # [DATA CLEANSER] 이상치 불량 틱(Bad-Tick) 및 NaN 정제
+            df = _cleanse_ohlcv_data(df)
             if len(df) > days:
                 df = df.tail(days)
             return df

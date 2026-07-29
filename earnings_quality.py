@@ -14,6 +14,7 @@ Scoring:
 - FCF << Net Income → -20 (accrual-based, unsustainable)
 - High ROE + low debt → +15
 """
+import config
 import pandas as pd
 import numpy as np
 import yfinance as yf

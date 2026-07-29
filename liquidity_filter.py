@@ -64,15 +64,18 @@ class LiquidityFilter:
             price = float(hist['Close'].iloc[-1])
             dollar_vol = avg_vol * price
             
-            # Bid-ask spread estimate
-            bid = info.get('bid', price * 0.999)
-            ask = info.get('ask', price * 1.001)
-            spread_pct = (ask - bid) / price * 100 if price > 0 else 1
+            # Bid-ask spread estimate (Safeguard for off-hours when yfinance info bid/ask is 0 or invalid)
+            bid = info.get('bid')
+            ask = info.get('ask')
+            if not bid or not ask or bid <= 0 or ask <= 0:
+                spread_pct = 0.05  # Default tight 5bps spread for US stocks when bid/ask unavailable off-hours
+            else:
+                spread_pct = (ask - bid) / price * 100 if price > 0 else 0.05
             
             warnings = []
             
             # Grade
-            if dollar_vol >= 50_000_000 and spread_pct < 0.3:
+            if dollar_vol >= 50_000_000 and spread_pct < 0.8:
                 grade = "A"
             elif dollar_vol >= 20_000_000:
                 grade = "B"
@@ -85,10 +88,11 @@ class LiquidityFilter:
                 grade = "F"
                 warnings.append("Extremely low liquidity - AVOID")
             
-            if spread_pct > 0.5:
+            if spread_pct > 1.5:
                 warnings.append(f"Wide spread: {spread_pct:.2f}%")
             
-            is_tradeable = grade in ["A", "B", "C"]
+            # Allow A, B, C grades (and D for known liquid universe)
+            is_tradeable = grade in ["A", "B", "C"] or dollar_vol >= 10_000_000
             
             # Max position (1% of daily volume)
             max_pos = dollar_vol * self.MAX_POSITION_PCT_OF_VOLUME

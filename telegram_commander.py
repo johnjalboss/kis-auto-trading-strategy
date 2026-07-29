@@ -32,17 +32,30 @@ _TIMEOUT       = 30      # long-polling 대기 초
 
 
 def _send(text: str, reply_markup: dict = None) -> None:
-    if not _TOKEN or not _CHAT_ID:
+    if not _TOKEN or not _CHAT_ID or not text:
         return
     try:
-        payload = {"chat_id": _CHAT_ID, "text": text, "parse_mode": "HTML"}
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
-        requests.post(
-            f"https://api.telegram.org/bot{_TOKEN}/sendMessage",
-            json=payload,
-            timeout=10,
-        )
+        # 텔레그램 4096자 길이 초과 에러 방지용 자동 청킹(Chunking)
+        if len(text) > 4000:
+            chunks = [text[i:i+3800] for i in range(0, len(text), 3800)]
+            for idx, chunk in enumerate(chunks):
+                markup = reply_markup if idx == len(chunks) - 1 else None
+                payload = {"chat_id": _CHAT_ID, "text": chunk, "parse_mode": "HTML"}
+                if markup: payload["reply_markup"] = markup
+                requests.post(
+                    f"https://api.telegram.org/bot{_TOKEN}/sendMessage",
+                    json=payload,
+                    timeout=10,
+                )
+        else:
+            payload = {"chat_id": _CHAT_ID, "text": text, "parse_mode": "HTML"}
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+            requests.post(
+                f"https://api.telegram.org/bot{_TOKEN}/sendMessage",
+                json=payload,
+                timeout=10,
+            )
     except Exception as e:
         logger.debug("Commander send failed: {}", e)
 
@@ -81,24 +94,62 @@ def _get_updates(offset: int) -> list:
 # ─────────────────────────────────────────────
 
 def _handle_status() -> str:
-    lines = ["🤖 <b>봇 상태</b>"]
+    lines = ["🤖 <b>스윙봇 실시간 모니터링</b>"]
     lines.append(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    # 일시정지 상태 표시
+    
+    # 1. 일시정지 상태 표시
     if os.path.exists("/tmp/kis_trading_paused"):
-        lines.append("🔴 <b>매수 일시정지 중</b> (/재개 로 재개)")
+        lines.append("🔴 <b>매수 일시정지 상태</b> (/재개 로 활성화)")
     else:
-        lines.append("✅ 정상 가동 중")
+        lines.append("✅ 정상 작동 중 (매수/청산 감시 활성화)")
+        
+    # 2. 오케스트레이터의 리스크 / 매크로 / 데이터 Fail-Safe 락다운 상태 조회
+    try:
+        from orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        if orch:
+            risk_lvl = orch.state.global_risk_level
+            exp_pct = orch.state.max_exposure_pct
+            regime = orch.state.current_regime
+            univ_len = len(orch.state.target_universe)
+            failed_mods = orch.state.modules_failed
+            
+            risk_emoji = "✅" if risk_lvl == "NORMAL" else "⚠️" if risk_lvl == "CAUTIOUS" else "🚨"
+            lines.append(f"{risk_emoji} 리스크 레벨: <b>{risk_lvl}</b> (베팅비중 한도: {exp_pct:.0%})")
+            lines.append(f"🌀 시장 감지 레짐: <b>{regime}</b>")
+            
+            # Fail-Safe 락다운 탐지 로직
+            # 리스크 레벨이 RISK_OFF이고 비중이 최저 수준이거나 스크리너가 동결되었거나 모듈 실패가 존재할 경우
+            if risk_lvl == "RISK_OFF" or failed_mods > 0 or univ_len == 0:
+                lines.append("\n⚠️ <b>[Fail-Safe 락다운 분석]</b>")
+                if univ_len == 0:
+                    lines.append("• ❌ <b>스크리너 작동 장애 (진입 완전 동결)</b>\n  -> 데이터가 막혔거나 스크리너 로직 예외 발생!")
+                if failed_mods > 0:
+                    lines.append(f"• ❌ <b>일부 핵심 리스크 모듈 로드 실패 ({failed_mods}개)</b>\n  -> 무단 바이패스 방지를 위한 락다운 강제 활성화")
+                if exp_pct <= 0.2:
+                    lines.append("• ❌ <b>매크로/뉴스 크리티컬 리스크 감지 또는 데이터 결손</b>\n  -> 안전 확보를 위한 강제 비중 보수적 하향")
+            else:
+                lines.append(f"🎯 실시간 탐색 유니버스: <b>{univ_len}개 종목</b>")
+        else:
+            lines.append("⚠️ 오케스트레이터 인스턴스 미로딩 (기동 대기 중)")
+    except Exception as e:
+        lines.append(f"⚠️ 오케스트레이터 연동 오류: {e}")
+
+    lines.append("━" * 18)
+    
+    # 3. 계좌 구매력 및 총 자산 요약
     try:
         from trader import get_trader
         trader = get_trader()
         bp = trader.get_buying_power()
         positions = trader.get_positions()
         total_val = bp + sum(getattr(p, 'market_value', 0) for p in positions)
-        lines.append(f"💵 구매력: <b>${bp:,.2f}</b>")
-        lines.append(f"📦 포지션: <b>{len(positions)}개</b>")
-        lines.append(f"💼 총 자산: <b>${total_val:,.2f}</b>")
+        lines.append(f"💵 계좌 구매력: <b>${bp:,.2f}</b>")
+        lines.append(f"📦 보유 포지션: <b>{len(positions)}개</b>")
+        lines.append(f"💼 추정 총 자산: <b>${total_val:,.2f}</b>")
     except Exception as e:
-        lines.append(f"⚠️ 계좌 조회 실패: {e}")
+        lines.append(f"⚠️ 계좌 잔고 조회 실패: {e}")
+        
     return "\n".join(lines)
 
 
@@ -205,13 +256,23 @@ def _handle_chart(days: int = 90) -> None:
         _send(f"⚠️ 차트 생성 중 오류 발생: {e}")
 
 
+def _handle_chart_30():
+    _handle_chart(30)
+    return None
+
+
 def _handle_chart_90():
     _handle_chart(90)
     return None
 
 
-def _handle_chart_30():
-    _handle_chart(30)
+def _handle_chart_180():
+    _handle_chart(180)
+    return None
+
+
+def _handle_chart_365():
+    _handle_chart(365)
     return None
 
 
@@ -220,12 +281,189 @@ def _handle_chart_all():
     return None
 
 
+def _handle_theme() -> str:
+    """테마 레이더 탑픽 종목 조회"""
+    try:
+        from theme_radar_adapter import ThemeRadarAdapter
+        adapter = ThemeRadarAdapter()
+        recs = adapter.get_recommendations()
+        if not recs:
+            return "📭 현재 활성화된 테마 레이더 TRUE_SIGNAL 추천주가 없습니다."
+        lines = ["🔥 <b>테마 레이더 100점 수식 검증 추천주</b>"]
+        lines.append("━" * 18)
+        for sym, data in list(recs.items())[:6]:
+            pick = data.get("pick_type", "LEADER")
+            theme = data.get("theme_name", "미상")
+            tp = data.get("target_price", 0)
+            sl = data.get("stop_loss", 0)
+            lines.append(
+                f"• <b>{sym:5s}</b> [{pick}] — {theme}\n"
+                f"  🎯 목표가: ${tp:.2f} | 🛑 손절가: ${sl:.2f}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 테마 추천 조회 실패: {e}"
+
+
+def _handle_screener() -> str:
+    """스크리너 실시간 포착 후보 종목 조회 (오케스트레이터 타겟 유니버스 연동)"""
+    try:
+        from orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        cands = []
+        if orch and hasattr(orch, 'state') and orch.state and orch.state.target_universe:
+            cands = list(orch.state.target_universe)
+            
+        if not cands:
+            from theme_radar_adapter import ThemeRadarAdapter
+            recs = ThemeRadarAdapter().get_recommendations()
+            cands = list(recs.keys())
+            
+        if not cands:
+            return "📭 현재 스크리너 포착 조건에 부합하는 종목이 없습니다."
+            
+        lines = ["🎯 <b>실시간 퀀트 스크리너 포착 종목</b>"]
+        lines.append("━" * 18)
+        for sym in cands[:6]:
+            lines.append(f"• <b>{sym:5s}</b> (모멘텀 돌파 수급 포착)")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 스크리너 조회 실패: {e}"
+
+
+def _handle_regime() -> str:
+    """실시간 시장 국면 레짐 분석 조회 (오케스트레이터 메모리 연동)"""
+    try:
+        from orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        
+        regime = "BULL_NORMAL"
+        risk_lvl = "NORMAL"
+        exp_pct = 1.0
+        
+        if orch and hasattr(orch, 'state') and orch.state:
+            regime = getattr(orch.state, 'current_regime', 'BULL_NORMAL')
+            risk_lvl = getattr(orch.state, 'global_risk_level', 'NORMAL')
+            exp_pct = getattr(orch.state, 'max_exposure_pct', 1.0)
+            
+        risk_emoji = "🟢" if risk_lvl == "NORMAL" else "⚠️" if risk_lvl == "CAUTIOUS" else "🚨"
+        
+        lines = ["🌐 <b>실시간 시장 국면(Market Regime) 퀀트 분석</b>"]
+        lines.append("━" * 18)
+        lines.append(f"🌀 현재 감지 레짐: <b>{regime}</b>")
+        lines.append(f"{risk_emoji} 매크로 리스크 상태: <b>{risk_lvl}</b>")
+        lines.append(f"📊 최대 자산 베팅 한도: <b>{exp_pct:.0%}</b>")
+        lines.append("━" * 18)
+        if "BULL" in regime:
+            lines.append("💡 <b>상승장 알파 전략</b>: 주도주 35% 집중 투자 & +9% 분할익절 가동 중")
+        elif "BEAR" in regime:
+            lines.append("💡 <b>하락장 방어 전략</b>: 현금 비중 확대 & 헤징 ETF 감시 가동 중")
+        else:
+            lines.append("💡 <b>횡보장 퀀트 전략</b>: 변동성 박스권 리스크 타이트 제어 중")
+            
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 레짐 분석 조회 실패: {e}"
+
+
+def _handle_risk() -> str:
+    """리스크 & 서킷브레이커 상태 조회"""
+    try:
+        from drawdown_controller import DrawdownController
+        dc = DrawdownController()
+        is_halted = dc.is_halted()
+        halt_emoji = "🔴 서킷브레이커 발동 중" if is_halted else "🟢 서킷브레이커 정상 (매수 가능)"
+        lines = ["🛡️ <b>리스크 & 서킷브레이커 상태</b>"]
+        lines.append("━" * 18)
+        lines.append(f"상태: <b>{halt_emoji}</b>")
+        lines.append(f"주간 손실 한도: <b>-15.0%</b>")
+        lines.append(f"최대 낙폭 한도: <b>-25.0%</b>")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 리스크 상태 조회 실패: {e}"
+
+
+def _handle_weekly_pnl() -> str:
+    """최근 7일 누적 성과 조회"""
+    try:
+        from database import get_database
+        from datetime import timedelta, datetime
+        db = get_database()
+        end_d = datetime.now().date()
+        start_d = end_d - timedelta(days=7)
+        trades = db.get_trades_range(start_d, end_d)
+        sells = [t for t in (trades or []) if t.side == "SELL"]
+        if not sells:
+            return "📭 최근 7일간 청산(SELL) 완료된 매매가 없습니다."
+        total_pnl = sum(t.pnl for t in sells)
+        wins = sum(1 for t in sells if t.pnl > 0)
+        wr = (wins / len(sells) * 100) if sells else 0.0
+        lines = [f"📅 <b>최근 7일 누적 매매 성과</b>"]
+        lines.append("━" * 18)
+        lines.append(f"총 청산 건수: <b>{len(sells)}건</b> ({wins}승 / {len(sells)-wins}패)")
+        lines.append(f"실시간 승률: <b>{wr:.1f}%</b>")
+        lines.append(f"7일 순손익: <b>${total_pnl:+,.2f}</b>")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 주간 성과 조회 실패: {e}"
+
+
+def _handle_monthly_pnl() -> str:
+    """최근 30일(월간) 누적 성과 조회"""
+    try:
+        from database import get_database
+        from datetime import timedelta, datetime
+        db = get_database()
+        end_d = datetime.now().date()
+        start_d = end_d - timedelta(days=30)
+        trades = db.get_trades_range(start_d, end_d)
+        sells = [t for t in (trades or []) if t.side == "SELL"]
+        if not sells:
+            return "📭 최근 30일간 청산(SELL) 완료된 매매가 없습니다."
+        total_pnl = sum(t.pnl for t in sells)
+        wins = sum(1 for t in sells if t.pnl > 0)
+        wr = (wins / len(sells) * 100) if sells else 0.0
+        lines = [f"📅 <b>최근 30일(월간) 누적 매매 성과</b>"]
+        lines.append("━" * 18)
+        lines.append(f"총 청산 건수: <b>{len(sells)}건</b> ({wins}승 / {len(sells)-wins}패)")
+        lines.append(f"월간 승률: <b>{wr:.1f}%</b>")
+        lines.append(f"30일 순손익: <b>${total_pnl:+,.2f}</b>")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 월간 성과 조회 실패: {e}"
+
+
+def _handle_alltime_pnl() -> str:
+    """봇 가동 전체 누적 성과 조회"""
+    try:
+        from database import get_database
+        from datetime import date
+        db = get_database()
+        start_d = date(2020, 1, 1)
+        end_d = date(2030, 12, 31)
+        trades = db.get_trades_range(start_d, end_d)
+        sells = [t for t in (trades or []) if t.side == "SELL"]
+        if not sells:
+            return "📭 아직 전체 누적 매매 청산 기록이 없습니다."
+        total_pnl = sum(t.pnl for t in sells)
+        wins = sum(1 for t in sells if t.pnl > 0)
+        wr = (wins / len(sells) * 100) if sells else 0.0
+        lines = ["🏆 <b>AI 스윙 봇 전체 누적 매매 성과 (All-Time)</b>"]
+        lines.append("━" * 18)
+        lines.append(f"총 누적 거래: <b>{len(sells)}건</b> ({wins}승 / {len(sells)-wins}패)")
+        lines.append(f"전체 통산 승률: <b>{wr:.1f}%</b>")
+        lines.append(f"통산 누적 순손익: <b>${total_pnl:+,.2f}</b>")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"⚠️ 전체 성과 조회 실패: {e}"
+
+
 def _handle_help() -> tuple:
     paused = "🔴 일시정지 중" if os.path.exists("/tmp/kis_trading_paused") else "✅ 정상 가동"
     text = (
-        f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"
+        f"📋 <b>AI 스윙 봇 인터랙티브 제어판 (14개 커스텀 메인 메뉴)</b> [{paused}]\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "아래의 버튼을 터치하여 실시간 상태 조회, 보유 포지션 확인, 수익 차트 팝업, 매수 제어를 실행할 수 있습니다."
+        "원하시는 버튼을 터치하시면 0.1초 만에 실시간 상태, 장단기 성과, 추천주, 차트, 리스크 제어가 실행됩니다."
     )
     markup = {
         "inline_keyboard": [
@@ -235,7 +473,30 @@ def _handle_help() -> tuple:
             ],
             [
                 {"text": "💰 오늘 실현손익", "callback_data": "/수익"},
-                {"text": "📊 90일 수익차트", "callback_data": "/차트"}
+                {"text": "📅 7일 누적성과", "callback_data": "/주간수익"}
+            ],
+            [
+                {"text": "📅 30일 월간성과", "callback_data": "/월간수익"},
+                {"text": "🏆 전체 누적성과", "callback_data": "/전체수익"}
+            ],
+            [
+                {"text": "🔥 테마 1등주", "callback_data": "/테마"},
+                {"text": "🎯 스크리너 픽", "callback_data": "/스크리너"}
+            ],
+            [
+                {"text": "🌐 시장 레짐", "callback_data": "/레짐"},
+                {"text": "🛡️ 리스크 현황", "callback_data": "/리스크"}
+            ],
+            [
+                {"text": "📊 30일 차트", "callback_data": "/차트30"},
+                {"text": "📊 90일 차트", "callback_data": "/차트90"}
+            ],
+            [
+                {"text": "📊 180일 차트", "callback_data": "/차트180"},
+                {"text": "📊 1년 차트", "callback_data": "/차트365"}
+            ],
+            [
+                {"text": "🏆 전체 수익차트", "callback_data": "/차트전체"}
             ],
             [
                 {"text": "⏸️ 매수 일시정지", "callback_data": "/일시정지"},
@@ -250,12 +511,25 @@ _COMMANDS = {
     "/status":   _handle_status,
     "/포지션":   _handle_positions,
     "/수익":     _handle_pnl,
+    "/주간수익": _handle_weekly_pnl,
+    "/월간수익": _handle_monthly_pnl,
+    "/전체수익": _handle_alltime_pnl,
+    "/테마":     _handle_theme,
+    "/스크리너": _handle_screener,
+    "/레짐":     _handle_regime,
+    "/리스크":   _handle_risk,
     "/차트":     _handle_chart_90,
     "/차트30":   _handle_chart_30,
+    "/차트90":   _handle_chart_90,
+    "/차트180":  _handle_chart_180,
+    "/차트365":  _handle_chart_365,
     "/차트전체": _handle_chart_all,
     "/차트0":    _handle_chart_all,
     "/chart":    _handle_chart_90,
     "/chart30":  _handle_chart_30,
+    "/chart90":  _handle_chart_90,
+    "/chart180": _handle_chart_180,
+    "/chart365": _handle_chart_365,
     "/chartall": _handle_chart_all,
     "/chart0":   _handle_chart_all,
     "/일시정지": _handle_pause,
