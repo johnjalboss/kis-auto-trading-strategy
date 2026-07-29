@@ -423,6 +423,7 @@ class StrategyEngine:
         )
 
         # [Bear Market Inverse Hedging] 하락장 국면에서 인버스 ETF 진입 보완을 위한 자신감 점수 보너스
+        setup_reason = ""
         is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
         if is_inverse and current_regime in _bear_regimes:
             confidence += 15

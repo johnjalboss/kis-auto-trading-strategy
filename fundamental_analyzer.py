@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 import yfinance as yf
 from loguru import logger
+import config
 
 
 @dataclass
