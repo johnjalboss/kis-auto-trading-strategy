@@ -421,7 +421,9 @@ def save_signals_to_db(df: pd.DataFrame):
                 if rvol >= 2.5: score += 35
                 elif rvol >= 1.8: score += 30
                 elif rvol >= 1.3: score += 20
-                elif rvol >= 1.0: score += 10
+                elif rvol >= 1.0: score += 12
+                elif rvol >= 0.6: score += 6
+                else: score += 2
                 
                 if 2.0 <= ret_5d <= 7.0: score += 35
                 elif 7.0 < ret_5d <= 12.0: score += 20
@@ -708,11 +710,11 @@ def _render_theme_detail(tid, theme_row_df, cfg, tab_name="detail"):
     # Factor breakdown
     st.markdown("#### 📊 5-Factor 신호 분해")
     factor_data = [
-        ("🔊 거래량 RVOL",  f["rvol"],        30, "#00d97e", f"RVOL {row['med_rvol']:.2f}x (30점 만점)"),
-        ("📈 모멘텀",       f["momentum"],     25, "#3a9bdc", f"5일 수익 {row['ret_5d']:+.1f}% (25점 만점)"),
+        ("🔊 거래량 RVOL",  f["rvol"],        25, "#00d97e", f"RVOL {row['med_rvol']:.2f}x (25점 만점)"),
+        ("📈 모멘텀",       f["momentum"],     20, "#3a9bdc", f"5일 수익 {row['ret_5d']:+.1f}% (20점 만점)"),
         ("🫁 브레스",       f["breadth"],      25, "#a78bfa", f"오늘 양봉 {row['breadth_1d']:.0f}% (25점 만점)"),
-        ("📐 추세",         f["trend"],        15, "#f0b429", f"MA20 위 {row['above_ma_pct']:.0f}% (15점 만점)"),
-        ("⏱ 지속성",       f["persistence"],   5, "#fb923c", f"20일 흐름 {row['ret_20d']:+.1f}% (5점 만점)"),
+        ("📐 추세",         f["trend"],        20, "#f0b429", f"MA20 위 {row['above_ma_pct']:.0f}% (20점 만점)"),
+        ("⏱ 지속성",       f["persistence"],  10, "#fb923c", f"20일 흐름 {row['ret_20d']:+.1f}% (10점 만점)"),
     ]
     total_score = sum(x[1] for x in factor_data)
     for label, score, max_score, color, desc in factor_data:
@@ -732,6 +734,28 @@ def _render_theme_detail(tid, theme_row_df, cfg, tab_name="detail"):
       <span style="color:#7aa3cc;font-size:12px;">합계: </span>
       <span style="color:#{'00d97e' if total_score>=65 else 'f0b429' if total_score>=40 else 'ff3b5c'};
                   font-size:20px;font-weight:800;">{total_score}점 / 100점</span>
+    </div>
+    """, unsafe_allow_html=True)
+    # ─── 🏛️ 기관 정배열 & 장기 성과 분석 추가 (5-Factor 외 추가 팩터) ───────────────────────
+    ma_align = row.get("ma_align_pct", 0.0)
+    ret60 = row.get("med_ret60d", 0.0)
+    st.markdown(f"""
+    <div style="background:#05101f;border:1px solid #112d54;border-radius:10px;padding:14px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.3);">
+      <div style="font-size:13px;font-weight:700;color:#7ab8f5;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+        🏛️ 기관 수급 및 장기 구조적 추세 분석 (중장기 신뢰도 검증)
+      </div>
+      <div style="display:flex;gap:12px;width:100%;">
+        <div style="flex:1;background:#0a1a30;border-radius:8px;padding:12px;text-align:center;border:1px solid #1e3a6e33;">
+          <div style="color:#7aa3cc;font-size:11px;font-weight:600;">🏛️ 기관 정배열 (MA20 > MA50 > MA200)</div>
+          <div style="color:#00d97e;font-size:22px;font-weight:800;margin-top:4px;">{ma_align:.1f}%</div>
+          <div style="color:#5a7a9a;font-size:10px;margin-top:2px;">전체 종목 중 정배열 진입 비율</div>
+        </div>
+        <div style="flex:1;background:#0a1a30;border-radius:8px;padding:12px;text-align:center;border:1px solid #1e3a6e33;">
+          <div style="color:#7aa3cc;font-size:11px;font-weight:600;">📈 60일 장기 누적 수익률</div>
+          <div style="color:{'#00d97e' if ret60 >= 0 else '#ff3b5c'};font-size:22px;font-weight:800;margin-top:4px;">{ret60:+.1f}%</div>
+          <div style="color:#5a7a9a;font-size:10px;margin-top:2px;">테마의 중장기 기관 자금 누적 강도</div>
+        </div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -876,16 +900,26 @@ def _render_theme_detail(tid, theme_row_df, cfg, tab_name="detail"):
                     ${pick['price']:.2f} 
                     <span style="font-size:12px;color:#7aa3cc;">(5일: {pick['ret_5d']:+.1f}%, RVOL: {pick['rvol']:.1f}x)</span>
                   </div>
-                  <!-- 목표가/손절가 추가 -->
-                  <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px 10px;margin-bottom:8px;border:1px solid #1d3557;">
-                    <div style="color:#00d97e;font-weight:700;font-size:13px;margin-bottom:2px;">
-                      🎯 익절 목표가: ${pick['target_price']:.2f} (+{pick['target_pct']}%)
+                  <!-- 목표가/손절가/손익비 추가 -->
+                  <div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #1d3557;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                      <span style="color:#00d97e;font-weight:700;font-size:13px;">🎯 익절 목표가: ${pick['target_price']:.2f} (+{pick['target_pct']}%)</span>
+                      <span style="background:rgba(0,217,126,0.15);color:#00d97e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #00d97e44;">손익비 {round(pick['target_pct']/pick['stop_pct'], 1)}:1</span>
                     </div>
                     <div style="color:#ff3b5c;font-weight:700;font-size:13px;">
                       🛑 손절 대응가: ${pick['stop_loss']:.2f} (-{pick['stop_pct']}%)
                     </div>
                   </div>
-                  <div style="font-size:12px;color:#a0c4e8;line-height:1.6;margin-top:8px;">{pick['reason']}</div>
+                  <!-- ⚡ 무지성 3초 실전 주문 가이드 -->
+                  <div style="background:rgba(0,217,126,0.06);border:1px solid #00d97e44;border-radius:8px;padding:10px 12px;margin-top:8px;">
+                    <div style="color:#00d97e;font-weight:700;font-size:11px;margin-bottom:4px;">⚡ 무지성 3초 주문 세팅 완료 가이드</div>
+                    <div style="font-size:11px;color:#c9d1d9;line-height:1.5;">
+                      1️⃣ <b>[진입 지정가]</b>: 현재가 <b>${pick['price']:.2f}</b> 이하 매수 주문<br>
+                      2️⃣ <b>[익절 지정가]</b>: 🎯 <b>${pick['target_price']:.2f}</b> (+{pick['target_pct']}%) 예약<br>
+                      3️⃣ <b>[손절 스탑로스]</b>: 🛑 <b>${pick['stop_loss']:.2f}</b> (-{pick['stop_pct']}%) 감시가 세팅
+                    </div>
+                  </div>
+                  <div style="font-size:11px;color:#a0c4e8;line-height:1.5;margin-top:8px;">{pick['reason']}</div>
                 </div>
                 """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1110,7 +1144,13 @@ if raw_themes_df.empty:
 themes_df = raw_themes_df.copy()
 if not show_traditional:
     themes_df = themes_df[~themes_df["theme_id"].isin(TRADITIONAL)]
-themes_df = themes_df[themes_df["stock_count"] >= min_stocks].reset_index(drop=True)
+# Load recommendations to display on front page cards
+recs_df = pd.DataFrame()
+if os.path.exists(DB_PATH):
+    try:
+        recs_df = db_df("SELECT * FROM theme_recommendations")
+    except Exception as e:
+        st.sidebar.error(f"Error loading recommendations: {e}")
 
 # Split by signal type
 true_signals  = themes_df[themes_df["signal_type"] == "TRUE_SIGNAL"].head(10)
@@ -1207,6 +1247,62 @@ with tab_signal:
                   <div style="background:#fb923c;height:4px;width:{f['persistence']/5*100:.0f}%;border-radius:2px;" title="지속"></div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # ── 🎯 퀀트 원픽 추천 종목 표시 (무지성 3초 주문 실행 가이드) ──
+                if not recs_df.empty:
+                    theme_recs = recs_df[recs_df["theme_id"] == row["theme_id"]]
+                    if not theme_recs.empty:
+                        leader_rec = theme_recs[theme_recs["pick_type"] == "LEADER"]
+                        setup_rec = theme_recs[theme_recs["pick_type"] == "SETUP"]
+                        
+                        recs_html = '<div style="margin-top:-8px;margin-bottom:16px;padding:12px;background:linear-gradient(135deg,#071527,#0d203d);border:1px solid #00d97e44;border-radius:10px;box-shadow:0 4px 15px rgba(0,0,0,0.4);">'
+                        
+                        if not leader_rec.empty:
+                            l = leader_rec.iloc[0]
+                            rr = round(l['target_pct'] / max(0.1, l['stop_pct']), 1)
+                            recs_html += f"""
+                            <div style="margin-bottom:6px;border-bottom:1px solid #1e3a6e;padding-bottom:6px;">
+                              <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:#00d97e;font-weight:800;">🔥 주도 수급 원픽</span>
+                                <span style="font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:800;color:#00d97e;">{l['ticker']}</span>
+                              </div>
+                              <div style="margin-top:6px;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;font-size:12px;color:#c9d1d9;line-height:1.6;border:1px solid #1e3a6e33;">
+                                1️⃣ <b>[진입 지정가]</b>: <b>${l['price']:.2f}</b> 이하<br>
+                                2️⃣ <b>[🎯 목표 익절가]</b>: <span style="color:#00d97e;font-weight:700;">${l['target_price']:.2f} (+{l['target_pct']}%)</span><br>
+                                3️⃣ <b>[🛑 위험 손절가]</b>: <span style="color:#ff3b5c;font-weight:700;">${l['stop_loss']:.2f} (-{l['stop_pct']}%)</span><br>
+                                <div style="margin-top:4px;font-size:10px;color:#7aa3cc;display:flex;justify-content:space-between;">
+                                  <span>⚖️ 손익비 {rr}:1</span>
+                                  <span style="color:#00d97e;">💡 체결 시 익절/손절 세팅 후 HTS 닫기</span>
+                                </div>
+                              </div>
+                            </div>
+                            """
+                            
+                        if not setup_rec.empty:
+                            s = setup_rec.iloc[0]
+                            rr_s = round(s['target_pct'] / max(0.1, s['stop_pct']), 1)
+                            if not leader_rec.empty:
+                                recs_html += '<div style="height:6px;"></div>'
+                            recs_html += f"""
+                            <div>
+                              <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:#3a9bdc;font-weight:800;">💤 눌림목 분할원픽</span>
+                                <span style="font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:800;color:#3a9bdc;">{s['ticker']}</span>
+                              </div>
+                              <div style="margin-top:6px;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;font-size:12px;color:#c9d1d9;line-height:1.6;border:1px solid #1e3a6e33;">
+                                1️⃣ <b>[진입 지정가]</b>: <b>${s['price']:.2f}</b> 이하<br>
+                                2️⃣ <b>[🎯 목표 익절가]</b>: <span style="color:#00d97e;font-weight:700;">${s['target_price']:.2f} (+{s['target_pct']}%)</span><br>
+                                3️⃣ <b>[🛑 위험 손절가]</b>: <span style="color:#ff3b5c;font-weight:700;">${s['stop_loss']:.2f} (-{s['stop_pct']}%)</span><br>
+                                <div style="margin-top:4px;font-size:10px;color:#7aa3cc;display:flex;justify-content:space-between;">
+                                  <span>⚖️ 손익비 {rr_s}:1</span>
+                                  <span style="color:#3a9bdc;">💡 분할 매수 대응 추천</span>
+                                </div>
+                              </div>
+                            </div>
+                            """
+                            
+                        recs_html += '</div>'
+                        st.markdown(recs_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
         # 2. 관찰 대상 테마
