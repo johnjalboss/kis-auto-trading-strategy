@@ -1127,7 +1127,7 @@ class StrategyEngine:
         # [Overnight Gap Risk Shield] 3x 레버리지/인버스 ETF 장 마감 15분 전(EST 15:45) 전량 자동 청산
         # 밤 사이 시장 휴장 시간에 발생하는 갭하락 폭락 위험을 100% 원천 차단함
         is_lev_or_inv = (symbol in getattr(config, 'INVERSE_ETFS', set())) or (symbol in getattr(config, 'LEVERAGED_ETFS', set()))
-        if is_lev_or_inv and getattr(config, 'OVERNIGHT_LEVERAGE_EXIT', True):
+        if is_lev_or_inv and getattr(config, 'OVERNIGHT_LEVERAGE_EXIT', False):
             try:
                 et = pytz.timezone('US/Eastern')
                 now_et = datetime.now(et)

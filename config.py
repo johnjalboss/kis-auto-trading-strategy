@@ -206,9 +206,15 @@ PREMARKET_TIME = os.getenv("PREMARKET_TIME", "21:00")
 MACRO_ANALYSIS_TIME = os.getenv("MACRO_ANALYSIS_TIME", "21:30")
 SCREENING_TIME = os.getenv("SCREENING_TIME", "22:00")
 
-# Trading session
-TRADING_START_TIME = os.getenv("TRADING_START_TIME", "22:30")
-CLOSE_ALL_TIME = os.getenv("CLOSE_ALL_TIME", "04:55")
+# Overnight Leverage Risk Policy:
+# False (Recommended by User): Hold positions overnight to capture gap-up profits, while monitoring 15h continuously (18:00~09:00 KST)
+# for early pre-market stop loss execution.
+OVERNIGHT_LEVERAGE_EXIT = False
+LEVERAGED_STOP_LOSS_PCT = 0.040
+
+# Trading session (Full 15-Hour Continuous Monitoring: Premarket 18:00 -> Main 22:30 -> Aftermarket 09:00 KST)
+TRADING_START_TIME = os.getenv("TRADING_START_TIME", "18:00")
+CLOSE_ALL_TIME = os.getenv("CLOSE_ALL_TIME", "09:00")
 
 # Reports
 DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "05:00")
