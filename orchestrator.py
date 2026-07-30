@@ -93,8 +93,10 @@ class BotOrchestrator:
                 "regime": self.state.current_regime,
                 "updated_at": datetime.now().isoformat()
             }
-            with open(status_file, "w", encoding="utf-8") as f:
+            tmp_status = f"{status_file}.tmp"
+            with open(tmp_status, "w", encoding="utf-8") as f:
                 json.dump(status_data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_status, status_file)
             logger.info("Saved bot status: Equity=${:.2f}, Regime={}", total_equity, self.state.current_regime)
             
             # Update drawdown controller state with latest total equity

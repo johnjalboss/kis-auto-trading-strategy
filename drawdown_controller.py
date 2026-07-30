@@ -351,8 +351,10 @@ class DrawdownController:
                 'max_drawdown_recorded': self.max_drawdown_recorded,
                 'last_update': datetime.now().isoformat()
             }
-            with open(self.state_file, 'w') as f:
-                json.dump(state, f, indent=2)
+            tmp_file = f"{self.state_file}.tmp"
+            with open(tmp_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_file, self.state_file)
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
     

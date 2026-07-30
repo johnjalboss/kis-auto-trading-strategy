@@ -607,6 +607,23 @@ class StrategyEngine:
         confidence = min(100, max(0, confidence))
 
         # BEAR_REGIME_BLOCK with High-Score (>= 80) Bypass
+        # [Opposite ETF Cannibalization Guard] 반대 방향 레버리지/인버스 ETF 동시 보유 방지
+        # 예: TQQQ(3x Long) 보유 중 SQQQ(3x Short) 동시 매수 금지 (자산 잠식 및 양방향 수수료 낭비 방지)
+        opp_map = {
+            "SQQQ": {"TQQQ", "QQQ"}, "PSQ": {"TQQQ", "QQQ"},
+            "TQQQ": {"SQQQ", "PSQ"}, "QQQ": {"SQQQ", "PSQ"},
+            "SOXS": {"SOXL"}, "SOXL": {"SOXS"},
+            "SPXU": {"UPRO", "SPY"}, "SH": {"UPRO", "SPY"},
+            "UPRO": {"SPXU", "SH"}, "SPY": {"SPXU", "SH"},
+        }
+        if symbol in opp_map:
+            held_symbols = set(self.positions.keys())
+            conflicting_held = opp_map[symbol].intersection(held_symbols)
+            if conflicting_held:
+                return EntrySignal("HOLD", confidence,
+                    f"OPPOSITE_CONFLICT_GUARD: Cannot buy {symbol} while holding opposing position {list(conflicting_held)}",
+                    current_price)
+
         if current_regime in _bear_regimes:
             _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
             if symbol not in _allowed_in_bear:
