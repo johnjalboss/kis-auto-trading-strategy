@@ -965,10 +965,11 @@ class StrategyEngine:
                                 f"LEVERAGED_TP: {pnl_pct:+.1%} >= {config.LEVERAGED_TAKE_PROFIT_PCT:.0%}",
                                 price, pnl_pct)
             
-            #  ETF: 1.5%  ()
-            if pnl_pct <= -0.015:
+            # Leveraged/Inverse ETF Stop Loss: -4.0% threshold (prevents noise whipsaws on 3x leveraged ETFs)
+            leveraged_sl_pct = float(getattr(config, 'LEVERAGED_STOP_LOSS_PCT', 0.040))
+            if pnl_pct <= -leveraged_sl_pct:
                 return ExitSignal("SELL_ALL",
-                                f"LEVERAGED_SL: {pnl_pct:+.1%} <= -1.5%",
+                                f"LEVERAGED_SL: {pnl_pct:+.1%} <= -{leveraged_sl_pct:.1%}",
                                 price, pnl_pct)
 
         # =================================================================
