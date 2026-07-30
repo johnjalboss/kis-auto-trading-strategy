@@ -59,6 +59,7 @@ class FundamentalAnalyzer:
     
     def analyze(self, symbol: str) -> FundamentalData:
         try:
+            import config
             ticker = yf.Ticker(symbol)
             info = ticker.info
             
