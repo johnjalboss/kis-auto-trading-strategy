@@ -610,12 +610,12 @@ class StrategyEngine:
         if current_regime in _bear_regimes:
             _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
             if symbol not in _allowed_in_bear:
-                if confidence < 80:
-                    return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 80)", current_price)
+                if confidence < 70:
+                    return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 70)", current_price)
                 else:
-                    setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 80)"
+                    setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 70)"
 
-        # 5. Market Breadth Guard with High-Score (>= 95) Bypass
+        # 5. Market Breadth Guard with High-Score (>= 70) Bypass
         try:
             import kis_data
             _spy_df = kis_data.get_daily_ohlcv("SPY", days=25)
@@ -628,10 +628,10 @@ class StrategyEngine:
                 if _spy_current < _spy_sma20 * 0.995:
                     _allowed_in_downtrend = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
                     if symbol not in _allowed_in_downtrend:
-                        if confidence < 95:
-                            return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 95)", current_price)
+                        if confidence < 70:
+                            return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 70)", current_price)
                         else:
-                            setup_reason += f" | BREADTH_BYPASS (Score {confidence} >= 95)"
+                            setup_reason += f" | BREADTH_BYPASS (Score {confidence} >= 70)"
         except Exception as e:
             logger.debug("Breadth guard check failed: {}", e)
 
