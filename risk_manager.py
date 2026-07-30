@@ -379,20 +379,28 @@ class RiskManager:
         
         exposure_pct = amount / total_portfolio
         
+        # Leveraged / Inverse ETF Volatility Sizing Protection:
+        # Cap 3x leveraged ETF position exposure at 15% (half of normal stock max 35%)
+        # because 3x leverage already triples capital volatility!
+        effective_max_pct = self.max_position_pct
+        is_leveraged = (symbol in getattr(config, 'LEVERAGED_ETFS', set())) or (symbol in getattr(config, 'INVERSE_ETFS', set()))
+        if is_leveraged:
+            effective_max_pct = min(effective_max_pct, 0.15)
+
         # Check single position limit
-        if exposure_pct > self.max_position_pct:
-            adjusted = total_portfolio * self.max_position_pct
-            return True, adjusted, f"Reduced to {self.max_position_pct:.0%} limit"
+        if exposure_pct > effective_max_pct:
+            adjusted = total_portfolio * effective_max_pct
+            return True, adjusted, f"Reduced to {effective_max_pct:.0%} limit for {'3x Leveraged ETF' if is_leveraged else 'Stock'}"
         
         # Check if already have position in symbol
         if symbol in self._positions:
             existing = self._positions[symbol]
             new_exposure = (existing.exposure_pct * total_portfolio + amount) / total_portfolio
             
-            if new_exposure > self.max_position_pct:
-                remaining = self.max_position_pct - existing.exposure_pct
+            if new_exposure > effective_max_pct:
+                remaining = effective_max_pct - existing.exposure_pct
                 adjusted = max(0, remaining * total_portfolio)
-                return True, adjusted, f"Adding to existing position, capped at {self.max_position_pct:.0%}"
+                return True, adjusted, f"Adding to existing position, capped at {effective_max_pct:.0%}"
         
         return True, amount, "OK"
     

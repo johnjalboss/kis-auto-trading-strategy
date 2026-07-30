@@ -9,6 +9,7 @@ Updates overall macro risk levels for the trading bot.
 import os
 import json
 import requests
+import config
 from datetime import datetime
 from loguru import logger
 from typing import List, Dict, Optional
