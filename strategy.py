@@ -1124,13 +1124,26 @@ class StrategyEngine:
         except Exception as exit_e:
             logger.error("Advanced Adaptive Exit Engine error for {}: {}", symbol, exit_e)
 
-        # 
-        # [ ETF] ETF decay  5 (32.5h )  
-        # 
+        # [Overnight Gap Risk Shield] 3x 레버리지/인버스 ETF 장 마감 15분 전(EST 15:45) 전량 자동 청산
+        # 밤 사이 시장 휴장 시간에 발생하는 갭하락 폭락 위험을 100% 원천 차단함
+        is_lev_or_inv = (symbol in getattr(config, 'INVERSE_ETFS', set())) or (symbol in getattr(config, 'LEVERAGED_ETFS', set()))
+        if is_lev_or_inv and getattr(config, 'OVERNIGHT_LEVERAGE_EXIT', True):
+            try:
+                et = pytz.timezone('US/Eastern')
+                now_et = datetime.now(et)
+                # EST 15:45 (장 마감 15분 전) 이후 3x 레버리지/인버스 ETF 오버나이트 금지 청산
+                if now_et.time() >= time(15, 45):
+                    return ExitSignal("SELL_ALL",
+                        f"OVERNIGHT_GAP_SHIELD: Closing {symbol} before market close to 100% prevent overnight gap-down risk (P&L: {pnl_pct:+.1%})",
+                        price, pnl_pct)
+            except Exception as _e_gap:
+                logger.debug("Overnight gap shield check error: {}", _e_gap)
+
+        # [Inverse ETF Timeout] 5일 보유 시 변동성 잠식(Decay) 방지 청산
         if symbol in getattr(config, 'INVERSE_ETFS', set()):
             if _hold_hours >= 32.5:
                 return ExitSignal("SELL_ALL",
-                    f"INVERSE_TIMEOUT: {_hold_hours/6.5:.1f} , decay  ",
+                    f"INVERSE_TIMEOUT: {_hold_hours/6.5:.1f} days held, forcing exit to prevent decay",
                     price, pnl_pct)
 
         # 

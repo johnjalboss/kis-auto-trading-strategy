@@ -127,6 +127,12 @@ DAY_TYPE_CHOP_SIZE_MULT = float(os.getenv("DAY_TYPE_CHOP_SIZE_MULT", "0.5"))  # 
 # ==============================================
 
 # 레버리지 ETF 목록 (Volatility Decay 위험)
+# Leveraged/Inverse ETF Overnight Risk Control
+# Set to True to automatically close 3x Leveraged/Inverse ETFs (SQQQ, TQQQ, etc.) 15 mins before market close
+# to 100% eliminate overnight gap-down risk.
+OVERNIGHT_LEVERAGE_EXIT = True
+LEVERAGED_STOP_LOSS_PCT = 0.040
+
 LEVERAGED_ETFS = {
     "TQQQ", "SQQQ", "UPRO", "SPXU", "UDOW", "SDOW",
     "SOXL", "SOXS", "FNGU", "FNGD", "LABU", "LABD",
