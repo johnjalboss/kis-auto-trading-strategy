@@ -1273,6 +1273,15 @@ class StrategyEngine:
             
         trailing_stop = pos.high_since_entry - (atr * dynamic_atr_mult)
         
+        # Wall Street SOTA Profit Lock Escalator:
+        # Guarantee Zero-Loss / Lock Profits dynamically as price rises
+        if pnl_pct_high >= 0.08:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.050)  # Lock +5.0% profit minimum
+        elif pnl_pct_high >= 0.05:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.025)  # Lock +2.5% profit minimum
+        elif pnl_pct_high >= 0.025:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.005)  # Lock +0.5% profit (Risk-Free Trade)
+        
         # Absolute Hook: If we were 6% up, trailing stop CANNOT go below Entry + 1%.
         if breakeven_hook:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.01)
@@ -1280,7 +1289,7 @@ class StrategyEngine:
         if price <= trailing_stop:
             pnl_pct = (price - pos.entry_price) / pos.entry_price
             return ExitSignal("SELL_ALL",
-                            f"TRAIL(Lock): ${price:.2f} <= ${trailing_stop:.2f}",
+                            f"TRAIL(SOTA_LOCK): ${price:.2f} <= ${trailing_stop:.2f} (High P&L: {pnl_pct_high:+.1%})",
                             price, pnl_pct)
         return None
     
