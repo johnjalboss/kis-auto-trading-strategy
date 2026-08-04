@@ -375,12 +375,10 @@ class DynamicScreener:
                 # ── [GUARD 2] 52주 고점 대비 괴리율 필터 ────────────────
                 # 꼭대기(52주 고점 5% 이내) = 이미 너무 오른 것
                 # 너무 내린(52주 고점 40% 이하) = 모멘텀 소멸
-                # 스윗스팟: 52주 고점 대비 5~35% 아래 (오르는 중이지만 공간 있음)
                 high_52w = float(close.tail(252).max()) if len(close) >= 252 else float(close.max())
                 dist_from_high = (high_52w - curr) / high_52w * 100  # % below 52w high
-                if dist_from_high < 3.0:
-                    # 52주 신고가 3% 이내 = 완전 과열, 리스크 너무 높음
-                    return
+                # 52주 신고가 돌파 주도주 가점 (52주 고점 5% 이내 = 신고가 모멘텀 랠리)
+                near_52w_breakout = (dist_from_high <= 5.0)
                 
                 # ── [GUARD 3] 어닝 블랙아웃 (7일 이내 실적발표 종목 제외) ──
                 # 실적발표 전 7일은 갭하락 리스크가 가장 높은 구간
