@@ -298,7 +298,11 @@ class RiskManager:
             get_notifier().daily_stop_triggered(pnl_pct, self.daily_stop_pct)
     
     def _check_consecutive_losses(self):
-        """Check consecutive loss limit"""
+        """Check consecutive loss limit (Bypassed if ENABLE_CONSECUTIVE_LOSS_COOLDOWN is False)"""
+        if not getattr(config, 'ENABLE_CONSECUTIVE_LOSS_COOLDOWN', False):
+            self._cooldown_until = None
+            return
+
         if self._daily_stats is None:
             return
         

@@ -51,9 +51,10 @@ DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.03"))
 if DAILY_STOP_LOSS_PCT >= 1.0:
     DAILY_STOP_LOSS_PCT /= 100.0
 
-# Consecutive loss limit — 3번 연속 실패 후 쿨다운
-CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "3"))
-COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "60"))
+# Consecutive loss limit — 대표님 요구사항 반영: 불필요한 3연속 손실 쿨다운 매매 차단 기능 비활성화 (False)
+ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
+CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "999"))
+COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 
 # Position limits (소액 계좌 수익 극대화를 위해 3개 핵심 주도주 집중 재편)
 MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 35% max per position
