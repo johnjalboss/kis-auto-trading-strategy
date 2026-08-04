@@ -879,6 +879,15 @@ class StrategyEngine:
         except Exception:
             pass
 
+        # ================================
+        # Tech Rotation Overdrive Bonus (+25 pts for Tech / Semis / Growth Leaders)
+        # Automatically prioritizes Tech leaders over stagnant defensive stocks during Tech Bull Rallies
+        # ================================
+        tech_symbols = {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "QQQ", "TQQQ", "SOXL", "GOOGL", "AMZN", "META", "AVGO", "SMH", "XLK"}
+        if symbol in tech_symbols:
+            score += 25
+            logger.debug("TECH_ROTATION_BONUS: +25 pts added for Tech leader {}", symbol)
+
         return min(100, max(0, int(score)))
     
     def check_exit(self, symbol: str, realtime_price: float = None) -> ExitSignal:

@@ -1009,7 +1009,8 @@ class BotOrchestrator:
                             # [BUGFIX] Prevent selling losing positions to upgrade
                             # - We should only upgrade flat or slightly profitable positions.
                             # - If a position is at a loss of more than UPGRADE_LOSS_LIMIT_PCT, let it hit its stop loss; do not lock in losses via upgrade.
-                            loss_limit = float(getattr(config, 'UPGRADE_LOSS_LIMIT_PCT', -0.002))
+                            # Allow upgrading lagging/defensive stocks down to -5.0% loss limit when a surging Tech leader appears
+                            loss_limit = float(getattr(config, 'UPGRADE_LOSS_LIMIT_PCT', -0.050))
                             if pnl_pct < loss_limit:
                                 continue
                         
