@@ -679,7 +679,9 @@ class StrategyEngine:
         if not is_inverse and ind.bollinger.percent_b > 0.95:
             failed.append(f"BB%:{ind.bollinger.percent_b:.2f}")
         
-        # MACD or Stochastic RSI must be favorable (Exempt inverse ETFs)
+        # RVOL (Relative Volume) - Require institutional volume (>1.1x) for non-inverse entries
+        if not is_inverse and ind.volume_ratio > 0 and ind.volume_ratio < 1.10:
+            failed.append(f"RVOL:{ind.volume_ratio:.2f}<1.10")
         if not is_inverse and (not ind.macd.is_bullish and ind.stoch_rsi > 0.7):
             failed.append("MACD_bearish+StochRSI_high")
         
@@ -1401,10 +1403,9 @@ class StrategyEngine:
                             f"Overbought: BB%={ind.bollinger.percent_b:.2f}, RSI={ind.rsi:.0f}",
                             price, pnl_pct)
         
-        # Stochastic RSI extreme + profit
-        # [v1.1.8] Raised from 2% -> 4%: data showed StochRSI exits avg +2.58% but cutting too early
-        if ind.stoch_rsi > 0.9 and pnl_pct > 0.04:
-            return ExitSignal("SELL_ALL", f"StochRSI extreme: {ind.stoch_rsi:.2f}",
+        # Stochastic RSI extreme + profit (Require MACD cross_down & RSI > 78 to prevent cutting winners prematurely)
+        if ind.stoch_rsi > 0.95 and ind.rsi > 78 and ind.macd.cross_down and pnl_pct > 0.06:
+            return ExitSignal("SELL_ALL", f"StochRSI+MACD Bearish Reversal: RSI={ind.rsi:.0f}, Stoch={ind.stoch_rsi:.2f}",
                             price, pnl_pct)
         
         return None
