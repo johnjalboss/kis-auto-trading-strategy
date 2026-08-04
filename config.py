@@ -46,10 +46,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Risk Management
 # ==============================================
 
-# Daily stop loss — 스윙 트레이딩: 일일 3% 손실 한도
-DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.03"))
-if DAILY_STOP_LOSS_PCT >= 1.0:
-    DAILY_STOP_LOSS_PCT /= 100.0
+# Per-position strict stop loss (-3.0%)
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.03"))
+if STOP_LOSS_PCT >= 1.0:
+    STOP_LOSS_PCT /= 100.0
 
 # Consecutive loss limit — 대표님 요구사항 반영: 불필요한 3연속 손실 쿨다운 매매 차단 기능 비활성화 (False)
 ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False

@@ -1265,10 +1265,12 @@ class StrategyEngine:
         # Regime-aware hard stop:
         # [CRITICAL FIX] config.py에 정의된 손절률(7%)을 강제로 존중하도록 연동. 
         # 이전에는 config에서 7%로 늘렸으나 내부 하드코딩 5%/4%에 막혀 오동작 중이었음.
+        # [v3.4.0 ULTRA-TIGHT RISK GUARD]
+        # Strict -3.0% Hard Stop-Loss (Prevents losses from expanding past -3%)
         if current_regime in bear_regimes:
-            hard_stop_pct = float(getattr(config, 'BEAR_HARD_STOP_PCT', 0.07))
+            hard_stop_pct = float(getattr(config, 'BEAR_HARD_STOP_PCT', 0.035))  # -3.5% in bear markets
         else:
-            hard_stop_pct = float(getattr(config, 'STOP_LOSS_PCT', 0.07))
+            hard_stop_pct = float(getattr(config, 'STOP_LOSS_PCT', 0.030))       # -3.0% strict stop loss
         
         hard_stop_price = pos.entry_price * (1 - hard_stop_pct)
         effective_stop = max(stop_price, hard_stop_price)
