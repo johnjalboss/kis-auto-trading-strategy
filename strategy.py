@@ -914,9 +914,20 @@ class StrategyEngine:
             if is_bear_or_choppy:
                 score += 35
                 logger.info("🛡️ [BEAR_DEFENSIVE_BOOST] +35 pts added for Defensive stock {} during {}", symbol, current_regime)
-            else:
-                score -= 20
-                logger.info("⚡ [BULL_DEFENSIVE_PENALTY] -20 pts deducted from Defensive stock {} during {}", symbol, current_regime)
+        # ================================
+        # [v3.0.0 INSTITUTIONAL TRUE BREAKOUT VERIFICATION ENGINE]
+        # Prevents buying False Breakouts & Exhaustion Tops at ATH / 20d Highs!
+        # - Simply hitting a high does NOT mean it's good (User's exact directive).
+        # - Require RVOL >= 1.25 AND No Bearish Divergence to confirm Institutional Demand!
+        # - Deduct -40 pts penalty if RSI > 76 or Bearish Divergence (False Breakout Trap)!
+        # ================================
+        if ind.bollinger.percent_b >= 0.90 or ind.rsi > 70:
+            if ind.rsi > 76:
+                score -= 40
+                logger.info("🚫 [EXHAUSTION_TOP_PENALTY] -40 pts deducted for Overbought Exhaustion (RSI={:.0f}) on {}", ind.rsi, symbol)
+            elif ind.macd.cross_down:
+                score -= 40
+                logger.info("🚫 [BEARISH_DIVERGENCE_PENALTY] -40 pts deducted for MACD Bearish Divergence at High on {}", symbol)
 
         return min(100, max(0, int(score)))
     
