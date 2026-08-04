@@ -679,9 +679,10 @@ class StrategyEngine:
         if not is_inverse and ind.bollinger.percent_b > 0.95:
             failed.append(f"BB%:{ind.bollinger.percent_b:.2f}")
         
-        # RVOL (Relative Volume) - Require institutional volume (>1.1x) for non-inverse entries
-        if not is_inverse and ind.volume_ratio > 0 and ind.volume_ratio < 1.10:
-            failed.append(f"RVOL:{ind.volume_ratio:.2f}<1.10")
+        # OBV Volume Trend - Require non-down volume trend for non-inverse entries
+        obv_tr = getattr(ind, 'obv_trend', 'NEUTRAL')
+        if not is_inverse and obv_tr == 'DOWN':
+            failed.append("OBV:DOWN")
         if not is_inverse and (not ind.macd.is_bullish and ind.stoch_rsi > 0.7):
             failed.append("MACD_bearish+StochRSI_high")
         
@@ -1358,9 +1359,11 @@ class StrategyEngine:
                                 f"SCALE_OUT_50%: {pnl_pct:+.1%} >= 1.5R ATR target (${target_15r:.2f}, +{t15r_pct:.1%})",
                                 price, pnl_pct)
         else:
-            if price >= target_30r:
+            final_target_r = 4.5 if "BULL" in current_regime else 3.0
+            target_final = pos.entry_price + (final_target_r * scaled_risk_1r)
+            if price >= target_final:
                 return ExitSignal("SELL_ALL",
-                                f"FINAL_TP_3.0R: {pnl_pct:+.1%} >= 3.0R target (${target_30r:.2f})",
+                                f"FINAL_TP_{final_target_r:.1f}R: {pnl_pct:+.1%} >= {final_target_r:.1f}R target (${target_final:.2f})",
                                 price, pnl_pct)
         
         # Dynamic Trailing profit lock: Once up, trail from peak (lock in gains)
