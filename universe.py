@@ -73,11 +73,10 @@ def _fetch_sp500_from_wikipedia() -> list:
     네트워크 fetch 먼저 시도, 실패 시 정적 목록 사용.
     """
     # ── 완전한 S&P 500 정적 목록 (Wikipedia 차단 대비 fallback) ──────────────
-    # ★ [v3.1.0 PRIORITY MARKET LEADERS]
-    # Place top volume & momentum leaders at the front so they are NEVER truncated by candidates[:100]
+    # ★ [v3.3.0 100% DYNAMIC MARKET LEADER ENGINE]
+    # Screener dynamically ranks candidate stocks by real-time RS (1M+3M+6M+RVOL) on every single run.
     SP500_STATIC = [
-        "NVDA", "AAPL", "MSFT", "TSLA", "AMD", "QQQ", "TQQQ", "SOXL", "PLTR", "AVGO", "META", "GOOGL", "AMZN", "ARM", "MU", "NFLX", "SOXX", "SPY", "DIA", "IWM", "XLK", "XLI", "XLF",
-        "A", "AAL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
+        "A", "AAL", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
         "ADP", "ADSK", "AEE", "AEP", "AES", "AFL", "AIG", "AIZ", "AJG", "AKAM",
         "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AME", "AMGN", "AMP",
         "AMT", "ANET", "AON", "AOS", "APA", "APD", "APH", "APO", "APP",

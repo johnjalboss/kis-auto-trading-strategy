@@ -403,6 +403,11 @@ class DynamicScreener:
                 except Exception:
                     pass  # Finnhub 없으면 생략
                 
+                # 1개월(약 21거래일) 수익률
+                ret_1m = 0.0
+                if len(close) >= 21:
+                    ret_1m = (curr / float(close.iloc[-21]) - 1) * 100
+
                 # 3개월(약 65거래일) 수익률
                 ret_3m = 0.0
                 if len(close) >= 65:
@@ -420,6 +425,7 @@ class DynamicScreener:
                     ret_6m = ret_3m
                 
                 # 거래량 확인 (20일 평균 대비 현재 거래량)
+                vol_ratio = 1.0
                 if 'Volume' in df.columns and len(df) >= 20:
                     avg_vol = float(df['Volume'].iloc[-20:].mean())
                     curr_vol = float(df['Volume'].iloc[-1])
@@ -427,12 +433,18 @@ class DynamicScreener:
                     if vol_ratio < 0.5:
                         return
                 
-                # SPY 대비 상대강도 점수 (3M 가중치 0.6, 6M 가중치 0.4)
-                rs_score = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
+                # [v3.3.0 100% DYNAMIC RS RANKING FORMULA]
+                # Combine 1M (40%), 3M (35%), 6M (25%) Relative Strength vs SPY + RVOL volume surge bonus!
+                rs_score = ((ret_1m - spy_ret_3m*0.33) * 0.40 + 
+                            (ret_3m - spy_ret_3m) * 0.35 + 
+                            (ret_6m - spy_ret_6m) * 0.25 + 
+                            (vol_ratio - 1.0) * 2.0)
                 
-                # [보너스] 52주 고점 대비 10~25% 조정된 종목에 RS 보너스 (최적 진입 구간)
-                if 10 <= dist_from_high <= 25:
-                    rs_score += 3.0  # 조정 후 반등 스윗스팟 보너스
+                # [보너스] 52주 고점 대비 5% 이내 신고가 돌파 종목에 +5.0 RS 모멘텀 보너스
+                if dist_from_high <= 5.0:
+                    rs_score += 5.0
+                elif 10 <= dist_from_high <= 25:
+                    rs_score += 2.0
                 
                 # SPY보다 못한 종목 제외
                 if rs_score < -2.0:
