@@ -880,13 +880,24 @@ class StrategyEngine:
             pass
 
         # ================================
-        # Tech Rotation Overdrive Bonus (+25 pts for Tech / Semis / Growth Leaders)
-        # Automatically prioritizes Tech leaders over stagnant defensive stocks during Tech Bull Rallies
+        # [v2.7.0 SECTOR SCORING OVERHAUL]
+        # 1. Tech & High-Beta Growth Overdrive (+35 pts): Prioritize market-leading Tech/Semis/Leveraged ETFs
+        # 2. Defensive / Pharma Value Trap Penalty (-35 pts): Heavily penalize sluggish dividend/pharma traps (BMY, GIS, PEP, MRK, etc.)
         # ================================
-        tech_symbols = {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "QQQ", "TQQQ", "SOXL", "GOOGL", "AMZN", "META", "AVGO", "SMH", "XLK"}
-        if symbol in tech_symbols:
-            score += 25
-            logger.debug("TECH_ROTATION_BONUS: +25 pts added for Tech leader {}", symbol)
+        tech_growth_symbols = {
+            "NVDA", "AAPL", "MSFT", "AMD", "TSLA", "QQQ", "TQQQ", "SOXL", 
+            "GOOGL", "AMZN", "META", "AVGO", "SMH", "XLK", "PLTR", "ARM", "MU", "NFLX", "SOXX"
+        }
+        defensive_pharma_symbols = {
+            "BMY", "GIS", "PEP", "JNJ", "PFE", "MRK", "K", "PG", "KO", "FNB", "CL", "CAG", "CPB", "HSY"
+        }
+        
+        if symbol in tech_growth_symbols:
+            score += 35
+            logger.info("⚡ [TECH_MOMENTUM_BOOST] +35 pts added for High-Beta Tech Leader {}", symbol)
+        elif symbol in defensive_pharma_symbols:
+            score -= 35
+            logger.info("🚫 [DEFENSIVE_VALUE_TRAP_PENALTY] -35 pts deducted for Sluggish Defensive/Pharma {}", symbol)
 
         return min(100, max(0, int(score)))
     
