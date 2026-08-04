@@ -880,9 +880,10 @@ class StrategyEngine:
             pass
 
         # ================================
-        # [v2.7.0 SECTOR SCORING OVERHAUL]
-        # 1. Tech & High-Beta Growth Overdrive (+35 pts): Prioritize market-leading Tech/Semis/Leveraged ETFs
-        # 2. Defensive / Pharma Value Trap Penalty (-35 pts): Heavily penalize sluggish dividend/pharma traps (BMY, GIS, PEP, MRK, etc.)
+        # [v2.8.0 DYNAMIC ADAPTIVE REGIME SECTOR MATRIX]
+        # Dynamically adapts to live market regime:
+        # - BULL / RISK_ON market: Tech & Growth leaders get +30 pts, Defensive gets -20 pts
+        # - BEAR / CHOPPY / RISK_OFF market: Defensive & Pharma gets +35 pts, Tech gets -20 pts
         # ================================
         tech_growth_symbols = {
             "NVDA", "AAPL", "MSFT", "AMD", "TSLA", "QQQ", "TQQQ", "SOXL", 
@@ -892,12 +893,23 @@ class StrategyEngine:
             "BMY", "GIS", "PEP", "JNJ", "PFE", "MRK", "K", "PG", "KO", "FNB", "CL", "CAG", "CPB", "HSY"
         }
         
+        current_regime = getattr(self, '_last_regime', 'BULL_NORMAL')
+        is_bear_or_choppy = ("BEAR" in current_regime) or (current_regime in {"CHOPPY", "TRANSITION", "RISK_OFF", "CRASH"})
+
         if symbol in tech_growth_symbols:
-            score += 35
-            logger.info("⚡ [TECH_MOMENTUM_BOOST] +35 pts added for High-Beta Tech Leader {}", symbol)
+            if not is_bear_or_choppy:
+                score += 30
+                logger.info("⚡ [BULL_TECH_BOOST] +30 pts added for Tech leader {} during {}", symbol, current_regime)
+            else:
+                score -= 20
+                logger.info("🔻 [BEAR_TECH_PENALTY] -20 pts deducted from Tech leader {} during {}", symbol, current_regime)
         elif symbol in defensive_pharma_symbols:
-            score -= 35
-            logger.info("🚫 [DEFENSIVE_VALUE_TRAP_PENALTY] -35 pts deducted for Sluggish Defensive/Pharma {}", symbol)
+            if is_bear_or_choppy:
+                score += 35
+                logger.info("🛡️ [BEAR_DEFENSIVE_BOOST] +35 pts added for Defensive stock {} during {}", symbol, current_regime)
+            else:
+                score -= 20
+                logger.info("⚡ [BULL_DEFENSIVE_PENALTY] -20 pts deducted from Defensive stock {} during {}", symbol, current_regime)
 
         return min(100, max(0, int(score)))
     
