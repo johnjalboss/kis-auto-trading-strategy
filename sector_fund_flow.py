@@ -93,8 +93,8 @@ class SectorFundFlow(BaseAnalyzer):
             
             with _sector_returns_lock:
                 now = time.time()
-                # Cache valid for 2 hours (7200 seconds)
-                if now - _sector_returns_cache_time < 7200 and _sector_returns_cache:
+                # Cache valid for 15 minutes (900 seconds) to capture real-time intraday sector rotation
+                if now - _sector_returns_cache_time < 900 and _sector_returns_cache:
                     sector_returns = _sector_returns_cache.copy()
                 else:
                     need_fetch = True
@@ -103,7 +103,7 @@ class SectorFundFlow(BaseAnalyzer):
                 with _sector_returns_lock:
                     now = time.time()
                     # Recheck inside lock
-                    if now - _sector_returns_cache_time < 7200 and _sector_returns_cache:
+                    if now - _sector_returns_cache_time < 900 and _sector_returns_cache:
                         sector_returns = _sector_returns_cache.copy()
                     else:
                         temp_returns = {}

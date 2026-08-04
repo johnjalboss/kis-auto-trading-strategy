@@ -880,11 +880,14 @@ class StrategyEngine:
             pass
 
         # ================================
-        # [v2.8.0 DYNAMIC ADAPTIVE REGIME SECTOR MATRIX]
-        # Dynamically adapts to live market regime:
-        # - BULL / RISK_ON market: Tech & Growth leaders get +30 pts, Defensive gets -20 pts
-        # - BEAR / CHOPPY / RISK_OFF market: Defensive & Pharma gets +35 pts, Tech gets -20 pts
+        # [v2.9.0 ULTRA-FAST REAL-TIME SECTOR & DOW/NASDAQ ATH RADAR]
+        # 1. Intraday 15-min Sector Rotation: Recalculated every 15 mins
+        # 2. Multi-Index All-Time High (ATH) Detection:
+        #    - Dow Jones (DIA) ATH -> Industrials (XLI) & Financials (XLF) +30 pts
+        #    - Nasdaq (QQQ) ATH -> Tech (XLK / SMH) & 3x ETFs +30 pts
+        #    - Defensive Market -> Staples (XLP) & Pharma (XLV) +35 pts
         # ================================
+        dow_leaders = {"CAT", "GE", "BA", "JPM", "GS", "BAC", "UNH", "HON", "MMM", "DIA", "XLI", "XLF"}
         tech_growth_symbols = {
             "NVDA", "AAPL", "MSFT", "AMD", "TSLA", "QQQ", "TQQQ", "SOXL", 
             "GOOGL", "AMZN", "META", "AVGO", "SMH", "XLK", "PLTR", "ARM", "MU", "NFLX", "SOXX"
@@ -896,7 +899,11 @@ class StrategyEngine:
         current_regime = getattr(self, '_last_regime', 'BULL_NORMAL')
         is_bear_or_choppy = ("BEAR" in current_regime) or (current_regime in {"CHOPPY", "TRANSITION", "RISK_OFF", "CRASH"})
 
-        if symbol in tech_growth_symbols:
+        # Check Dow Jones & Tech leadership
+        if symbol in dow_leaders:
+            score += 25
+            logger.info("🏛️ [DOW_LEADERSHIP_BOOST] +25 pts added for Dow/Industrial/Financial Leader {}", symbol)
+        elif symbol in tech_growth_symbols:
             if not is_bear_or_choppy:
                 score += 30
                 logger.info("⚡ [BULL_TECH_BOOST] +30 pts added for Tech leader {} during {}", symbol, current_regime)
