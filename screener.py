@@ -179,11 +179,11 @@ class DynamicScreener:
                 _spy_close = _spy_df['Close']
                 _spy_sma50 = float(_spy_close.rolling(50).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
-                if _spy_current < _spy_sma50:
+                if _spy_current < _spy_sma50 and mode == ScreenMode.DEFENSIVE:
                     inverse_cands = self._screen_inverse()
                     defensive_cands = self._screen_defensive()
-                    candidates = list(dict.fromkeys(inverse_cands + defensive_cands))
-                    logger.warning("⚠️ [DOWNTREND_GUARD] SPY (${:.2f}) < SMA50 (${:.2f}). Force replacing screener pool with {} inverse/defensive candidates.", _spy_current, _spy_sma50, len(candidates))
+                    candidates = list(dict.fromkeys(candidates + defensive_cands + inverse_cands))
+                    logger.info("⚠️ [DOWNTREND_GUARD] SPY (${:.2f}) < SMA50 (${:.2f}). Appended defensive candidates to pool.", _spy_current, _spy_sma50)
         except Exception as e:
             logger.debug("Failed to check SPY downtrend guard: {}", e)
 
@@ -217,7 +217,7 @@ class DynamicScreener:
         # OHLCV downloads are I/O-bound but KIS API enforces rate limits;
         # 16 concurrent threads cause 429 bursts. 8 workers is the sweet spot.
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:100]}
+            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:200]}
             try:
                 # Increased timeout 90s→150s: 100 candidates × KIS download.
                 # Each KIS call can take up to 2-3s; at 8 workers, 100 symbols = ~37s min.

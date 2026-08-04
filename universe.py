@@ -73,12 +73,15 @@ def _fetch_sp500_from_wikipedia() -> list:
     네트워크 fetch 먼저 시도, 실패 시 정적 목록 사용.
     """
     # ── 완전한 S&P 500 정적 목록 (Wikipedia 차단 대비 fallback) ──────────────
+    # ★ [v3.1.0 PRIORITY MARKET LEADERS]
+    # Place top volume & momentum leaders at the front so they are NEVER truncated by candidates[:100]
     SP500_STATIC = [
-        "A", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
+        "NVDA", "AAPL", "MSFT", "TSLA", "AMD", "QQQ", "TQQQ", "SOXL", "PLTR", "AVGO", "META", "GOOGL", "AMZN", "ARM", "MU", "NFLX", "SOXX", "SPY", "DIA", "IWM", "XLK", "XLI", "XLF",
+        "A", "AAL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
         "ADP", "ADSK", "AEE", "AEP", "AES", "AFL", "AIG", "AIZ", "AJG", "AKAM",
-        "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AMD", "AME", "AMGN", "AMP",
-        "AMT", "AMZN", "ANET", "AON", "AOS", "APA", "APD", "APH", "APO", "APP",
-        "APTV", "ARE", "ARES", "ATO", "AVB", "AVGO", "AVY", "AWK", "AXON", "AXP",
+        "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AME", "AMGN", "AMP",
+        "AMT", "ANET", "AON", "AOS", "APA", "APD", "APH", "APO", "APP",
+        "APTV", "ARE", "ARES", "ATO", "AVB", "AVY", "AWK", "AXON", "AXP",
         "AZO", "BA", "BAC", "BALL", "BAX", "BBY", "BDX", "BEN", "BFB", "BG",
         "BIIB", "BKNG", "BKR", "BLDR", "BLK", "BMY", "BNY", "BR", "BRK-B", "BRO",
         "BSX", "BX", "BXP", "C", "CAG", "CAH", "CARR", "CASY", "CAT", "CB",
