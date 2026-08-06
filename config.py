@@ -46,10 +46,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Risk Management
 # ==============================================
 
-# Per-position strict stop loss (-3.0%)
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.03"))
-if STOP_LOSS_PCT >= 1.0:
-    STOP_LOSS_PCT /= 100.0
+# Per-position strict stop loss (-3.0%) — Hardcoded to 0.03 to override legacy .env settings
+STOP_LOSS_PCT = 0.03
 
 # Consecutive loss limit — 대표님 요구사항 반영: 불필요한 3연속 손실 쿨다운 매매 차단 기능 비활성화 (False)
 ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
@@ -88,8 +86,8 @@ PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.09"))  #
 BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.05"))   # +5.0% 달성 시 손절가를 본절가로 상향
 
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.15"))       # 15% 최종 TP
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.07"))           # 7% 기본 SL
-BEAR_HARD_STOP_PCT = float(os.getenv("BEAR_HARD_STOP_PCT", "0.07"))
+STOP_LOSS_PCT = 0.03                                                    # -3.0% strict hard SL
+BEAR_HARD_STOP_PCT = 0.03                                               # -3.0% strict bear SL
 ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.5")) # [FIX] 2.0 -> 2.5x ATR
 ECON_EVENT_GUARD_ENABLED = False
 
