@@ -695,8 +695,8 @@ class StrategyEngine:
             try:
                 if is_near_max_pain(symbol, price, threshold_pct=0.015):
                     failed.append(f"MaxPain_pin({symbol})")
-            except Exception:
-                pass
+            except Exception as mpe:
+                logger.warning("⚠️ MaxPain check failed for {}: {}", symbol, mpe)
         
         return {
             'passed': len(failed) == 0,
@@ -896,7 +896,7 @@ class StrategyEngine:
                 if opts_score != 0:
                     logger.debug("{} OptionsFlow score: {:+d} | {}", symbol, opts_score, opts_reason)
             except Exception as e:
-                logger.debug("Options flow score error for {}: {}", symbol, e)
+                logger.warning("🚨 [OPTIONS_DATA_WARNING] Options flow score fetch failed for {}: {}", symbol, e)
         
         # ================================
         # VIX Regime Adjustment (+/- 15)

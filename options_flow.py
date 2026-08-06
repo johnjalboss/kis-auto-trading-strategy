@@ -562,6 +562,8 @@ def get_options_snapshot(symbol: str, force_refresh: bool = False) -> OptionsSna
 
     try:
         snap = _compute_options_snapshot(symbol)
+        if snap.reason and snap.reason not in ("options_OK", ""):
+            logger.warning("🚨 [OPTIONS_FALLBACK_ALERT] Symbol {}: Live options fetch fell back | Reason: {}", symbol, snap.reason)
     except Exception as e:
         logger.warning("options_flow: unexpected error for {}: {}", symbol, e)
         snap = OptionsSnapshot(symbol=symbol, reason=f"error:{e}")
