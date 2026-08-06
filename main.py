@@ -45,6 +45,13 @@ def main():
     except Exception as _up_err:
         logger.debug("Auto-update check skipped/bypassed: {}", _up_err)
     
+    # 🛡️ Self-Healing Autonomous Watchdog Engine (v3.7.0)
+    try:
+        from self_healing_watchdog import get_self_healing_watchdog
+        get_self_healing_watchdog().start()
+    except Exception as _shw_err:
+        logger.debug("Self-healing watchdog startup error: {}", _shw_err)
+
     logger.info("="*60)
     logger.info("🚀 KIS AUTO-TRADING BOT INITIALIZING (DRY RUN: {})", args.dry_run)
     logger.info("="*60)
