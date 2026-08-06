@@ -20,8 +20,8 @@ def send_tg(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=10)
-    except Exception:
-        pass
+    except Exception as err:
+        print("⚠️ [watchdog.py] Fallback triggered:", err)
 
 
 def run():

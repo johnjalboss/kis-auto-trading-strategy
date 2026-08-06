@@ -73,12 +73,12 @@ def discover_all_modules():
                                     }
                                     modules[module_name] = cls
                                     break
-                                except:
-                                    pass
-                            except Exception:
-                                pass
-        except:
-            pass
+                                except Exception as err:
+                                    print("⚠️ [all_modules_backtest_vs_qqq.py] Fallback triggered:", err)
+                            except Exception as err:
+                                print("⚠️ [all_modules_backtest_vs_qqq.py] Fallback triggered:", err)
+        except Exception as err:
+            print("⚠️ [all_modules_backtest_vs_qqq.py] Fallback triggered:", err)
             
     return modules, analyzers
 
@@ -198,8 +198,8 @@ class UltimateAllModulesBacktester:
                             try:
                                 result = getattr(instance, method)('QQQ')
                                 break
-                            except:
-                                pass
+                            except Exception as err:
+                                print("⚠️ [all_modules_backtest_vs_qqq.py] Fallback triggered:", err)
                 
                 if result is not None:
                     if hasattr(result, 'score'):
@@ -210,8 +210,8 @@ class UltimateAllModulesBacktester:
                         signals[mod_name] = 100 - result.risk_score
                     elif isinstance(result, (int, float)):
                         signals[mod_name] = min(100, max(0, result))
-            except:
-                pass
+            except Exception as err:
+                print("⚠️ [all_modules_backtest_vs_qqq.py] Fallback triggered:", err)
         return signals
 
     def _simulate(self, data: pd.DataFrame, benchmark_df: pd.Series, signals: Dict, aggressive: bool) -> Dict:

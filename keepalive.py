@@ -83,8 +83,8 @@ class AntiIdleThread:
             with open(".heartbeat", "w") as f:
                 f.write(f"{datetime.now().isoformat()}\n")
                 f.write(f"Pulses: {self._pulse_count}\n")
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [keepalive.py] Fallback triggered: {}", err)
         
         elapsed = time.time() - start
         
@@ -168,8 +168,8 @@ if __name__ == "__main__":
             while True:
                 time.sleep(10)
                 print(f"Status: {thread.get_status()}")
-        except KeyboardInterrupt:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [keepalive.py] Fallback triggered: {}", err)
     
     thread.stop()
     print(f"\nTotal pulses: {thread.pulse_count}")

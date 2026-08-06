@@ -167,8 +167,8 @@ class MultiStockBacktester:
                 if not df.empty and len(df) > 60:
                     data[sym] = df
                     success += 1
-            except:
-                pass
+            except Exception as err:
+                print("⚠️ [multi_stock_backtest.py] Fallback triggered:", err)
             
             if (i + 1) % 10 == 0:
                 print(f"   Downloaded {i+1}/{len(symbols)}...")
@@ -443,7 +443,7 @@ class MultiStockBacktester:
                 scores.append(score)
                 
             except Exception as e:
-                pass
+                print("⚠️ [multi_stock_backtest.py] Fallback triggered:", e)
         
         return scores
     

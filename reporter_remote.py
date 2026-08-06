@@ -191,8 +191,8 @@ class PerformanceReporter:
         try:
             from chart_generator import generate_daily_pnl_chart
             chart_path = generate_daily_pnl_chart(days=90)
-        except ImportError:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [reporter_remote.py] Fallback triggered: {}", err)
             
         if chart_path:
             self.notifier.send_photo(photo_path=chart_path, caption=report)

@@ -54,8 +54,8 @@ def run_check():
                 best_target = sig
             if sig.composite_score > 40:
                 print(f" * {symbol}: Score={sig.composite_score} ({sig.action.value})")
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [server_check_strategy.py] Fallback triggered: {}", err)
             
     if best_target:
         print(f"\nBest Available: {best_target.symbol} at {best_target.composite_score} points")

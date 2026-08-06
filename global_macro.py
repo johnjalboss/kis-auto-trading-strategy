@@ -225,8 +225,8 @@ class GlobalMacroAnalyzer:
                     df.columns = df.columns.get_level_values(0)
                 if not df.empty:
                     self.data_cache[name] = df
-            except:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [global_macro.py] Fallback triggered: {}", err)
     
     def _get_change(self, name: str, days: int = 5) -> float:
         """Get % change over n days"""

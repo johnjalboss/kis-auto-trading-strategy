@@ -118,8 +118,8 @@ def run_audit():
                 inst = a()
                 c = inst.category
                 cats[c] = cats.get(c, 0) + 1
-            except:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [simple_audit.py] Fallback triggered: {}", err)
         for c, count in sorted(cats.items()):
             log(f"       {c}: {count} adapters")
     except Exception as e:

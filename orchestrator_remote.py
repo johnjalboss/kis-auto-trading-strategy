@@ -865,8 +865,8 @@ class BotOrchestrator:
                 from kelly_criterion import get_kelly_fraction
                 kelly_pct = get_kelly_fraction(symbol)
                 qty = calculate_optimal_size(symbol, qty, kelly_pct, self.state.max_exposure_pct)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
             
         if qty <= 0:
             logger.warning("Risk modules reduced size to 0 for {}", symbol)
@@ -884,8 +884,8 @@ class BotOrchestrator:
         try:
             from tax_optimizer import optimize_tax_lot
             qty, action = optimize_tax_lot(symbol, action, qty)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
 
         # 7. Anti-Fragility Check
         def _antifrag():
@@ -1069,8 +1069,8 @@ class BotOrchestrator:
                 stats = self._exec_tracker.get_stats()
                 logger.info("  -> execution_tracker.py: avg slip {:.2f}%, best hour {}",
                            stats.avg_slippage_pct, stats.best_time_window)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
         
         # 8. Trade Journal
         def _journal():
@@ -1129,8 +1129,8 @@ class BotOrchestrator:
             from base_adapters import get_available_adapters
             adapters = get_available_adapters()
             logger.info("Composite Signal Engine: {} analysis adapters loaded", len(adapters))
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
         
         logger.info("=" * 60)
         logger.info("?? ENTERING 24/7 AUTONOMOUS TRADING LOOP")
@@ -1150,7 +1150,7 @@ class BotOrchestrator:
                     if 'config' in sys.modules:
                         importlib.reload(sys.modules['config'])
                 except Exception as e:
-                    pass
+                    logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", e)
 
                 now = datetime.now()
                 
@@ -1207,8 +1207,8 @@ class BotOrchestrator:
                                 self.state.max_exposure_pct = 1.0
                                 self.phase_2_macro_evaluation()
                                 self._spy_open = spy_price  # Reset to avoid repeat triggers
-                    except Exception:
-                        pass
+                    except Exception as err:
+                        logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
                     
                     # Refresh macro every 4 hours
                     if (self.state.last_macro_refresh is None or 
@@ -1274,7 +1274,7 @@ class BotOrchestrator:
             try:
                 from notification import get_notifier
                 get_notifier().send_message(f"\U0001F6A8 <b>\ud2b8\ub798\uc774\ub529\ubd07 \ube44\uc815\uc0c1 \uc885\ub8cc</b>\n\uc0ac\uc720: {str(e)[:100]}\nWatchdog\uc5d0 \uc758\ud574 \uc7ac\uc2dc\uc791 \uc2dc\ub3c4\ub429\ub2c8\ub2e4.")
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator_remote.py] Fallback triggered: {}", err)
             raise
 

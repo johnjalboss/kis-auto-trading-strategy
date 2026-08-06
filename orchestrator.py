@@ -165,8 +165,8 @@ class BotOrchestrator:
                         f"• 에러내용: {str(e)[:150]}\n"
                         f"• 결과: 강제 <b>RISK_OFF</b> 봉인 (최대 비중 20% 제한)"
                     )
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             else:
                 logger.warning("⚠️ Non-critical module failed/skipped: {}. Error: {}", description, e)
             return None
@@ -411,8 +411,8 @@ class BotOrchestrator:
                             vix_factor = 1.3
                         elif vix_price < 15.0:
                             vix_factor = 0.6
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
                 
                 adjusted_penalty = int(raw_penalty * vix_factor)
                 if is_bull_regime:
@@ -454,8 +454,8 @@ class BotOrchestrator:
                         f"• 결과: 비중 제한 강제 축소 ({self.state.max_exposure_pct:.0%})\n"
                         f"• 감시 레짐: {self.state.current_regime}"
                     )
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
         else:
             if prev_risk_level == "RISK_OFF":
                 self.state.global_risk_level = "NORMAL"
@@ -467,8 +467,8 @@ class BotOrchestrator:
                         f"• 뉴스 감지 페널티: {penalty}점\n"
                         f"• 결과: 정상 투자 비중 한도 복구"
                     )
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             
         self.state.last_macro_refresh = datetime.now()
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 
@@ -574,8 +574,8 @@ class BotOrchestrator:
                     f"• 에러내용: {str(e)[:150]}\n"
                     f"• 결과: 포트폴리오 보호를 위한 <b>신규 매수 완전 차단</b>"
                 )
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
         
         # Fallback: if screener returned 0 stocks, keep it empty to protect portfolio
         if not self.state.target_universe:
@@ -1241,8 +1241,8 @@ class BotOrchestrator:
                 if check_circuit_breaker(self.trader, self.rm):
                     logger.warning("CIRCUIT BREAKER ACTIVATED — trade blocked: {} {}", action, symbol)
                     return
-            except ImportError:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             except Exception as cb_err:
                 logger.error("Circuit breaker error: {}", cb_err)
 
@@ -1254,8 +1254,8 @@ class BotOrchestrator:
             if action == "BUY" and dc.is_halted():
                 logger.warning("DRAWDOWN HALT — new BUY entry blocked: {} {}", action, symbol)
                 return
-        except ImportError:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
         except Exception as dc_err:
             logger.error("Drawdown controller error: {}", dc_err)
 
@@ -1322,8 +1322,8 @@ class BotOrchestrator:
         try:
             from tax_optimizer import optimize_tax_lot
             qty, action = optimize_tax_lot(symbol, action, qty)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
 
         # 7. Anti-Fragility Check
         def _antifrag():
@@ -1591,8 +1591,8 @@ class BotOrchestrator:
                 stats = self._exec_tracker.get_stats()
                 logger.info("  -> execution_tracker.py: avg slip {:.2f}%, best hour {}",
                            stats.avg_slippage_pct, stats.best_time_window)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
         
         # 8. Trade Journal      ( API )
         def _journal():
@@ -1780,8 +1780,8 @@ class BotOrchestrator:
             from base_adapters import get_available_adapters
             adapters = get_available_adapters()
             logger.info("Composite Signal Engine: {} analysis adapters loaded", len(adapters))
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
         
         logger.info("=" * 60)
         logger.info("?? ENTERING 24/7 AUTONOMOUS TRADING LOOP")
@@ -1802,7 +1802,7 @@ class BotOrchestrator:
                     if 'config' in sys.modules:
                         importlib.reload(sys.modules['config'])
                 except Exception as e:
-                    pass
+                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", e)
                 
                 now = datetime.now()
                 
@@ -1874,8 +1874,8 @@ class BotOrchestrator:
                                 self.state.max_exposure_pct = 1.0
                                 self.phase_2_macro_evaluation()
                                 self._spy_open = spy_price  # Reset to avoid repeat triggers
-                    except Exception:
-                        pass
+                    except Exception as err:
+                        logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
                     
                     # Refresh macro every 4 hours
                     if (self.state.last_macro_refresh is None or 
@@ -1960,8 +1960,8 @@ class BotOrchestrator:
             try:
                 from notification import get_notifier
                 get_notifier().send_message(f"\U0001F6A8 <b>\ud2b8\ub798\uc774\ub529\ubd07 \ube44\uc815\uc0c1 \uc885\ub8cc</b>\n\uc0ac\uc720: {str(e)[:100]}\nWatchdog\uc5d0 \uc758\ud574 \uc7ac\uc2dc\uc791 \uc2dc\ub3c4\ub429\ub2c8\ub2e4.")
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             raise
 
     def _run_weekly_tuning(self):

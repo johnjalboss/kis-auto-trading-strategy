@@ -16,4 +16,4 @@ try:
     with open('tr_ids.json', 'w') as f:
         json.dump(res, f)
 except Exception as e:
-    pass
+    print("⚠️ [extract_tr_id.py] Fallback triggered:", e)

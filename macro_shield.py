@@ -162,8 +162,8 @@ class MacroRiskManager:
                         cache_minutes = 15
                     elif last_vix > 20:
                         cache_minutes = 30
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [macro_shield.py] Fallback triggered: {}", err)
             if datetime.now() - self._last_update < timedelta(minutes=cache_minutes):
                 logger.debug("Using cached data (TTL {}m, updated {})", cache_minutes, self._last_update)
                 return True

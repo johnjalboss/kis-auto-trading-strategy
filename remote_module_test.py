@@ -75,8 +75,8 @@ try:
                     except Exception as e:
                         record(name, "BaseAnalyzer", "FAIL", f"class={attr_name}: {str(e)[:60]}")
                     break
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [remote_module_test.py] Fallback triggered: {}", err)
 except Exception as e:
     print(f"  BaseAnalyzer import error: {e}")
 

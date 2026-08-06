@@ -72,10 +72,10 @@ def discover_modules():
                                     analyzers[module_name] = {'class': cls, 'instance': instance}
                                     modules[module_name] = cls
                                     break
-                                except:
-                                    pass
-        except:
-            pass
+                                except Exception as err:
+                                    print("⚠️ [ultra_aggressive_backtest.py] Fallback triggered:", err)
+        except Exception as err:
+            print("⚠️ [ultra_aggressive_backtest.py] Fallback triggered:", err)
     
     return modules, analyzers
 
@@ -175,10 +175,10 @@ class UltraAggressiveBacktester:
                             elif hasattr(result, 'signal_strength'):
                                 signals[mod_name] = result.signal_strength
                             break
-                        except:
-                            pass
-            except:
-                pass
+                        except Exception as err:
+                            print("⚠️ [ultra_aggressive_backtest.py] Fallback triggered:", err)
+            except Exception as err:
+                print("⚠️ [ultra_aggressive_backtest.py] Fallback triggered:", err)
         
         return signals
     

@@ -262,8 +262,8 @@ class DrawdownController:
         try:
             if isinstance(self.day_start_date, str):
                 self.day_start_date = datetime.strptime(self.day_start_date, "%Y-%m-%d").date()
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [drawdown_controller.py] Fallback triggered: {}", err)
 
         if today != self.day_start_date:
             # EOD evaluation of consecutive green days

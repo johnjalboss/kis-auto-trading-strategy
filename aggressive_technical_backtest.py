@@ -68,10 +68,10 @@ def discover_modules():
                                     analyzers[module_name] = {'class': cls, 'instance': instance}
                                     modules[module_name] = cls
                                     break
-                                except:
-                                    pass
-        except:
-            pass
+                                except Exception as err:
+                                    print("⚠️ [aggressive_technical_backtest.py] Fallback triggered:", err)
+        except Exception as err:
+            print("⚠️ [aggressive_technical_backtest.py] Fallback triggered:", err)
     
     return modules, analyzers
 

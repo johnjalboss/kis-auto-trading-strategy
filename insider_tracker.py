@@ -238,8 +238,8 @@ class InsiderInstitutionalTracker:
                             value=val,
                             date=tx_dt
                         ))
-                    except:
-                        pass
+                    except Exception as err:
+                        logger.warning("⚠️ [insider_tracker.py] Fallback triggered: {}", err)
                 
                 if result:
                     logger.debug("Successfully fetched {} insider transactions from Finnhub for {}", len(result), symbol)
@@ -276,8 +276,8 @@ class InsiderInstitutionalTracker:
                         value=float(row.get('Value', 0) or 0),
                         date=start_date
                     ))
-                except:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [insider_tracker.py] Fallback triggered: {}", err)
             
             return result[:20]  # Last 20 transactions
         except:

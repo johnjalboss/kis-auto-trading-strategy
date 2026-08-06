@@ -473,8 +473,8 @@ class EarningsAnalyzer:
                         if next_date:
                             days_to = (next_date - datetime.now()).days
                             return next_date, max(0, days_to)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [earnings_analyzer.py] Fallback triggered: {}", err)
         
         return None, None
 

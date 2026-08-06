@@ -278,8 +278,8 @@ class EventCalendar:
                     return "MISSES"
                 return "MIXED"
                 
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [event_calendar.py] Fallback triggered: {}", err)
         
         return "UNKNOWN"
     
@@ -344,8 +344,8 @@ class EventCalendar:
                 days_until = (exdiv - date.today()).days
                 return days_until if days_until >= 0 else None
                 
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [event_calendar.py] Fallback triggered: {}", err)
         
         return None
     

@@ -214,8 +214,8 @@ class StrategyEngine:
             try:
                 from health_monitor import get_health_monitor
                 get_health_monitor().record_error(f"Data fetch error: {symbol}")
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
             return None
     
     # ==============================================
@@ -240,8 +240,8 @@ class StrategyEngine:
             vix_snap = get_vix_snapshot()
             if vix_snap.regime == "EXTREME":
                 return EntrySignal("HOLD", 0, f"VIX extreme ({vix_snap.vix:.1f}) market crash mode", 0)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         _bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
         _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
@@ -261,8 +261,8 @@ class StrategyEngine:
             e_info = ec.check(symbol)
             if e_info.recommendation == "AVOID":
                 return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: Avoid entry within {e_info.days_until} days of earnings", 0)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # 3. High Impact Economic Events Guard
         try:
@@ -273,8 +273,8 @@ class StrategyEngine:
                 high_impact = [e for e in today_events if getattr(e, 'impact', '') == 'HIGH']
                 if high_impact:
                     return EntrySignal("HOLD", 0, "ECON_EVENT_GUARD: High-impact economic event scheduled today", 0)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # 4. Insider Dump Guard
         try:
@@ -297,8 +297,8 @@ class StrategyEngine:
                     _block_threshold = -0.05          # >0.05% of MC
                 if _net_pct < _block_threshold:
                     return EntrySignal("HOLD", 0, f"INSIDER_GUARD: MC-tiered dump | {_net_pct:.3f}% of ~${_implied_mc/1e9:.0f}B MC (threshold: {_block_threshold:.2f}%) Net: ${_net_val/1e6:.1f}M", 0)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # BREADTH_GUARD moved to the end of check_entry to support High-Score Bypass
 
@@ -361,8 +361,8 @@ class StrategyEngine:
                 if same_sector_count >= 2:
                     return EntrySignal("HOLD", 0,
                         f"SECTOR_GUARD: Already {same_sector_count} positions in {sym_sector} sector", 0)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
@@ -479,8 +479,8 @@ class StrategyEngine:
                     vol_surge >= 1.5 and
                     current_price >= today_open * 0.98  # 갭 아래로 되돌리지 않음
                 )
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ── Setup E: 골든크로스 모멘텀 (Golden Cross Momentum) ───────────
         # SMA50이 SMA200을 최근 10일 내 상향 돌파 = 중장기 추세 전환 확인
@@ -496,8 +496,8 @@ class StrategyEngine:
                     if curr_sma50 > curr_sma200 and prev_sma50 <= prev_sma200:
                         is_golden_cross = True
                         break
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ── Setup F: VIX 공포 정점 후 반등 (VIX Spike Reversal) ──────────
         # VIX가 급등 후 15%+ 하락 = 시장 공포 정점 확인, 반등 시작
@@ -516,8 +516,8 @@ class StrategyEngine:
                     15 <= vix_current <= 30 and
                     structural_uptrend  # 기본 추세는 상승이어야 함
                 )
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ── Setup G: 어닝 서프라이즈 후 모멘텀 (PEAD Continuation) ────────
         # 어닝 서프라이즈 5%+ + 30일 이내 = Post-Earnings Announcement Drift
@@ -533,8 +533,8 @@ class StrategyEngine:
             if _beat >= 5 and 1 <= _days <= 30:
                 is_pead = True
                 pead_beat = _beat
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ── Setup B: Quant Liquidity Accumulation ─────────────────────────
         is_quant_accumulation = False
@@ -601,8 +601,8 @@ class StrategyEngine:
             if _beat > 5 and _days <= 30:
                 confidence += 10
                 setup_reason += f" | PEAD (+{_beat:.0f}%)"
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         confidence = min(100, max(0, confidence))
 
@@ -830,7 +830,7 @@ class StrategyEngine:
                 score -= 30
                 logger.info("🚫 [FLOATING_ZONE_PENALTY] -30 pts: Stock is extended ({:.1f}% above 20d SMA), skipping late entry on {}", (close_curr/sma20_curr-1)*100, symbol)
         except Exception as _e_zone:
-            pass
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", _e_zone)
         
         # ================================
         # OBV    (+5)
@@ -880,8 +880,8 @@ class StrategyEngine:
                 elif ind.bollinger.percent_b < 0.3:
                     score += 8
                     logger.debug(f"{symbol} Pullback detected: BB% {ind.bollinger.percent_b:.2f} in Uptrend")
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ================================
         
@@ -907,8 +907,8 @@ class StrategyEngine:
             if abs(vix_snap.score_adj) > 0:
                 logger.debug("VIX {} ({:.1f}): score adj {:+d}",
                             vix_snap.regime, vix_snap.vix, vix_snap.score_adj)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ================================
         # [v2.9.0 ULTRA-FAST REAL-TIME SECTOR & DOW/NASDAQ ATH RADAR]
@@ -1009,8 +1009,8 @@ class StrategyEngine:
                 price = ticker.fast_info.last_price or 0
                 if price > 0:
                     logger.info("yfinance fast_info fallback for {}: ${:.2f}", symbol, price)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # [Fallback 2] kis_data.get_current_price (KIS API  )
         if price <= 0:
@@ -1019,8 +1019,8 @@ class StrategyEngine:
                 price = get_current_price(symbol) or 0
                 if price > 0:
                     logger.info("kis_data.get_current_price fallback for {}: ${:.2f}", symbol, price)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # [Fallback 3]         
         if price <= 0:
@@ -1035,7 +1035,7 @@ class StrategyEngine:
                 db_mgr = get_database()
                 db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price)
             except Exception as e:
-                pass
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", e)
         pnl_pct = (price - pos.entry_price) / pos.entry_price
         
         #  / ETF    (  )
@@ -1181,8 +1181,8 @@ class StrategyEngine:
                 now_et = datetime.now(et)
                 if get_market_phase() == MarketPhase.OPENING and now_et.time() < time(9, 45):
                     is_early_opening_noise = True
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
             #    (Shakeout Protection Mode):
             #   15   15   
@@ -1265,8 +1265,8 @@ class StrategyEngine:
                     return ExitSignal("SELL_ALL",
                         f"MAX_HOLD: {_hold_hours/6.5:.1f} ,   ({pnl_pct:+.1%})",
                         price, pnl_pct)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         return ExitSignal("HOLD", f"SWING_HOLD: {pnl_pct:+.1%} ({_hold_hours:.0f}h)", price, pnl_pct)
 
@@ -1538,7 +1538,7 @@ class StrategyEngine:
             db_mgr = get_database()
             db_mgr.update_position_tracking(symbol, entry_price, stop_price)
         except Exception as e:
-            pass
+            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", e)
         logger.info("Position added: {} @ ${:.2f}, stop ${:.2f}", 
                    symbol, entry_price, stop_price)
     

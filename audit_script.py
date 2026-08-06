@@ -27,7 +27,7 @@ for filename in os.listdir(directory):
                     if pattern.search(content):
                         results[key].append(filename)
         except Exception as e:
-            pass
+            print("⚠️ [audit_script.py] Fallback triggered:", e)
 
 print(f"Total Python Modules Scanned: {total_py}")
 print("========================================")

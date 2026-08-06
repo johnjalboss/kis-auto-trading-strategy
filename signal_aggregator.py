@@ -358,8 +358,8 @@ class SignalAggregator:
                 elif ann_sharpe < -0.5:
                     score = -10
                     details.append(f"HIGH_VOL_DOWNTREND:{ann_sharpe:.1f}")
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [signal_aggregator.py] Fallback triggered: {}", err)
             
         return score, details
 

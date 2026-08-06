@@ -285,8 +285,8 @@ class TokenManager:
                 if acquired:
                     try:
                         lock_dir.rmdir()
-                    except Exception:
-                        pass
+                    except Exception as err:
+                        logger.warning("⚠️ [trader.py] Fallback triggered: {}", err)
             
             return self._token
     
@@ -617,8 +617,8 @@ class Trader:
             if bid_sum + ask_sum > 0:
                 mlofi = (bid_sum - ask_sum) / (bid_sum + ask_sum)
                 return max(-1.0, min(1.0, mlofi))
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [trader.py] Fallback triggered: {}", err)
 
         # 2. Fallback: Simple total volumes from output1
         try:
@@ -627,8 +627,8 @@ class Trader:
             if bvol + avol > 0:
                 obi = (bvol - avol) / (bvol + avol)
                 return max(-1.0, min(1.0, obi))
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [trader.py] Fallback triggered: {}", err)
 
         return 0.0
 
@@ -648,8 +648,8 @@ class Trader:
             if pbid1 > 0 and pask1 > 0:
                 mid = (pbid1 + pask1) / 2.0
                 return (pask1 - pbid1) / mid
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [trader.py] Fallback triggered: {}", err)
         return 0.001  # Default fallback
 
     # ==============================================

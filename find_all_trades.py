@@ -13,8 +13,8 @@ for log in log_files:
             for line in f:
                 if 'Trade Executed' in line:
                     results.append(f"{log}: {line.strip()}")
-    except Exception:
-        pass
+    except Exception as err:
+        print("⚠️ [find_all_trades.py] Fallback triggered:", err)
 
 # Sort results by what looks like a timestamp in the log line
 def extract_timestamp(line):

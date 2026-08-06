@@ -37,8 +37,8 @@ def send_tg(msg):
         import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=10)
-    except Exception:
-        pass
+    except Exception as err:
+        logger.warning("⚠️ [auto_tuner.py] Fallback triggered: {}", err)
 
 
 def get_recent_trades(days=14):
@@ -142,8 +142,8 @@ def analyze_performance(trades, daily_stats):
                 hours = (exit_dt - entry_dt).total_seconds() / 3600
                 avg_hold_hours += hours
                 hold_count += 1
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [auto_tuner.py] Fallback triggered: {}", err)
     if hold_count > 0:
         avg_hold_hours /= hold_count
 

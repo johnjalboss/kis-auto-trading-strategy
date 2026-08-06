@@ -85,13 +85,13 @@ def discover_all_modules():
                                     }
                                     modules[module_name] = cls
                                     break
-                                except:
-                                    pass
-                            except Exception:
-                                pass
+                                except Exception as err:
+                                    print("⚠️ [all_modules_backtest.py] Fallback triggered:", err)
+                            except Exception as err:
+                                print("⚠️ [all_modules_backtest.py] Fallback triggered:", err)
                                 
         except Exception as e:
-            pass
+            print("⚠️ [all_modules_backtest.py] Fallback triggered:", e)
     
     return modules, analyzers
 
@@ -293,8 +293,8 @@ class UltimateAllModulesBacktester:
                             try:
                                 result = getattr(instance, method)('SPY')
                                 break
-                            except:
-                                pass
+                            except Exception as err:
+                                print("⚠️ [all_modules_backtest.py] Fallback triggered:", err)
                 
                 if result is not None:
                     # Extract score from result
@@ -318,8 +318,8 @@ class UltimateAllModulesBacktester:
                     elif isinstance(result, (int, float)):
                         signals[mod_name] = min(100, max(0, result))
                         
-            except Exception:
-                pass
+            except Exception as err:
+                print("⚠️ [all_modules_backtest.py] Fallback triggered:", err)
         
         return signals
     

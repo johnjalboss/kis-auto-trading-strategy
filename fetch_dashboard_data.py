@@ -25,8 +25,8 @@ data = {
 # 1. Bot status
 try:
     data["status"] = subprocess.getoutput("sudo systemctl is-active kis-trading").strip()
-except:
-    pass
+except Exception as err:
+    logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
 
 # 2. Positions from KIS API (read token directly, never request new one)
 try:
@@ -116,8 +116,8 @@ try:
                                 "value": round(cur_price * qty, 2)
                             })
 
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
             
     # 2.2 Precise Buying Power Discovery (using inquire-psamount if bp is still 0 or low)
     if bp <= 0:
@@ -148,8 +148,8 @@ try:
                 exrt = out.get("exrt", "1400")
                 if exrt and float(exrt) > 0:
                     data["exchange_rate"] = float(exrt)
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     # If API returned positions, save to cache for off-hours use
     if api_success:
@@ -161,8 +161,8 @@ try:
                         old_bp = json.load(f).get("buying_power", 0)
                         if old_bp > 0:
                             bp = old_bp
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     # If API returned no data (off-hours), load everything from cache
     if not pos_data and not api_success:
@@ -176,8 +176,8 @@ try:
                     p["from_cache"] = True
                 if bp <= 0:
                     bp = cache.get("buying_power", 0)
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     # Buying power fallback from log or cache if API returned 0
     if bp <= 0:
@@ -190,8 +190,8 @@ try:
             
             # 2. Try Log (DEPRECATED: leads to stale $500 reports)
             pass
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     # Update cache ONLY if we have valid data (or if we want to update positions)
     # We always save positions, but only overwrite BP if it's > 0
@@ -210,8 +210,8 @@ try:
         }
         with open(CACHE_FILE, 'w') as f:
             json.dump(cache_data, f)
-    except:
-        pass
+    except Exception as err:
+        logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     data["positions"] = pos_data
     data["buying_power"] = round(bp, 2)
@@ -229,8 +229,8 @@ except Exception as e:
             data["buying_power"] = cache.get("buying_power", 0)
             data["total_value"] = data["buying_power"] + sum(p["value"] for p in data["positions"])
             data["total_pnl"] = sum((p["current"] - p["entry"]) * p["qty"] for p in data["positions"])
-    except:
-        pass
+    except Exception as err:
+        logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     
     # Last resort: buying power from log ONLY if it's still 0
     if data.get("buying_power", 0) <= 0:
@@ -242,8 +242,8 @@ except Exception as e:
                 data["buying_power"] = float(bp_match.group(1).replace(',', ''))
                 if data.get("total_value", 0) <= 0:
                     data["total_value"] = data["buying_power"]
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
     data["error_msg"] = str(e)
 
 # 3. Recent log (strip ANSI colors)
@@ -251,15 +251,15 @@ try:
     raw_log = subprocess.getoutput("tail -20 ~/kis-auto-trading/logs/trading_bot.log 2>/dev/null")
     import re
     data["log"] = re.sub(r'\x1b\[[0-9;]*m', '', raw_log)
-except:
-    pass
+except Exception as err:
+    logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
 
 # 4. Error count
 try:
     err_out = subprocess.getoutput("grep -c 'FATAL' ~/kis-auto-trading/logs/trading_bot.log 2>/dev/null || echo 0").strip()
     data["errors"] = err_out.split('\n')[0].strip()
-except:
-    pass
+except Exception as err:
+    logger.warning("⚠️ [fetch_dashboard_data.py] Fallback triggered: {}", err)
 
 # 5. Extract historical PnL from trades.db
 try:

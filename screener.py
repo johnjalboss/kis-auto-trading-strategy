@@ -270,8 +270,8 @@ class DynamicScreener:
         try:
             from finnhub_client import get_finnhub_client
             get_finnhub_client().flush_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         # Filter candidates above MIN_SCORE
         above_min = [s for s in scored if s.total_score >= self.MIN_SCORE]
@@ -326,8 +326,8 @@ class DynamicScreener:
             if spy_df is not None and len(spy_df) >= 65:
                 spy_ret_3m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-65]) - 1) * 100
                 spy_ret_6m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[0]) - 1) * 100
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
         
         # 유니버스에서 방어주/인버스ETF 제외 (RS 모멘텀은 성장/시클리컬 섹터가 대상)
         defensive_set = {
@@ -398,8 +398,8 @@ class DynamicScreener:
                                         days_to_earnings = (edate - _today).days
                                         if 0 <= days_to_earnings <= 7:
                                             return  # 7일 이내 어닝 → 제외
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
                 except Exception:
                     pass  # Finnhub 없으면 생략
                 
@@ -453,8 +453,8 @@ class DynamicScreener:
                 with _lock:
                     rs_scores.append((sym, rs_score, ret_3m, ret_6m))
                     
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
@@ -499,8 +499,8 @@ class DynamicScreener:
             spy_df = kis_data.get_daily_ohlcv("SPY", days=20)
             if spy_df is not None and len(spy_df) >= 11:
                 spy_pct_10d = ((float(spy_df['Close'].iloc[-1]) - float(spy_df['Close'].iloc[-11])) / float(spy_df['Close'].iloc[-11])) * 100
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         # Rolling Round-Robin scanning of the entire universe across multiple cycles to avoid KIS/Finnhub API 429
         if not hasattr(self, '_screener_offset'):
@@ -705,8 +705,8 @@ class DynamicScreener:
                 if total_score >= 70:
                     with _lock:
                         passed_candidates.append((sym, total_score))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         # Concurrent scan using 8 threads (VM safe)
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
@@ -736,8 +736,8 @@ class DynamicScreener:
             spy_df = kis_data.get_daily_ohlcv("SPY", days=30)
             if spy_df is not None and len(spy_df) >= 6:
                 spy_close = spy_df['Close']
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         # 후보 풀: BASE_UNIVERSE 전체 (최대 SCREENER_MAX_CANDIDATES개 — API 과부하 방지)
         # ⚠️ 반드시 shuffle! 알파벳 정렬이면 항상 A~D만 스캔됨
@@ -982,8 +982,8 @@ class DynamicScreener:
                     if high_period > 0 and (current / high_period) >= 0.92:
                         with _lock:
                             breakout_stocks.append((symbol, current / high_period))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
             import sys
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
@@ -1087,8 +1087,8 @@ class DynamicScreener:
                         oversold_score = rsi + (current_price / lower_bb if lower_bb > 0 else 1) * 10
                         with _lock:
                             oversold_stocks.append((symbol, oversold_score))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
             import sys
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
@@ -1154,8 +1154,8 @@ class DynamicScreener:
                     logger.debug("EARNINGS_FILTER: {} 실적 {}일 후 — 스크리너 제외",
                                  symbol, e_info.days_until)
                     return None
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
             
             # Build info dict from OHLCV data (proxy for yf.Ticker.info)
             avg_volume = float(hist['Volume'].mean())
@@ -1236,8 +1236,8 @@ class DynamicScreener:
                         news_blacklist = True  # Catastrophic news shock (e.g. SEC probe, FDA fail, or fraud)
                     elif news_result.sentiment_score < -40:
                         news_bonus = -15
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
             
             # ============================================================
             # 👔 INSIDER BUYING BONUS (+15) / SELLING PENALTY (-10)
@@ -1251,8 +1251,8 @@ class DynamicScreener:
                         insider_bonus = 15
                     elif ins_result.insider_sentiment == "SELLING" and ins_result.insider_net_value < -2_000_000:
                         insider_bonus = -10
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
             
             # ============================================================
             # 📈 52주 신고가 돌파 BONUS (+20) — 가장 강한 모멘텀 알파
@@ -1269,8 +1269,8 @@ class DynamicScreener:
                     high52w_bonus = 10
                 elif _dist >= -0.05:  # 5% 이내
                     high52w_bonus = 5
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
             # ============================================================
             # 🚀 PEAD BONUS (+15) / PEAD PANIC PENALTY (-25) — 실적 서프라이즈 vs 미스
@@ -1334,8 +1334,8 @@ class DynamicScreener:
                         sector_bonus = 15  # Early rotation capture bonus!
                     elif _rec == 'UNDERWEIGHT':
                         sector_bonus = -20
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
             # Theme Radar Bonus (테마 레이더 1등주 우선순위 강제)
             theme_radar_bonus = 0

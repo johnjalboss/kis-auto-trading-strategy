@@ -201,8 +201,8 @@ def t8a():
             inst = ac()
             cat = inst.category.lower()
             cats[cat] = cats.get(cat, 0) + 1
-        except:
-            pass
+        except Exception as err:
+            print("⚠️ [deep_verify.py] Fallback triggered:", err)
     return f"{len(adapters)} adapters, categories: {dict(cats)}"
 test("base_adapters adapter loading", t8a)
 

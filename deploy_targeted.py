@@ -11,7 +11,8 @@ REMOTE_DIR = '/home/ubuntu/kis-auto-trading'
 
 CHANGED_FILES = [
     'config.py',
-    'strategy.py'
+    'strategy.py',
+    'screener.py'
 ]
 
 def scp(local, remote):

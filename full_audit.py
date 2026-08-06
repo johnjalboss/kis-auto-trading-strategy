@@ -56,8 +56,8 @@ for r in sells:
             entry = datetime.fromisoformat(r['entry_time'])
             exit_ = datetime.fromisoformat(r['created_at'])
             hold_times.append((exit_ - entry).total_seconds() / 3600)
-        except:
-            pass
+        except Exception as err:
+            print("⚠️ [full_audit.py] Fallback triggered:", err)
 
 if hold_times:
     print(f"  평균 보유: {sum(hold_times)/len(hold_times):.1f}h")

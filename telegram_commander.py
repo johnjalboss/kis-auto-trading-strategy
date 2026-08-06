@@ -84,8 +84,8 @@ def _get_updates(offset: int) -> list:
         )
         if resp.ok:
             return resp.json().get("result", [])
-    except Exception:
-        pass
+    except Exception as err:
+        logger.warning("⚠️ [telegram_commander.py] Fallback triggered: {}", err)
     return []
 
 
@@ -587,8 +587,8 @@ def _polling_loop() -> None:
                                 json={"callback_query_id": cb_id},
                                 timeout=5,
                             )
-                        except Exception:
-                            pass
+                        except Exception as err:
+                            logger.warning("⚠️ [telegram_commander.py] Fallback triggered: {}", err)
 
                         # 버튼 내부 데이터에 대응되는 핸들러 실행
                         handler = _COMMANDS.get(cb_data)
@@ -656,8 +656,8 @@ def _get_log_mtime() -> float:
             mtime = os.path.getmtime(path)
             if mtime > latest:
                 latest = mtime
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [telegram_commander.py] Fallback triggered: {}", err)
     return latest
 
 

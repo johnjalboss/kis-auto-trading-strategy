@@ -90,7 +90,7 @@ def main():
                 'drawdown_from_high_pct': drawdown_from_high,
             })
         except Exception as e:
-            pass
+            print("⚠️ [analyze_entry_timing.py] Fallback triggered:", e)
 
     df_results = pd.DataFrame(results)
     print(f"\n=== Trade Analysis: {len(df_results)} matched trades ===\n")

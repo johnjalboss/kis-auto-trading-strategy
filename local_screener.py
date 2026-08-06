@@ -174,8 +174,8 @@ class DynamicScreener:
                     score = self._score_stock(symbol, mode)
                     if score:
                         all_scored.append(score)
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [local_screener.py] Fallback triggered: {}", err)
             all_scored.sort(key=lambda x: x.total_score, reverse=True)
             top_picks = all_scored[:self.MAX_RESULTS]
         else:

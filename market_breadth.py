@@ -202,8 +202,8 @@ class MarketBreadthAnalyzer:
                     df.columns = df.columns.get_level_values(0)
                 if not df.empty:
                     self._stock_data[symbol] = df
-            except:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [market_breadth.py] Fallback triggered: {}", err)
     
     def _calculate_ad(self) -> tuple:
         """Calculate advances and declines"""
@@ -282,8 +282,8 @@ class MarketBreadthAnalyzer:
                         bullish += 1
                     else:
                         bearish += 1
-            except:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [market_breadth.py] Fallback triggered: {}", err)
         
         return bullish, bearish
     
@@ -305,8 +305,8 @@ class MarketBreadthAnalyzer:
             elif not spy_at_high and pct_50 > 0.60:
                 return "BULLISH_DIV"  # Index down but breadth strong
             
-        except:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [market_breadth.py] Fallback triggered: {}", err)
         
         return "NONE"
 

@@ -18,5 +18,5 @@ if __name__ == "__main__":
                             if term in content:
                                 print(f"Found term '{term}' in file: {path}")
                 except Exception as e:
-                    pass
+                    print("⚠️ [find_correlation_usage.py] Fallback triggered:", e)
 

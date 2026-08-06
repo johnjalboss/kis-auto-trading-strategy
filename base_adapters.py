@@ -235,8 +235,8 @@ class UniversalAdapter(BaseAnalyzer):
                         except TypeError:
                             try:
                                 output = method()
-                            except Exception:
-                                pass
+                            except Exception as err:
+                                logger.warning("⚠️ [base_adapters.py] Fallback triggered: {}", err)
             
             # Extract score from output
             result = self._extract_score(output, result)
@@ -457,8 +457,8 @@ def get_adapter_report() -> Dict[str, Any]:
             cat = inst.category if hasattr(inst, 'category') else "UNKNOWN"
             name = inst.name if hasattr(inst, 'name') else str(a)
             by_category.setdefault(cat, []).append(name)
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [base_adapters.py] Fallback triggered: {}", err)
     return {
         'total': len(adapters),
         'by_category': by_category,

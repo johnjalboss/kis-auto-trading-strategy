@@ -27,8 +27,8 @@ def read_db():
             rows = cursor.fetchall()
             for r in rows:
                 print(r)
-    except:
-        pass
+    except Exception as err:
+        print("⚠️ [server_read_db.py] Fallback triggered:", err)
         
     conn.close()
 

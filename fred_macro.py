@@ -150,8 +150,8 @@ class FREDMacroAnalyzer:
                 try:
                     dates.append(obs.get("date"))
                     values.append(float(val_str))
-                except ValueError:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [fred_macro.py] Fallback triggered: {}", err)
         if not dates:
             return pd.DataFrame()
             
@@ -225,12 +225,12 @@ class FREDMacroAnalyzer:
         # so downstream modules get instant cache hits (< 1ms).
         try:
             self.fetch_series_df("VIXCLS", limit=130)    # ~6 months daily VIX
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fred_macro.py] Fallback triggered: {}", err)
         try:
             self.fetch_series_df("T10Y3M", limit=70)     # 10Y-3M spread history
-        except Exception:
-            pass
+        except Exception as err:
+            logger.warning("⚠️ [fred_macro.py] Fallback triggered: {}", err)
 
             
         # 1. 10Y-2Y Yield Spread (T10Y2Y) & Un-inversion Velocity

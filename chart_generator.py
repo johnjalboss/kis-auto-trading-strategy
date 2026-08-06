@@ -54,8 +54,8 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
         if hasattr(df.columns, 'get_level_values'):
             try:
                 df.columns = df.columns.get_level_values(0)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [chart_generator.py] Fallback triggered: {}", err)
 
         df.index = df.index.normalize()
 
@@ -409,8 +409,8 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         if os.path.exists(out_path):
             try:
                 os.remove(out_path)
-            except Exception:
-                pass
+            except Exception as err:
+                logger.warning("⚠️ [chart_generator.py] Fallback triggered: {}", err)
 
         plt.savefig(out_path, dpi=120, bbox_inches='tight')
         plt.close(fig)

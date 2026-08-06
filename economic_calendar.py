@@ -139,8 +139,8 @@ class EconomicCalendar:
                         forecast=None,
                         previous=None
                     ))
-                except:
-                    pass
+                except Exception as err:
+                    logger.warning("⚠️ [economic_calendar.py] Fallback triggered: {}", err)
     
     def check_today(self) -> CalendarCheck:
         """Check economic events for today/week — uses ET (US Eastern) date"""

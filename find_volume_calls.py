@@ -15,6 +15,6 @@ if __name__ == "__main__":
                                 if any(k in line for k in ['download', 'Ticker', 'analyze']):
                                     if any(v in line for v in ["'Volume'", '"Volume"', "'VOLUME'", '"VOLUME"']):
                                         print(f"{path}:{idx+1} -> {line}")
-                except Exception:
-                    pass
+                except Exception as err:
+                    print("⚠️ [find_volume_calls.py] Fallback triggered:", err)
 

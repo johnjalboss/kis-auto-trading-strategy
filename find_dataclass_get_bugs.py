@@ -18,6 +18,6 @@ if __name__ == "__main__":
                             for i, line in enumerate(lines):
                                 if search_pattern in line:
                                     print(f"  Line {i+1}: {line}")
-                except Exception:
-                    pass
+                except Exception as err:
+                    print("⚠️ [find_dataclass_get_bugs.py] Fallback triggered:", err)
 
