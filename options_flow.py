@@ -250,7 +250,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     # ── Options chain ──
     try:
-        expiries = _run_with_timeout(lambda: ticker.options, timeout=2.0)
+        expiries = _run_with_timeout(lambda: ticker.options, timeout=5.0)
     except Exception as e:
         logger.debug("options.options list failed for {}: {}", symbol, e)
         snap.reason = "no_expiries"
@@ -274,7 +274,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     try:
         import pandas as pd
-        chain = _run_with_timeout(lambda: ticker.option_chain(target_expiry), timeout=2.0)
+        chain = _run_with_timeout(lambda: ticker.option_chain(target_expiry), timeout=5.0)
         if chain is None:
             raise TimeoutError("options chain download timed out")
         calls = chain.calls
@@ -482,7 +482,7 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
     # ── 1. Max Pain Magnet on Expiry Week ──
     if snap.is_expiry_week and price > 0 and snap.max_pain > 0:
         mp_dev = abs(price - snap.max_pain) / price
-        if mp_dev < 0.015:          # Within 1.5% of max pain
+        if mp_dev < 0.015:          # Within 1.5% of max pain → dealer pin risk
             score -= 8
             reasons.append(f"MaxPain_pin(${snap.max_pain:.0f})")
         elif mp_dev < 0.03:
@@ -491,12 +491,19 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
         elif price > snap.max_pain * 1.03:
             score += 5              # Price well above max pain → bullish momentum
             reasons.append(f"AboveMaxPain(${snap.max_pain:.0f})")
+        elif price < snap.max_pain * 0.97 and snap.days_to_expiry <= 3:
+            score += 8              # [v3.6.0 MAX PAIN REBOUND MAGNET] Dealers pulling price UP to Max Pain before Friday expiry
+            reasons.append(f"MaxPainUpwardPull(${snap.max_pain:.0f})")
 
-    # ── 2. Gamma Exposure ──
-    if snap.gex > 5:                # Strong positive GEX → price pin
+    # ── 2. Gamma Exposure & Gamma Squeeze Surge ──
+    pcr = snap.put_call_ratio
+    if snap.gex < -3.0 and pcr < 0.65:
+        score += 10                 # [v3.6.0 GAMMA SQUEEZE SURGE] Negative GEX + Call Dominance = Forced Dealer Buying Surge!
+        reasons.append(f"GammaSqueezeSurge(${snap.gex:.1f}M)")
+    elif snap.gex > 5.0:             # Strong positive GEX → price pin / low volatility
         score += 4
         reasons.append(f"GEX_stable(${snap.gex:.1f}M)")
-    elif snap.gex < -5:             # Negative GEX → vol amplification
+    elif snap.gex < -5.0:            # Negative GEX without call surge → vol risk
         score -= 4
         reasons.append(f"GEX_volatile(${snap.gex:.1f}M)")
 
