@@ -464,15 +464,9 @@ class EarningsAnalyzer:
         try:
             from earnings_calendar import get_earnings_calendar
             ec = get_earnings_calendar()
-            upcoming = ec.get_upcoming_earnings([symbol], days_ahead=30)
-            
-            if upcoming and symbol in [e.get('symbol') for e in upcoming]:
-                for e in upcoming:
-                    if e.get('symbol') == symbol:
-                        next_date = e.get('date')
-                        if next_date:
-                            days_to = (next_date - datetime.now()).days
-                            return next_date, max(0, days_to)
+            info = ec.check(symbol)
+            if info and info.earnings_date:
+                return info.earnings_date, info.days_until
         except Exception as err:
             logger.warning("⚠️ [earnings_analyzer.py] Fallback triggered: {}", err)
         
