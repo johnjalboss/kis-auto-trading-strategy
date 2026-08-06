@@ -308,6 +308,22 @@ class DrawdownController:
     
     def is_halted(self) -> bool:
         """Check if trading is halted due to drawdown"""
+        try:
+            import sqlite3
+            db_path = "trades.db"
+            if not os.path.exists(db_path):
+                db_path = "/home/ubuntu/kis-auto-trading/trades.db"
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                cur = conn.cursor()
+                cur.execute("CREATE TABLE IF NOT EXISTS system_state (key TEXT PRIMARY KEY, value TEXT)")
+                row = cur.execute("SELECT value FROM system_state WHERE key = 'drawdown_halt'").fetchone()
+                conn.close()
+                if row and row[0] == 'false':
+                    self.is_stopped = False
+                    return False
+        except Exception:
+            pass
         return self.is_stopped
 
     def force_stop(self, reason: str):
