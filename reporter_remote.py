@@ -176,9 +176,9 @@ class PerformanceReporter:
         """Send daily report via Telegram (only once per day)"""
         us_d = self._us_date()
         
-        # Prevent duplicates
-        if self.db.is_report_sent("DAILY_SUMMARY", us_d):
-            logger.info("Daily summary already sent for {}. Skipping.", us_d)
+        # Prevent duplicates atomically (Atomic DB lock claim)
+        if not self.db.claim_report_sending_lock("DAILY_SUMMARY", us_d):
+            logger.info("Daily summary already claimed/sent for {}. Skipping.", us_d)
             return
             
         report = self.generate_daily_report(us_d)

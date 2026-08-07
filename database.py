@@ -415,6 +415,24 @@ class TradeDatabase:
     # Report Tracking
     # ==============================================
 
+    def claim_report_sending_lock(self, report_type: str, report_date: date) -> bool:
+        """
+        Atomically attempts to claim report sending lock.
+        Returns True if lock acquired (first to send).
+        Returns False if report was already claimed or sent by another process/thread.
+        """
+        try:
+            with self._get_conn() as conn:
+                conn.execute(
+                    "INSERT INTO sent_reports (report_type, report_date) VALUES (?, ?)",
+                    (report_type, report_date.isoformat())
+                )
+                logger.info("🔒 Atomic report lock claimed for {} on {}", report_type, report_date)
+                return True
+        except Exception:
+            # Primary key constraint violation (already claimed/sent)
+            return False
+
     def is_report_sent(self, report_type: str, report_date: date) -> bool:
         """Check if a report has already been sent for a specific date"""
         with self._get_conn() as conn:
@@ -422,7 +440,7 @@ class TradeDatabase:
                 "SELECT 1 FROM sent_reports WHERE report_type = ? AND report_date = ?",
                 (report_type, report_date.isoformat())
             ).fetchone()
-        return row is not None
+            return row is not None
 
     def mark_report_sent(self, report_type: str, report_date: date):
         """Mark a report as sent for a specific date"""
@@ -431,7 +449,7 @@ class TradeDatabase:
                 "INSERT OR REPLACE INTO sent_reports (report_type, report_date) VALUES (?, ?)",
                 (report_type, report_date.isoformat())
             )
-        logger.info("Marked report {} sent for {}", report_type, report_date)
+            logger.info("Marked report {} sent for {}", report_type, report_date)
 
     # ==============================================
     # Macro Feedback Loops (Self-Feedback Audit)

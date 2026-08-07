@@ -37,6 +37,13 @@ def main():
 
     load_dotenv()
     setup_logging()
+
+    # 🔒 Process Guard: Guarantee ONLY 1 instance of main.py runs at any time
+    try:
+        from single_instance import ensure_single_instance
+        ensure_single_instance()
+    except Exception as _si_err:
+        logger.warning("Single instance guard check warning: {}", _si_err)
     
     # 🌟 무인 원격 자동 업데이트 체크 (부팅 시 깃허브 최신 전략 파일 자동 패치)
     try:
