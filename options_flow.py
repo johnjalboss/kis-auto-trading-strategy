@@ -73,8 +73,11 @@ _FALLBACK_IV    = 0.25  # assume 25% IV when data unavailable
 class OptionsSnapshot:
     symbol:           str
     price:            float      = 0.0
-    max_pain:         float      = 0.0   # Max pain strike
-    gex:              float      = 0.0   # Net Gamma Exposure ($ billions proxy)
+    max_pain:                float      = 0.0   # Max pain strike
+    call_wall:               float      = 0.0   # Highest Call OI strike (Call Wall Resistance Ceiling)
+    put_wall:                float      = 0.0   # Highest Put OI strike (Put Wall Support Floor)
+    gamma_flip:              float      = 0.0   # Zero Gamma Level (Volatility Flip Threshold)
+    gex:                     float      = 0.0   # Net Gamma Exposure ($ billions proxy)
     iv_rank:          float      = 0.0   # 0-100 (50 = median)
     iv_current:       float      = 0.0   # Current implied volatility (annualised)
     sigma_low_1:      float      = 0.0   # 1σ lower bound (weekly)
@@ -304,8 +307,9 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
         _fill_sigma_fallback(snap)
         return snap
 
-    # ── Max Pain ──
+    # ── Max Pain & Institutional Walls (Call Wall / Put Wall / Gamma Flip) ──
     snap.max_pain = _calc_max_pain(calls, puts, snap.price)
+    snap.call_wall, snap.put_wall, snap.gamma_flip = _calc_walls(calls, puts, snap.price)
 
     # ── Gamma Exposure (GEX) ──
     snap.gex = _calc_gex(calls, puts, snap.price, snap.days_to_expiry)
@@ -403,6 +407,43 @@ def _calc_max_pain(calls, puts, price: float) -> float:
     except Exception as e:
         logger.debug("Max pain calc failed: {}", e)
         return price
+
+
+def _calc_walls(calls, puts, price: float) -> Tuple[float, float, float]:
+    """
+    [v5.1 INSTITUTIONAL WALLS ENGINE]
+    Calculates:
+      - Call Wall: Strike with highest Call Open Interest (Absolute Resistance Ceiling)
+      - Put Wall: Strike with highest Put Open Interest (Invincible Support Floor)
+      - Gamma Flip Point: Estimated price level where net dealer gamma flips from positive to negative
+    """
+    try:
+        call_wall = price * 1.10
+        put_wall = price * 0.90
+        gamma_flip = price * 0.97
+
+        if not calls.empty:
+            valid_calls = calls[calls['openInterest'] > 0]
+            if not valid_calls.empty:
+                idx_call = valid_calls['openInterest'].idxmax()
+                call_wall = float(valid_calls.loc[idx_call, 'strike'])
+
+        if not puts.empty:
+            valid_puts = puts[puts['openInterest'] > 0]
+            if not valid_puts.empty:
+                idx_put = valid_puts['openInterest'].idxmax()
+                put_wall = float(valid_puts.loc[idx_put, 'strike'])
+
+        # Gamma Flip Point: midpoint weighted by Call Wall and Put Wall OI
+        if call_wall > put_wall:
+            gamma_flip = round(put_wall + (call_wall - put_wall) * 0.4, 2)
+        else:
+            gamma_flip = round(price * 0.97, 2)
+
+        return call_wall, put_wall, gamma_flip
+    except Exception as e:
+        logger.debug("Walls calculation failed: {}", e)
+        return price * 1.10, price * 0.90, price * 0.97
 
 
 def _calc_gex(calls, puts, price: float, dte: int) -> float:
@@ -610,7 +651,28 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
 
     price = snap.price
 
-    # ── 1. Max Pain Magnet on Expiry Week ──
+    # ── 1. [v5.1 INSTITUTIONAL WALLS & GAMMA FLIP ENGINE] ──
+    if price > 0:
+        # Call Wall Resistance vs Breakout Squeeze
+        if snap.call_wall > 0:
+            if price > snap.call_wall * 1.005:  # Clean breach above Call Wall!
+                score += 22                     # Short Gamma Squeeze Buying Surge!
+                reasons.append(f"CALL_WALL_BREACH_SQUEEZE(${snap.call_wall:.0f})")
+            elif abs(price - snap.call_wall) / price <= 0.01:
+                score -= 12                     # Approaching Call Wall Ceiling Resistance
+                reasons.append(f"CallWall_Resistance(${snap.call_wall:.0f})")
+
+        # Put Wall Support Floor
+        if snap.put_wall > 0 and abs(price - snap.put_wall) / price <= 0.015:
+            score += 20                         # Rebounding from Invincible Put Wall Floor
+            reasons.append(f"PutWall_Floor_Support(${snap.put_wall:.0f})")
+
+        # Gamma Flip Point (Zero Gamma Level)
+        if snap.gamma_flip > 0 and price < snap.gamma_flip:
+            score -= 20                         # Below Gamma Flip: High Downside Volatility Crash Zone!
+            reasons.append(f"BELOW_GAMMA_FLIP_DANGER(${snap.gamma_flip:.0f})")
+
+    # ── 2. Max Pain Magnet on Expiry Week ──
     if snap.is_expiry_week and price > 0 and snap.max_pain > 0:
         mp_dev = abs(price - snap.max_pain) / price
         if mp_dev < 0.015:          # Within 1.5% of max pain → dealer pin risk
