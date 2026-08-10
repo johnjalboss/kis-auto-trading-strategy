@@ -46,54 +46,54 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Risk Management
 # ==============================================
 
-# Per-position strict stop loss (-3.0%) — Hardcoded to 0.03 to override legacy .env settings
-STOP_LOSS_PCT = 0.03
+# Per-position strict stop loss (-4.5% safety hard stop floor to absorb market noise)
+STOP_LOSS_PCT = 0.045
 
 # Consecutive loss limit — 대표님 요구사항 반영: 불필요한 3연속 손실 쿨다운 매매 차단 기능 비활성화 (False)
 ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "999"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 
-# Position limits (소액 계좌 수익 극대화를 위해 3개 핵심 주도주 집중 재편)
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 35% max per position
+# Position limits (4개 종목 분산으로 개별 종목 손절 타격 최소화)
+MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.25"))  # 25% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "3"))  # 1등 주도주 3종목 집중 투자
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "4"))  # 4종목 분산 투자
 
 # ==============================================
-# [ENABLED] UPGRADE 교체매매 활성화 — 최소 25점 차이날 때만 교체
-# 너무 자주 발생하는 것을 방지하기 위해 큰 점수 격차(25점)를 설정하여 무분별한 교체를 방지합니다.
-UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "35"))  # [v1.2] 25→35: 고득점 스윙 포지션 무분별 교체 방지
+# [ENABLED] UPGRADE 교체매매 활성화 — 최소 30점 차이날 때만 교체
+# 너무 자주 발생하는 것을 방지하기 위해 큰 점수 격차(30점)를 설정하여 무분별한 교체를 방지합니다.
+UPGRADE_SCORE_GAP = int(os.getenv("UPGRADE_SCORE_GAP", "30"))  # 스윙 포지션 무분별 교체 방지
 
 # 매수 후 최소 보유 시간 (분)
 UPGRADE_MIN_HOLD_MINUTES = int(os.getenv("UPGRADE_MIN_HOLD_MINUTES", "120"))
 
 # 하루 최대 교체 횟수
-UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "1"))  # [v1.2] 2→1: 스윙 포지션 안정성 최우선
+UPGRADE_MAX_PER_DAY = int(os.getenv("UPGRADE_MAX_PER_DAY", "1"))  # 1회: 스윙 포지션 안정성 최우선
 
 # 수익중인 종목은 교체하지 않음 (이 %이상 수익이면 보호)
 UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02"))  # 2%
 
-# 손실중인 종목 교체 매도 금지 기준선 (이 % 초과 손실이면 교체 금지, 예: -0.002 = -0.2% 손실 이하일 때만 교체 허용)
-UPGRADE_LOSS_LIMIT_PCT = float(os.getenv("UPGRADE_LOSS_LIMIT_PCT", "-0.002"))
+# 손실중인 종목 교체 매도 금지 기준선 (이 % 이하 손실이면 교체 금지, 예: -0.005 = -0.5% 이하 손실 포지션 교체 절대 금지)
+UPGRADE_LOSS_LIMIT_PCT = float(os.getenv("UPGRADE_LOSS_LIMIT_PCT", "-0.005"))
 
 # ==============================================
 # Strategy & Profit Execution Parameters
 # ==============================================
 
-# [PROFIT MAXIMIZER] 분할 익절 및 무위험 본절 스탑 파라미터
-PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.09"))  # +9.0% 50% 분할익절
-BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.05"))   # +5.0% 달성 시 손절가를 본절가로 상향
+# [PROFIT MAXIMIZER] 분할 익절 및 무위험 본절 스탑 파라미터 (v4.0)
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.05"))  # +5.0% 50% 분할익절
+BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.035"))   # +3.5% 달성 시 손절가를 본절가로 상향
 
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.15"))       # 15% 최종 TP
-STOP_LOSS_PCT = 0.03                                                    # -3.0% strict hard SL
-BEAR_HARD_STOP_PCT = 0.03                                               # -3.0% strict bear SL
-ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.5")) # [FIX] 2.0 -> 2.5x ATR
+STOP_LOSS_PCT = 0.045                                                   # -4.5% safety hard SL
+BEAR_HARD_STOP_PCT = 0.045                                              # -4.5% safety bear SL
+ATR_STOP_MULTIPLIER = float(os.getenv("ATR_STOP_MULTIPLIER", "2.2")) # 2.2x ATR dynamic stop
 ECON_EVENT_GUARD_ENABLED = False
 
-# Trailing Stop — [FIX] 8% 수익 이상부터 트레일링 (기존 6%)
-TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.08"))  # [FIX] 6% -> 8%
-TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.035"))        # [FIX] 3% -> 3.5%
+# Trailing Stop — +5.5% 수익 이상부터 트레일링 적용
+TRAILING_TRIGGER_PCT = float(os.getenv("TRAILING_TRIGGER_PCT", "0.055"))
+TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "0.025"))
 
 # Daily trade limit
 MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "15"))
