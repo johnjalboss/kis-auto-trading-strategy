@@ -81,13 +81,15 @@ class OptionsSnapshot:
     sigma_high_1:     float      = 0.0   # 1σ upper bound (weekly)
     sigma_low_2:      float      = 0.0   # 2σ lower bound (weekly)
     sigma_high_2:     float      = 0.0   # 2σ upper bound (weekly)
-    put_call_ratio:   float      = 1.0   # <0.7 bullish, >1.2 bearish
-    iv_skew:          float      = 0.0   # Put IV - Call IV (negative = Call Skew / Bullish)
-    unusual_oi_ratio: float      = 1.0   # OTM Call OI spike ratio (>2.5x = Smart Money Sweep)
-    days_to_expiry:   int        = 0     # DTE for nearest weekly
-    is_expiry_week:   bool       = False # True if expiry within 5 calendar days
-    score:            int        = 0     # Composite options score (-20 to +20)
-    reason:           str        = ""
+    put_call_ratio:       float      = 1.0   # <0.7 bullish, >1.2 bearish
+    iv_skew:              float      = 0.0   # Put IV - Call IV (negative = Call Skew / Bullish)
+    unusual_oi_ratio:     float      = 1.0   # OTM Call OI spike ratio (>2.5x = Smart Money Sweep)
+    put_sweep_ratio:      float      = 1.0   # OTM Put OI spike ratio (>2.5x = Bearish Downside Hedge)
+    is_zero_dte_gambler:  bool       = False # DTE <= 3d short-term retail noise filter
+    days_to_expiry:       int        = 0     # DTE for nearest weekly
+    is_expiry_week:       bool       = False # True if expiry within 5 calendar days
+    score:                int        = 0     # Composite options score (-20 to +20)
+    reason:               str        = ""
     fetched_at:       float      = field(default_factory=time.time)
 
     def is_fresh(self, ttl: float = _OPTIONS_TTL) -> bool:
@@ -308,9 +310,12 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
     # ── IV: use ATM options average & Skew ──
     snap.iv_current, snap.iv_rank = _calc_iv(calls, puts, snap.price)
     
-    # ── Volatility Skew & Unusual OI Sweeps ──
+    # ── Volatility Skew & Institutional OI Sweeps (DTE & Strike Filtered) ──
     snap.iv_skew = _calc_iv_skew(calls, puts, snap.price)
-    snap.unusual_oi_ratio = _calc_unusual_oi_sweep(calls, puts, snap.price)
+    sweep_dict = _calc_unusual_oi_sweep(calls, puts, snap.price, snap.days_to_expiry)
+    snap.unusual_oi_ratio = sweep_dict.get('call_sweep_ratio', 1.0)
+    snap.put_sweep_ratio = sweep_dict.get('put_sweep_ratio', 1.0)
+    snap.is_zero_dte_gambler = sweep_dict.get('is_zero_dte_gambler', False)
 
     # ── Sigma Range (1σ / 2σ weekly move) ──
     _fill_sigma(snap)
@@ -492,26 +497,61 @@ def _calc_iv_skew(calls, puts, price: float) -> float:
         return 0.0
 
 
-def _calc_unusual_oi_sweep(calls, puts, price: float) -> float:
+def _calc_unusual_oi_sweep(calls, puts, price: float, dte: int) -> Dict[str, float]:
     """
-    Detect Unusual OI Sweep in OTM Call options.
-    If OTM Call Open Interest spike ratio >= 2.5x mean, Smart Money Leverage Sweep detected!
+    [v4.3 REAL INSTITUTIONAL QUANT SWEEP ENGINE]
+    Calculates Unusual OI Sweeps with DTE & Strike Distance Filters.
+    
+    Rules:
+    1. Only DTE >= 7 days (7~60d) is considered Smart Money Conviction. DTE <= 3d is Zero-DTE Gambler noise.
+    2. Strike Distance Filter: Only 1.5% ~ 10% OTM strikes are realistic institutional targets. >15% OTM is discarded as junk.
+    3. Separates Bullish OTM Call Sweeps (+18 pts) from Bearish OTM Put Crash Insurance (-15 pts).
     """
+    res = {
+        'call_sweep_ratio': 1.0,
+        'put_sweep_ratio': 1.0,
+        'is_valid_smart_money': False,
+        'is_zero_dte_gambler': False,
+        'target_call_strike': 0.0,
+        'target_put_strike': 0.0
+    }
+    
+    if price <= 0:
+        return res
+
     try:
-        otm_calls = calls[calls['strike'] > price * 1.01]
-        if otm_calls.empty:
-            return 1.0
+        # Zero-DTE Gambler Trap Check
+        if dte <= 3:
+            res['is_zero_dte_gambler'] = True
 
-        max_oi = otm_calls['openInterest'].max()
-        avg_oi = otm_calls['openInterest'].mean()
+        # DTE >= 5 days: Smart Money Window
+        if dte >= 5:
+            res['is_valid_smart_money'] = True
 
-        if avg_oi <= 0:
-            return 1.0
+        # Filter OTM Call strikes between +1.5% and +10.0%
+        valid_otm_calls = calls[(calls['strike'] >= price * 1.015) & (calls['strike'] <= price * 1.10)]
+        if not valid_otm_calls.empty:
+            max_call_oi = valid_otm_calls['openInterest'].max()
+            avg_call_oi = valid_otm_calls['openInterest'].mean()
+            if avg_call_oi > 0:
+                res['call_sweep_ratio'] = round(float(max_call_oi / avg_call_oi), 2)
+                idx = valid_otm_calls['openInterest'].idxmax()
+                res['target_call_strike'] = float(valid_otm_calls.loc[idx, 'strike'])
 
-        return round(float(max_oi / avg_oi), 2)
+        # Filter OTM Put strikes between -1.5% and -10.0%
+        valid_otm_puts = puts[(puts['strike'] <= price * 0.985) & (puts['strike'] >= price * 0.90)]
+        if not valid_otm_puts.empty:
+            max_put_oi = valid_otm_puts['openInterest'].max()
+            avg_put_oi = valid_otm_puts['openInterest'].mean()
+            if avg_put_oi > 0:
+                res['put_sweep_ratio'] = round(float(max_put_oi / avg_put_oi), 2)
+                idx = valid_otm_puts['openInterest'].idxmax()
+                res['target_put_strike'] = float(valid_otm_puts.loc[idx, 'strike'])
+
+        return res
     except Exception as e:
-        logger.debug("Unusual OI calc failed: {}", e)
-        return 1.0
+        logger.debug("Institutional OI Sweep calc failed: {}", e)
+        return res
 
 
 # ──────────────────────────────────────────────────────────
@@ -558,7 +598,7 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
         score -= 4
         reasons.append(f"GEX_volatile(${snap.gex:.1f}M)")
 
-    # ── 3. [v4.1 ADVANCED] Volatility Skew & Unusual OI Sweeps ──
+    # ── 3. [v4.3 REAL QUANT] Volatility Skew & Institutional OI Sweeps (DTE/Strike Filtered) ──
     if snap.iv_skew < -0.03:
         score += 12                 # Call Skew: Institutions aggressively buying upside OTM Calls!
         reasons.append(f"CallSkew_Bullish({snap.iv_skew:.3f})")
@@ -566,9 +606,18 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
         score -= 10                 # Put Skew: Institutions hedging against downside crash
         reasons.append(f"PutSkew_Bearish({snap.iv_skew:.3f})")
 
-    if snap.unusual_oi_ratio >= 2.5:
-        score += 15                 # Unusual Whales OI Sweep: Institutional leveraged bet!
-        reasons.append(f"UnusualOI_Sweep({snap.unusual_oi_ratio:.1f}x)")
+    # Smart Money Call Sweep (+1.5% ~ +10% OTM & DTE >= 5d)
+    if snap.unusual_oi_ratio >= 2.5 and not snap.is_zero_dte_gambler:
+        score += 18                 # Real Smart Money OTM Call Sweep!
+        reasons.append(f"SmartMoney_CallSweep({snap.unusual_oi_ratio:.1f}x)")
+    elif snap.unusual_oi_ratio >= 2.5 and snap.is_zero_dte_gambler:
+        score -= 5                  # Zero-DTE Gambler Noise: Retail lottery trap
+        reasons.append(f"0DTE_Gambler_Trap({snap.unusual_oi_ratio:.1f}x)")
+
+    # Bearish Put OI Sweep (-1.5% ~ -10% OTM Puts)
+    if snap.put_sweep_ratio >= 2.5:
+        score -= 15                 # Institutional Downside Protection / Crash Bet
+        reasons.append(f"Institutional_Put_Hedge({snap.put_sweep_ratio:.1f}x)")
 
     # ── 4. IV Rank & IV Crush Shield ──
     if snap.iv_rank < 25:
