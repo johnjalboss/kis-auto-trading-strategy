@@ -884,20 +884,75 @@ class StrategyEngine:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
         # ================================
-        
+        # [v4.0 INSTITUTIONAL DATA MODULE 1: DARK POOL & SMART MONEY] (+20 / -15 pts)
         # ================================
-        # Options Flow Bonus (+/- 20)
-        # Includes: Max Pain, GEX, IV Rank, Sigma Range, Put/Call Ratio
+        try:
+            from smart_money import analyze_smart_money
+            sm_data = analyze_smart_money(symbol, df)
+            if sm_data and getattr(sm_data, 'is_accumulating', False):
+                score += 20
+                logger.info("💎 [DARK_POOL_ACCUMULATION] +20 pts: Institutional Dark Pool Buying detected for {}", symbol)
+            elif sm_data and getattr(sm_data, 'is_distributing', False):
+                score -= 15
+                logger.info("⚠️ [DARK_POOL_DISTRIBUTION] -15 pts: Institutional Dark Pool Selling for {}", symbol)
+        except Exception as _sm_err:
+            logger.debug("Smart money check skipped for {}: {}", symbol, _sm_err)
+
+        # ================================
+        # [v4.0 INSTITUTIONAL DATA MODULE 2: INSIDER CLUSTER BUYING] (+25 pts)
+        # ================================
+        try:
+            from insider_tracker import InsiderInstitutionalTracker
+            _insider_tr = InsiderInstitutionalTracker()
+            insider_sig = _insider_tr.analyze(symbol)
+            if insider_sig and getattr(insider_sig, 'insider_buys_90d', 0) >= 2 and getattr(insider_sig, 'insider_net_value', 0) > 50000:
+                score += 25
+                logger.info("🔥 [INSIDER_CLUSTER_BUY] +25 pts: Multiple C-level Executives buying 자사주 for {}", symbol)
+            elif insider_sig and getattr(insider_sig, 'insider_sentiment', 'NEUTRAL') == 'BUYING':
+                score += 10
+        except Exception as _ins_err:
+            logger.debug("Insider tracker check skipped for {}: {}", symbol, _ins_err)
+
+        # ================================
+        # [v4.0 INSTITUTIONAL DATA MODULE 3: OPTIONS GEX & MAX PAIN] (+20 / -20 pts)
         # ================================
         if symbol:
             try:
                 opts_score, opts_reason = get_options_score(symbol, current_price=price)
                 score += opts_score
-                if opts_score != 0:
-                    logger.debug("{} OptionsFlow score: {:+d} | {}", symbol, opts_score, opts_reason)
+                if opts_score > 15:
+                    logger.info("🎯 [OPTIONS_GEX_SUPPORT] +{:d} pts for {}: {}", opts_score, symbol, opts_reason)
             except Exception as e:
-                logger.warning("🚨 [OPTIONS_DATA_WARNING] Options flow score fetch failed for {}: {}", symbol, e)
-        
+                logger.debug("Options flow score fetch skipped for {}: {}", symbol, e)
+
+        # ================================
+        # [v4.0 INSTITUTIONAL DATA MODULE 4: SECTOR ROTATION & RS ALPHA] (+20 / -15 pts)
+        # ================================
+        try:
+            from sector_rotator import get_sector_rotator
+            _rotator = get_sector_rotator()
+            leading_sectors = _rotator.get_leading_sectors(top_n=3)
+            sym_sector = _SECTOR_MAP.get(symbol, "")
+            if sym_sector in leading_sectors:
+                score += 20
+                logger.info("🚀 [SECTOR_LEADER_TAILWIND] +20 pts: {} belongs to top leading sector ({})", symbol, sym_sector)
+            
+            # Relative Strength vs SPY check
+            import kis_data as _kd_rs
+            spy_df_rs = _kd_rs.get_daily_ohlcv("SPY", days=25)
+            if spy_df_rs is not None and len(spy_df_rs) >= 20 and len(df) >= 20:
+                stock_ret_20d = (float(df['Close'].iloc[-1]) / float(df['Close'].iloc[-20])) - 1.0
+                spy_ret_20d = (float(spy_df_rs['Close'].iloc[-1]) / float(spy_df_rs['Close'].iloc[-20])) - 1.0
+                rs_alpha = stock_ret_20d - spy_ret_20d
+
+                if rs_alpha >= 0.05:
+                    score += 15
+                    logger.info("🔥 [RS_ALPHA_LEADER] +15 pts: {} outperforming SPY by {:.1f}%", symbol, rs_alpha*100)
+                elif rs_alpha < -0.05:
+                    score -= 10
+        except Exception as _rs_err:
+            logger.debug("Sector & RS check skipped for {}: {}", symbol, _rs_err)
+
         # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
