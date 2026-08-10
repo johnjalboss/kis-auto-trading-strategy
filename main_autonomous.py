@@ -10,6 +10,20 @@ import sys
 from datetime import datetime
 from loguru import logger
 
+import os
+import fcntl
+
+# Single-Instance Mutex Lock File Mechanism (Prevents duplicate bot execution)
+LOCK_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kis_bot_daemon.lock")
+try:
+    _lock_fp = open(LOCK_FILE_PATH, "w")
+    fcntl.flock(_lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    _lock_fp.write(str(os.getpid()))
+    _lock_fp.flush()
+except IOError:
+    print(f"🚨 [SINGLE_INSTANCE_GUARD] Another main_autonomous.py process (PID active) is already running! Terminating this duplicate process immediately.")
+    sys.exit(0)
+
 # Import all modules
 from scheduler import get_scheduler
 from health_monitor import get_health_monitor
