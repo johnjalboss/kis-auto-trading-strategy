@@ -82,6 +82,8 @@ class OptionsSnapshot:
     sigma_low_2:      float      = 0.0   # 2σ lower bound (weekly)
     sigma_high_2:     float      = 0.0   # 2σ upper bound (weekly)
     put_call_ratio:   float      = 1.0   # <0.7 bullish, >1.2 bearish
+    iv_skew:          float      = 0.0   # Put IV - Call IV (negative = Call Skew / Bullish)
+    unusual_oi_ratio: float      = 1.0   # OTM Call OI spike ratio (>2.5x = Smart Money Sweep)
     days_to_expiry:   int        = 0     # DTE for nearest weekly
     is_expiry_week:   bool       = False # True if expiry within 5 calendar days
     score:            int        = 0     # Composite options score (-20 to +20)
@@ -303,8 +305,12 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
     # ── Gamma Exposure (GEX) ──
     snap.gex = _calc_gex(calls, puts, snap.price, snap.days_to_expiry)
 
-    # ── IV: use ATM options average ──
+    # ── IV: use ATM options average & Skew ──
     snap.iv_current, snap.iv_rank = _calc_iv(calls, puts, snap.price)
+    
+    # ── Volatility Skew & Unusual OI Sweeps ──
+    snap.iv_skew = _calc_iv_skew(calls, puts, snap.price)
+    snap.unusual_oi_ratio = _calc_unusual_oi_sweep(calls, puts, snap.price)
 
     # ── Sigma Range (1σ / 2σ weekly move) ──
     _fill_sigma(snap)
@@ -459,20 +465,65 @@ def _calc_iv(calls, puts, price: float) -> Tuple[float, float]:
         return _FALLBACK_IV, 50.0
 
 
+def _calc_iv_skew(calls, puts, price: float) -> float:
+    """
+    Calculate Put-Call Volatility Skew: IV(OTM Put ~5% below) - IV(OTM Call ~5% above)
+    Negative Skew (< -0.03) = Call Skew (Aggressive Institutional Upside FOMO)
+    Positive Skew (> +0.08) = Put Skew (Institutional Crash Insurance Buying)
+    """
+    try:
+        import pandas as pd
+        iv_col = 'impliedVolatility'
+        otm_calls = calls[(calls['strike'] > price * 1.02) & (calls['strike'] < price * 1.10)]
+        otm_puts  = puts[(puts['strike'] < price * 0.98) & (puts['strike'] > price * 0.90)]
+
+        if otm_calls.empty or otm_puts.empty:
+            return 0.0
+
+        call_iv = otm_calls[iv_col].median()
+        put_iv  = otm_puts[iv_col].median()
+
+        if pd.isna(call_iv) or pd.isna(put_iv):
+            return 0.0
+
+        return round(float(put_iv - call_iv), 4)
+    except Exception as e:
+        logger.debug("IV Skew calc failed: {}", e)
+        return 0.0
+
+
+def _calc_unusual_oi_sweep(calls, puts, price: float) -> float:
+    """
+    Detect Unusual OI Sweep in OTM Call options.
+    If OTM Call Open Interest spike ratio >= 2.5x mean, Smart Money Leverage Sweep detected!
+    """
+    try:
+        otm_calls = calls[calls['strike'] > price * 1.01]
+        if otm_calls.empty:
+            return 1.0
+
+        max_oi = otm_calls['openInterest'].max()
+        avg_oi = otm_calls['openInterest'].mean()
+
+        if avg_oi <= 0:
+            return 1.0
+
+        return round(float(max_oi / avg_oi), 2)
+    except Exception as e:
+        logger.debug("Unusual OI calc failed: {}", e)
+        return 1.0
+
+
 # ──────────────────────────────────────────────────────────
 # Scoring Logic
 # ──────────────────────────────────────────────────────────
 def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
     """
     Combine options signals into a single score adjustment (-20 to +20).
-    Rationale:
-      - Near max pain on expiry week → avoid entry (score penalty)
-      - Positive GEX → price stable, safe to enter range trades → small bonus
-      - Negative GEX → explosive moves possible → caution, tighter stops
-      - Low IV rank (<25%) → options cheap → bullish stability
-      - High IV rank (>75%) → expensive IV, post-event vol crush risk
-      - Put/Call < 0.6 → euphoria (slight caution) or genuine bull
-      - Put/Call > 1.2 → fear (contrarian + caution vs trend exhaustion)
+    Includes Advanced Quant Features:
+      - Unusual OI Sweeps (>2.5x OTM call OI spike)
+      - Volatility Skew (Call Skew vs Put Skew)
+      - IV Crush & Max Pain Magnet
     """
     score = 0
     reasons = []
@@ -492,13 +543,13 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
             score += 5              # Price well above max pain → bullish momentum
             reasons.append(f"AboveMaxPain(${snap.max_pain:.0f})")
         elif price < snap.max_pain * 0.97 and snap.days_to_expiry <= 3:
-            score += 8              # [v3.6.0 MAX PAIN REBOUND MAGNET] Dealers pulling price UP to Max Pain before Friday expiry
+            score += 8              # Dealers pulling price UP to Max Pain before Friday expiry
             reasons.append(f"MaxPainUpwardPull(${snap.max_pain:.0f})")
 
     # ── 2. Gamma Exposure & Gamma Squeeze Surge ──
     pcr = snap.put_call_ratio
     if snap.gex < -3.0 and pcr < 0.65:
-        score += 10                 # [v3.6.0 GAMMA SQUEEZE SURGE] Negative GEX + Call Dominance = Forced Dealer Buying Surge!
+        score += 10                 # Gamma Squeeze Surge: Forced Dealer Buying
         reasons.append(f"GammaSqueezeSurge(${snap.gex:.1f}M)")
     elif snap.gex > 5.0:             # Strong positive GEX → price pin / low volatility
         score += 4
@@ -507,13 +558,25 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
         score -= 4
         reasons.append(f"GEX_volatile(${snap.gex:.1f}M)")
 
-    # ── 3. IV Rank ──
+    # ── 3. [v4.1 ADVANCED] Volatility Skew & Unusual OI Sweeps ──
+    if snap.iv_skew < -0.03:
+        score += 12                 # Call Skew: Institutions aggressively buying upside OTM Calls!
+        reasons.append(f"CallSkew_Bullish({snap.iv_skew:.3f})")
+    elif snap.iv_skew > 0.08:
+        score -= 10                 # Put Skew: Institutions hedging against downside crash
+        reasons.append(f"PutSkew_Bearish({snap.iv_skew:.3f})")
+
+    if snap.unusual_oi_ratio >= 2.5:
+        score += 15                 # Unusual Whales OI Sweep: Institutional leveraged bet!
+        reasons.append(f"UnusualOI_Sweep({snap.unusual_oi_ratio:.1f}x)")
+
+    # ── 4. IV Rank & IV Crush Shield ──
     if snap.iv_rank < 25:
         score += 5                  # Low IV = underpriced vol = calm market
         reasons.append(f"IV_low({snap.iv_rank:.0f}%)")
-    elif snap.iv_rank > 75:
-        score -= 5                  # High IV = expensive options = event risk
-        reasons.append(f"IV_high({snap.iv_rank:.0f}%)")
+    elif snap.iv_rank > 80:
+        score -= 8                  # High IV = IV Crush Shield active
+        reasons.append(f"IV_Crush_Risk({snap.iv_rank:.0f}%)")
 
     # ── 4. Put/Call Ratio ──
     pcr = snap.put_call_ratio
