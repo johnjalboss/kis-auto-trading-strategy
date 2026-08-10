@@ -39,6 +39,26 @@ from universe import FALLBACK_SYMBOLS
 from options_flow import get_options_score, get_vix_snapshot, is_near_max_pain, get_sigma_range
 
 
+# Sector Mapping Dictionary for System-wide Sector Rotation & Guards
+GLOBAL_SECTOR_MAP = {
+    "NVDA": "Technology", "AMD": "Technology", "AVGO": "Technology", "QCOM": "Technology", "SMCI": "Technology",
+    "MSFT": "Technology", "AAPL": "Technology", "ORCL": "Technology", "ADBE": "Technology", "CRM": "Technology",
+    "SOXL": "Technology", "SOXS": "Technology", "MU": "Technology", "MRVL": "Technology",
+    "META": "Communication", "GOOGL": "Communication", "GOOG": "Communication", "NFLX": "Communication",
+    "T": "Communication", "VZ": "Communication", "CMCSA": "Communication",
+    "AMZN": "Consumer Disc", "TSLA": "Consumer Disc", "NKE": "Consumer Disc",
+    "HD": "Consumer Disc", "MCD": "Consumer Disc", "SBUX": "Consumer Disc",
+    "LLY": "Healthcare", "UNH": "Healthcare", "JNJ": "Healthcare", "MRK": "Healthcare",
+    "ABBV": "Healthcare", "PFE": "Healthcare", "BMY": "Healthcare", "HALO": "Healthcare",
+    "JPM": "Financials", "BAC": "Financials", "GS": "Financials", "MS": "Financials", "WFC": "Financials",
+    "BHF": "Financials", "PNFP": "Financials", "NTAP": "Technology",
+    "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "FANG": "Energy", "DINO": "Energy",
+    "CAT": "Industrials", "GE": "Industrials", "HON": "Industrials", "UPS": "Industrials",
+    "FLS": "Industrials", "ARMK": "Industrials",
+    "AAL": "Industrials", "DAL": "Industrials", "UAL": "Industrials", "CSX": "Industrials",
+    "ARE": "Real Estate", "WPC": "Real Estate", "AMT": "Real Estate", "O": "Real Estate",
+}
+
 # ==============================================
 # Market Phases
 # ==============================================
@@ -887,14 +907,15 @@ class StrategyEngine:
         # [v4.0 INSTITUTIONAL DATA MODULE 1: DARK POOL & SMART MONEY] (+20 / -15 pts)
         # ================================
         try:
-            from smart_money import analyze_smart_money
-            sm_data = analyze_smart_money(symbol, df)
-            if sm_data and getattr(sm_data, 'is_accumulating', False):
+            from smart_money import SmartMoneyTracker
+            _sm_tracker = SmartMoneyTracker()
+            sm_data = _sm_tracker.analyze(symbol)
+            if sm_data and getattr(sm_data, 'score', 0) >= 20:
                 score += 20
-                logger.info("💎 [DARK_POOL_ACCUMULATION] +20 pts: Institutional Dark Pool Buying detected for {}", symbol)
-            elif sm_data and getattr(sm_data, 'is_distributing', False):
+                logger.info("💎 [DARK_POOL_ACCUMULATION] +20 pts: Institutional Smart Money score {} for {}", sm_data.score, symbol)
+            elif sm_data and getattr(sm_data, 'score', 0) <= -20:
                 score -= 15
-                logger.info("⚠️ [DARK_POOL_DISTRIBUTION] -15 pts: Institutional Dark Pool Selling for {}", symbol)
+                logger.info("⚠️ [DARK_POOL_DISTRIBUTION] -15 pts: Institutional Selling score {} for {}", sm_data.score, symbol)
         except Exception as _sm_err:
             logger.debug("Smart money check skipped for {}: {}", symbol, _sm_err)
 
@@ -929,10 +950,11 @@ class StrategyEngine:
         # [v4.0 INSTITUTIONAL DATA MODULE 4: SECTOR ROTATION & RS ALPHA] (+20 / -15 pts)
         # ================================
         try:
-            from sector_rotator import get_sector_rotator
-            _rotator = get_sector_rotator()
-            leading_sectors = _rotator.get_leading_sectors(top_n=3)
-            sym_sector = _SECTOR_MAP.get(symbol, "")
+            from sector_rotator import SectorRotator
+            _rotator = SectorRotator()
+            rankings = _rotator.analyze()
+            leading_sectors = [r.sector for r in rankings[:3]] if rankings else []
+            sym_sector = GLOBAL_SECTOR_MAP.get(symbol, "")
             if sym_sector in leading_sectors:
                 score += 20
                 logger.info("🚀 [SECTOR_LEADER_TAILWIND] +20 pts: {} belongs to top leading sector ({})", symbol, sym_sector)
@@ -1007,13 +1029,48 @@ class StrategyEngine:
         # - Require RVOL >= 1.25 AND No Bearish Divergence to confirm Institutional Demand!
         # - Deduct -40 pts penalty if RSI > 76 or Bearish Divergence (False Breakout Trap)!
         # ================================
-        if ind.bollinger.percent_b >= 0.90 or ind.rsi > 70:
-            if ind.rsi > 76:
-                score -= 40
-                logger.info("🚫 [EXHAUSTION_TOP_PENALTY] -40 pts deducted for Overbought Exhaustion (RSI={:.0f}) on {}", ind.rsi, symbol)
-            elif ind.macd.cross_down:
-                score -= 40
-                logger.info("🚫 [BEARISH_DIVERGENCE_PENALTY] -40 pts deducted for MACD Bearish Divergence at High on {}", symbol)
+        # ================================
+        # [v6.0 INSTITUTIONAL QUANT ALPHA ENGINE]
+        # 1. Macro Cross-Asset Risk Matrix (Yields & US Dollar Spikes)
+        # 2. Pre-Earnings Risk Shield (-50 pts for earnings in <=3d)
+        # 3. Volume Profile & Point of Control (POC +18 pts)
+        # 4. Multi-Timeframe 1-Hour Intraday Confluence (+12 pts / -15 pts)
+        # ================================
+        try:
+            from macro_matrix import MacroRiskMatrix
+            macro_res = MacroRiskMatrix().analyze()
+            score += macro_res['score_adj']
+            if abs(macro_res['score_adj']) > 0:
+                logger.info("🌐 [MACRO_RISK_MATRIX] {} pts: {}", macro_res['score_adj'], macro_res['reason'])
+        except Exception as _m_err:
+            logger.debug("Macro Risk Matrix skipped for {}: {}", symbol, _m_err)
+
+        try:
+            from pre_earnings_shield import PreEarningsShield
+            pe_res = PreEarningsShield().analyze(symbol)
+            score += pe_res['score_adj']
+            if pe_res['is_pre_earnings_danger']:
+                logger.info("🚨 [PRE_EARNINGS_SHIELD] -50 pts: {}", pe_res['reason'])
+        except Exception as _pe_err:
+            logger.debug("PreEarningsShield skipped for {}: {}", symbol, _pe_err)
+
+        try:
+            from volume_profile import VolumeProfileAnalyzer
+            vp_res = VolumeProfileAnalyzer().analyze(symbol)
+            score += vp_res['score_adj']
+            if vp_res['score_adj'] > 0:
+                logger.info("🎯 [VOLUME_PROFILE_POC] +{} pts: {}", vp_res['score_adj'], vp_res['reason'])
+        except Exception as _vp_err:
+            logger.debug("VolumeProfileAnalyzer skipped for {}: {}", symbol, _vp_err)
+
+        try:
+            from multi_tf_align import MultiTFAligner
+            mtf_res = MultiTFAligner().analyze(symbol)
+            score += mtf_res['score_adj']
+            if abs(mtf_res['score_adj']) > 0:
+                logger.info("⏱️ [MULTI_TF_1H_ALIGN] {} pts: {}", mtf_res['score_adj'], mtf_res['reason'])
+        except Exception as _mtf_err:
+            logger.debug("MultiTFAligner skipped for {}: {}", symbol, _mtf_err)
 
         return min(100, max(0, int(score)))
     
@@ -1217,6 +1274,19 @@ class StrategyEngine:
         # =================================================================
         #  1:     (Emergency Hard Stop Net)
         # =================================================================
+        # =================================================================
+        # [v6.0 PRE-EARNINGS RISK CUT SHIELD]
+        # =================================================================
+        try:
+            from pre_earnings_shield import PreEarningsShield
+            pe_check = PreEarningsShield().analyze(symbol)
+            if pe_check['days_to_earnings'] <= 2 and pnl_pct > -0.02:
+                return ExitSignal("SELL_PARTIAL",
+                    f"PRE_EARNINGS_TRIM: Shielding capital 2d before earnings ({pe_check['days_to_earnings']}d)",
+                    price, pnl_pct)
+        except Exception as _pe_exit_err:
+            logger.debug("Pre-earnings exit check failed for {}: {}", symbol, _pe_exit_err)
+
         if pnl_pct <= -0.10:
             return ExitSignal("SELL_ALL",
                 f"EMERGENCY_STOP: Extreme drawdown {pnl_pct:+.1%} ( {_hold_hours:.1f}h)",

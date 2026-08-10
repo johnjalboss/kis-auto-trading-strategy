@@ -90,6 +90,7 @@ class OptionsSnapshot:
     put_sweep_ratio:         float      = 1.0   # OTM Put OI spike ratio (>3.5x + $2M Notional)
     is_buyer_initiated_call: bool       = False # Last Price >= Ask * 0.98
     is_seller_write_call:    bool       = False # Last Price <= Bid * 1.02 (Resistance Cap)
+    is_buyer_initiated_put:  bool       = False # Last Price >= Ask * 0.98 for Puts
     is_dealer_pinning_box:   bool       = False # Price trapped in Dealer Pinning Range (가두리 장세)
     is_zero_dte_gambler:     bool       = False # DTE <= 3d short-term retail noise filter
     days_to_expiry:          int        = 0     # DTE for nearest weekly
@@ -324,6 +325,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
     snap.put_sweep_ratio = sweep_dict.get('put_sweep_ratio', 1.0)
     snap.is_buyer_initiated_call = sweep_dict.get('is_buyer_initiated_call', False)
     snap.is_seller_write_call = sweep_dict.get('is_seller_write_call', False)
+    snap.is_buyer_initiated_put = sweep_dict.get('is_buyer_initiated_put', False)
     snap.is_zero_dte_gambler = sweep_dict.get('is_zero_dte_gambler', False)
 
     # ── Dealer Pinning Box Detection (가두리 장세) ──
