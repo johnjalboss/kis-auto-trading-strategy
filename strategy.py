@@ -1073,18 +1073,28 @@ class StrategyEngine:
             logger.debug("MultiTFAligner skipped for {}: {}", symbol, _mtf_err)
 
         # ================================
-        # [v7.0 MASTER QUANT ALPHA ENGINE]
-        # 5. Statistical Lead-Lag Correlation Spillover (+20 pts)
-        # 6. SEC Form 4 Multi-Executive Cluster Buy (+25 pts)
+        # [v8.0 ULTRA QUANT ALPHA ENGINE]
+        # 5. Vectorized 3,500-Stock Dynamic Cointegration Matrix (ρ >= 0.80)
+        # 6. 24/7 Multi-Session Phase Radar (Pre-Market / Regular / Power Hour)
+        # 7. SEC Form 4 Multi-Executive Cluster Buy (+25 pts)
         # ================================
         try:
-            from leader_follower_lag import LeaderFollowerLagEngine
-            lag_res = LeaderFollowerLagEngine().analyze(symbol)
-            score += lag_res['score_adj']
-            if lag_res['score_adj'] > 0:
-                logger.info("🔗 [LEAD_LAG_CORRELATION] +20 pts: {}", lag_res['reason'])
-        except Exception as _lag_err:
-            logger.debug("LeaderFollowerLagEngine skipped for {}: {}", symbol, _lag_err)
+            from dynamic_correlation_matrix import DynamicCorrelationMatrix
+            matrix_res = DynamicCorrelationMatrix().get_dynamic_lag_alpha(symbol)
+            score += matrix_res['score_adj']
+            if matrix_res['score_adj'] > 0:
+                logger.info("⚡ [DYNAMIC_COINTEGRATION_MATRIX] +20 pts: {}", matrix_res['reason'])
+        except Exception as _matrix_err:
+            logger.debug("DynamicCorrelationMatrix skipped for {}: {}", symbol, _matrix_err)
+
+        try:
+            from session_radar import SessionRadar
+            session_info = SessionRadar().get_current_session_info()
+            score += session_info['score_adj']
+            if session_info['score_adj'] > 0:
+                logger.info("⏱️ [SESSION_RADAR_{}] +{} pts: {}", session_info['session'], session_info['score_adj'], session_info['reason'])
+        except Exception as _ses_err:
+            logger.debug("SessionRadar skipped for {}: {}", symbol, _ses_err)
 
         try:
             from sec_cluster_scanner import SecClusterScanner
