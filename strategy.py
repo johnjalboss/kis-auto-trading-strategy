@@ -1072,6 +1072,29 @@ class StrategyEngine:
         except Exception as _mtf_err:
             logger.debug("MultiTFAligner skipped for {}: {}", symbol, _mtf_err)
 
+        # ================================
+        # [v7.0 MASTER QUANT ALPHA ENGINE]
+        # 5. Statistical Lead-Lag Correlation Spillover (+20 pts)
+        # 6. SEC Form 4 Multi-Executive Cluster Buy (+25 pts)
+        # ================================
+        try:
+            from leader_follower_lag import LeaderFollowerLagEngine
+            lag_res = LeaderFollowerLagEngine().analyze(symbol)
+            score += lag_res['score_adj']
+            if lag_res['score_adj'] > 0:
+                logger.info("🔗 [LEAD_LAG_CORRELATION] +20 pts: {}", lag_res['reason'])
+        except Exception as _lag_err:
+            logger.debug("LeaderFollowerLagEngine skipped for {}: {}", symbol, _lag_err)
+
+        try:
+            from sec_cluster_scanner import SecClusterScanner
+            sec_res = SecClusterScanner().analyze(symbol)
+            score += sec_res['score_adj']
+            if sec_res['score_adj'] > 0:
+                logger.info("🏛️ [SEC_CLUSTER_BUY_SURGE] +25 pts: {}", sec_res['reason'])
+        except Exception as _sec_err:
+            logger.debug("SecClusterScanner skipped for {}: {}", symbol, _sec_err)
+
         return min(100, max(0, int(score)))
     
     def check_exit(self, symbol: str, realtime_price: float = None) -> ExitSignal:

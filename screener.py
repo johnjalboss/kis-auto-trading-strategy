@@ -159,6 +159,16 @@ class DynamicScreener:
             logger.error("Failed to inject local smart money candidates: {}", sm_err)
 
 
+        # 🚀 Inject 3,500+ US Stock Bulk Universe Expander candidates (v7.0)
+        try:
+            from universe_expander import UniverseExpander
+            expander_cands = UniverseExpander().get_top_super_candidates(top_n=80)
+            if expander_cands:
+                logger.info("🚀 [v7.0 BULK_EXPANDER] Scanned 3,500+ US Market stocks. Injecting Top {} Super-Candidates.", len(expander_cands))
+                candidates = list(dict.fromkeys(expander_cands + candidates))
+        except Exception as _exp_err:
+            logger.error("Failed to inject 3,500+ universe expander candidates: {}", _exp_err)
+
         # 🎯 Inject Theme Radar recommended candidates (Top picks)
         try:
             from theme_radar_adapter import ThemeRadarAdapter
