@@ -1096,14 +1096,30 @@ class StrategyEngine:
         except Exception as _ses_err:
             logger.debug("SessionRadar skipped for {}: {}", symbol, _ses_err)
 
+        # ================================
+        # [v9.0 MASTER QUANT ENGINE]
+        # 8. Gemini AI Real-time News Sentinel (Free-Tier Rate-Limit Shielded)
+        # 9. $10M+ Dark Pool Block Imbalance Radar (+18 / -18 pts)
+        # ================================
         try:
-            from sec_cluster_scanner import SecClusterScanner
-            sec_res = SecClusterScanner().analyze(symbol)
-            score += sec_res['score_adj']
-            if sec_res['score_adj'] > 0:
-                logger.info("🏛️ [SEC_CLUSTER_BUY_SURGE] +25 pts: {}", sec_res['reason'])
-        except Exception as _sec_err:
-            logger.debug("SecClusterScanner skipped for {}: {}", symbol, _sec_err)
+            from gemini_news_sentinel import GeminiNewsSentinel
+            news_ai = GeminiNewsSentinel().analyze(symbol)
+            score += news_ai['score_adj']
+            if news_ai['has_catastrophic_risk']:
+                logger.error("🚨 [GEMINI_AI_NEWS_SHIELD] -60 pts: CATASTROPHIC RISK DETECTED FOR {}! Reason: {}", symbol, news_ai['catastrophic_reason'])
+            elif abs(news_ai['score_adj']) > 0:
+                logger.info("🤖 [GEMINI_AI_NEWS] {} pts: {}", news_ai['score_adj'], news_ai['reason'])
+        except Exception as _ai_err:
+            logger.debug("GeminiNewsSentinel skipped for {}: {}", symbol, _ai_err)
+
+        try:
+            from dark_pool_block_radar import DarkPoolBlockRadar
+            dp_res = DarkPoolBlockRadar().analyze(symbol)
+            score += dp_res['score_adj']
+            if abs(dp_res['score_adj']) > 0:
+                logger.info("🏦 [DARKPOOL_BLOCK_RADAR] {} pts: {}", dp_res['score_adj'], dp_res['reason'])
+        except Exception as _dp_err:
+            logger.debug("DarkPoolBlockRadar skipped for {}: {}", symbol, _dp_err)
 
         return min(100, max(0, int(score)))
     
@@ -1124,17 +1140,32 @@ class StrategyEngine:
         if df is None:
             return ExitSignal("HOLD", "No data", 0)
         
-        # [Quant-Shield] Catastrophic Black-Swan News Exit (파산, 상장폐지 등 실시간 돌발 뉴스 감지 시 강제청산)
+        # [Quant-Shield] Gemini AI Catastrophic Black-Swan News Emergency Exit
         try:
-            from news_analyzer import get_news_analyzer
-            news_res = get_news_analyzer().analyze(symbol)
-            if news_res and getattr(news_res, 'has_catastrophic_risk', False):
-                reason = getattr(news_res, 'catastrophic_reason', 'Catastrophic event detected')
-                logger.error("🚨 [BLACK_SWAN_SHIELD] CATASTROPHIC RISK DETECTED FOR {}! Reason: {}. Triggering IMMEDIATE EMERGENCY EXIT!", symbol, reason)
-                close_price = float(df['Close'].iloc[-1]) if not df.empty else pos.current_price
-                return ExitSignal("SELL_ALL", f"EMERGENCY_EXIT - {reason}", close_price)
-        except Exception as ex:
-            logger.debug("Black-swan news exit check failed: {}", ex)
+            from gemini_news_sentinel import GeminiNewsSentinel
+            ai_news = GeminiNewsSentinel().analyze(symbol)
+            if ai_news['has_catastrophic_risk']:
+                reason = ai_news['catastrophic_reason']
+                logger.error("🚨 [GEMINI_AI_EMERGENCY_EXIT] CATASTROPHIC RISK FOR {}! Reason: {}. Triggering IMMEDIATE LIQUIDATION!", symbol, reason)
+                close_p = float(df['Close'].iloc[-1]) if df is not None and not df.empty else pos.current_price
+                return ExitSignal("SELL_ALL", f"EMERGENCY_GEMINI_AI_EXIT: {reason}", close_p)
+        except Exception as _ai_exit_err:
+            logger.debug("GeminiNewsSentinel exit check skipped for {}: {}", symbol, _ai_exit_err)
+
+        # [v9.0 PROFIT-LOCKING MATRIX] Dynamic Profit Floor Locking (Locks in +2%, +5.5%, +9% profit floors)
+        try:
+            from profit_locking_stop import ProfitLockingStopEngine
+            cur_price = realtime_price or (float(df['Close'].iloc[-1]) if df is not None and not df.empty else pos.current_price)
+            pl_res = ProfitLockingStopEngine().evaluate_profit_lock(
+                symbol=symbol,
+                entry_price=pos.entry_price,
+                current_price=cur_price,
+                high_since_entry=getattr(pos, 'high_since_entry', cur_price)
+            )
+            if pl_res['should_exit']:
+                return ExitSignal("SELL", pl_res['reason'], cur_price)
+        except Exception as _pl_err:
+            logger.debug("ProfitLockingStopEngine skipped for {}: {}", symbol, _pl_err)
         
         indicators = analyze_all(df)
         if indicators is None:
