@@ -1053,13 +1053,22 @@ class BotOrchestrator:
                             if sell_price <= 0:
                                 sell_price = worst_pos.entry_price
 
-                            logger.info("UPGRADE: {} ({}) -> {} ({}), Gap: {}",
-                                        worst_sym, worst_score,
+                            # [BUG FIX] Fetch TRUE broker position quantity so ALL shares are sold at once
+                            actual_qty = worst_pos.quantity
+                            try:
+                                broker_pos = self.trader.get_positions()
+                                if broker_pos and worst_sym in broker_pos:
+                                    actual_qty = max(actual_qty, int(broker_pos[worst_sym].get('qty', actual_qty)))
+                            except Exception as _bq_err:
+                                logger.debug("Broker position fetch failed for {}: {}", worst_sym, _bq_err)
+
+                            logger.info("UPGRADE: {} ({} shares @ ${:.2f}) -> {} ({}), Gap: {}",
+                                        worst_sym, actual_qty, sell_price,
                                         best_buy_signal.symbol, best_buy_signal.composite_score,
                                         best_buy_signal.composite_score - worst_score)
 
-                            # Step 1: Sell weakest
-                            self.phase_5_execute_trade(worst_sym, "SELL", worst_pos.quantity, sell_price,
+                            # Step 1: Sell 100% of held shares
+                            self.phase_5_execute_trade(worst_sym, "SELL", actual_qty, sell_price,
                                                       f"UPGRADE: {worst_sym}({worst_score}) -> {best_buy_signal.symbol}({best_buy_signal.composite_score})")
 
                             # Step 2: Buy new (with available buying power after sell)
@@ -1069,7 +1078,7 @@ class BotOrchestrator:
                             
                             # [LOGICAL BUG FIX] Account for KIS API delay in updating buying power after sell.
                             # Add sell proceeds to current buying power to get the expected buying power.
-                            approx_proceeds = worst_pos.quantity * sell_price
+                            approx_proceeds = actual_qty * sell_price
                             expected_bp = bp + approx_proceeds * 0.985  # 1.5% margin for slippage/fees
                             
                             if expected_bp > 5 and best_buy_signal.entry_price > 0:
