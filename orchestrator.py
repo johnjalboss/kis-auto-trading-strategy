@@ -726,7 +726,21 @@ class BotOrchestrator:
         except Exception as e:
             logger.error("Exception in Phase 4 symbol check thread pool: {}", e)
         
-        # Sort by score to process best first
+        # Multi-Factor Tie-Breaking Priority Engine (v11.0.4)
+        # Resolves equal high scores (e.g. multiple 100s) deterministically using:
+        # 1. Clamped Composite Score
+        # 2. Raw Unclamped Score
+        # 3. Kalman Filter Velocity Slope
+        # 4. Relative Strength vs SPY
+        def _tie_breaker_key(sig):
+            c_score = getattr(sig, 'composite_score', 0)
+            raw_score = getattr(sig, 'raw_score', c_score)
+            kalman_vel = getattr(sig, 'kalman_velocity', 0.0)
+            rs_alpha = getattr(sig, 'rs_alpha', 0.0)
+            return (c_score, raw_score, kalman_vel, rs_alpha)
+
+        signals_to_process.sort(key=_tie_breaker_key, reverse=True)
+
         # Check if Telegram remote control pause is active
         try:
             from telegram_interactive_bot import is_trading_paused

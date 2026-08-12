@@ -78,6 +78,11 @@ UPGRADE_PROFIT_PROTECT_PCT = float(os.getenv("UPGRADE_PROFIT_PROTECT_PCT", "0.02
 UPGRADE_LOSS_LIMIT_PCT = float(os.getenv("UPGRADE_LOSS_LIMIT_PCT", "-0.005"))
 
 # ==============================================
+# Continuous Real-Time Streaming Screener (Zero Resting Time)
+# ==============================================
+SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "0"))  # 0: Continuous 24/7 non-stop real-time scan
+
+# ==============================================
 # Strategy & Profit Execution Parameters
 # ==============================================
 
