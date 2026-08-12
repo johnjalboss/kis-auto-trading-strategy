@@ -21,9 +21,8 @@ class GammaSqueezeRadar:
             return {"score_bonus": 0, "is_gamma_squeeze": False, "reason": "Invalid price"}
 
         try:
-            from options_flow import get_options_flow
-            opt_flow = get_options_flow()
-            snap = opt_flow.get_options_snapshot(symbol, current_price)
+            from options_flow import get_options_snapshot
+            snap = get_options_snapshot(symbol)
 
             score_bonus = 0
             is_gamma_squeeze = False
