@@ -48,6 +48,9 @@ CORE_FILES = [
     "news_sentiment_engine.py",
     "telegram_receipt.py",
     "weekly_audit.py",
+    "safe_math.py",
+    "adaptive_vix_engine.py",
+    "mtf_confluence_filter.py",
 ]
 
 def run(cmd):
