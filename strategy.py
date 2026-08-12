@@ -1154,6 +1154,51 @@ class StrategyEngine:
         except Exception as _kf_err:
             logger.debug("KalmanFilterEngine skipped for {}: {}", symbol, _kf_err)
 
+        # ================================
+        # [v2026 CUTTING-EDGE QUANT ALPHA MODULES]
+        # ================================
+        try:
+            from gamma_squeeze_radar import GammaSqueezeRadar
+            gamma_res = GammaSqueezeRadar().analyze_gamma(symbol, price)
+            score += gamma_res['score_bonus']
+            if abs(gamma_res['score_bonus']) > 0:
+                logger.info("⚡ [GAMMA_SQUEEZE_RADAR] {} pts: Reasons: {}", gamma_res['score_bonus'], gamma_res['reasons'])
+                breakdown.append(f"• 옵션 감마 스퀴즈 레이더: {gamma_res['score_bonus']:+d}점 ({', '.join(gamma_res['reasons'])})")
+        except Exception as _gamma_e:
+            logger.debug("GammaSqueezeRadar integration skipped for {}: {}", symbol, _gamma_e)
+
+        try:
+            from mtf_confluence_filter import MTFConfluenceFilter
+            mtf_cf_res = MTFConfluenceFilter().check_alignment(df, symbol)
+            score += mtf_cf_res['score_bonus']
+            if abs(mtf_cf_res['score_bonus']) > 0:
+                logger.info("🔍 [MTF_CONFLUENCE_FILTER] {} pts: {}", mtf_cf_res['score_bonus'], mtf_cf_res['reason'])
+                breakdown.append(f"• 다중 타임프레임(MTF) 동조 필터: {mtf_cf_res['score_bonus']:+d}점 ({mtf_cf_res['reason']})")
+        except Exception as _mtf_cf_e:
+            logger.debug("MTFConfluenceFilter integration skipped for {}: {}", symbol, _mtf_cf_e)
+
+        try:
+            from order_flow_imbalance import OrderFlowImbalanceDetector
+            ofi_res = OrderFlowImbalanceDetector().evaluate_ofi(df, symbol)
+            score += ofi_res['ofi_score']
+            if abs(ofi_res['ofi_score']) > 0:
+                logger.info("🌊 [ORDER_FLOW_IMBALANCE] {} pts: {}", ofi_res['ofi_score'], ofi_res['label'])
+                breakdown.append(f"• 호가 체결 강도 불균형(OFI): {ofi_res['ofi_score']:+d}점 ({ofi_res['label']})")
+        except Exception as _ofi_e:
+            logger.debug("OrderFlowImbalanceDetector integration skipped for {}: {}", symbol, _ofi_e)
+
+        try:
+            from news_sentiment_engine import NewsSentimentEngine
+            news_engine_res = NewsSentimentEngine().analyze_symbol_news(symbol)
+            score += news_engine_res['score']
+            if abs(news_engine_res['score']) > 0:
+                logger.info("📰 [AI_NEWS_SENTIMENT_ENGINE] {} pts: Label: {} | Highlights: {}",
+                            news_engine_res['score'], news_engine_res['label'], news_engine_res['highlights'])
+                breakdown.append(f"• AI 뉴스 센티먼트 엔진: {news_engine_res['score']:+d}점 ({news_engine_res['label']})")
+        except Exception as _nse_e:
+            logger.debug("NewsSentimentEngine integration skipped for {}: {}", symbol, _nse_e)
+
+        # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
         return final_score, breakdown, float(score)
