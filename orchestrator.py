@@ -266,6 +266,27 @@ class BotOrchestrator:
             except Exception as _tb_err:
                 logger.debug("TelegramInteractiveBot startup failed: {}", _tb_err)
         self._safe_import("telegram_interactive_bot", _commander)
+
+        # 12. Real-Time Web Dashboard Server
+        def _dash():
+            try:
+                from web_dashboard import start_dashboard_server
+                start_dashboard_server()
+                logger.info("  -> web_dashboard.py: Live Web Dashboard Server active at http://0.0.0.0:8080")
+            except Exception as _d_err:
+                logger.debug("Web Dashboard server startup failed: {}", _d_err)
+        self._safe_import("web_dashboard", _dash)
+
+        # 13. Self-Healing & Daily DB Backup Guardian
+        def _guardian():
+            try:
+                from self_healing_recovery import SelfHealingRecoveryDaemon
+                self._guardian_daemon = SelfHealingRecoveryDaemon()
+                self._guardian_daemon.start_background_guardian()
+                logger.info("  -> self_healing_recovery.py: 24/7 Self-Healing & DB Backup Guardian active")
+            except Exception as _g_err:
+                logger.debug("Self-Healing Guardian startup failed: {}", _g_err)
+        self._safe_import("self_healing_recovery", _guardian)
         
         logger.info("Phase 1 Complete. Modules: {}/{} loaded", 
                     self.state.modules_loaded, self.state.modules_loaded + self.state.modules_failed)

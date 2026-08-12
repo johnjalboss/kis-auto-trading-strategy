@@ -1,67 +1,80 @@
 """
-[v9.0 DYNAMIC PROFIT-LOCKING TRAILING STOP MATRIX]
-Dynamically locks in accrued unrealized profits so big winning trades NEVER turn into losses.
-
-Profit Locking Thresholds:
-- Gain >= +4.0%: Lock minimum +2.0% profit floor.
-- Gain >= +8.0%: Lock minimum +5.5% profit floor.
-- Gain >= +12.0%: Lock minimum +9.0% profit floor.
+Profit-Locking Floor Engine (Risk-Free Trade & Profit Locking Matrix)
+======================================================================
+1. Breakeven Stop Trigger (+3.5% gain) -> Raises stop loss to Entry + 0.5% (Risk-Free Trade!).
+2. Tier 1 Profit Lock (+7.0% gain)     -> Locks in +3.5% profit floor.
+3. Tier 2 Profit Lock (+12.0% gain)    -> Locks in +7.0% profit floor.
+4. Tier 3 Profit Lock (+18.0% gain)    -> Locks in +12.0% profit floor.
+5. High-Peak Trailing Lock             -> Pullback > 3.0% from ATH peak exits for max profit capture.
 """
 
-from typing import Dict, Any
 from loguru import logger
-
+import config
 
 class ProfitLockingStopEngine:
-    def __init__(self):
-        pass
+    """Dynamic Risk-Free Profit Floor Locking Engine"""
 
-    def evaluate_profit_lock(self, symbol: str, entry_price: float, current_price: float, high_since_entry: float = 0.0) -> Dict[str, Any]:
+    def evaluate_profit_lock(self, symbol: str, entry_price: float, current_price: float, high_since_entry: float) -> dict:
         res = {
-            'should_exit': False,
-            'locked_stop_price': 0.0,
-            'locked_profit_pct': 0.0,
-            'reason': ''
+            "should_exit": False,
+            "reason": "",
+            "recommended_stop": 0.0,
+            "is_risk_free": False
         }
 
         if entry_price <= 0 or current_price <= 0:
             return res
 
-        peak_price = max(current_price, high_since_entry or current_price)
-        max_pnl_pct = (peak_price - entry_price) / entry_price * 100.0
-        cur_pnl_pct = (current_price - entry_price) / entry_price * 100.0
+        pnl_pct = (current_price - entry_price) / entry_price
+        max_pnl_pct = (high_since_entry - entry_price) / entry_price if high_since_entry > entry_price else pnl_pct
 
-        # Tier 3: +12% Peak Gain -> Lock +9.0% Floor
-        if max_pnl_pct >= 12.0:
-            floor_pct = 9.0
-            stop_price = entry_price * (1.0 + floor_pct / 100.0)
-            res['locked_stop_price'] = round(stop_price, 2)
-            res['locked_profit_pct'] = floor_pct
-            if current_price <= stop_price:
-                res['should_exit'] = True
-                res['reason'] = f"PROFIT_LOCK_TIER3: Peak +{max_pnl_pct:.1f}% -> Exited at +{cur_pnl_pct:.1f}% to lock +{floor_pct}% profit floor!"
-                logger.info("🔒 [PROFIT_LOCK_EXIT] {}: {}", symbol, res['reason'])
+        # 1. Breakeven Stop (+3.5% trigger -> +0.5% floor)
+        BREAKEVEN_TRIGGER = getattr(config, 'BREAKEVEN_STOP_TRIGGER', 0.035)
+        if max_pnl_pct >= BREAKEVEN_TRIGGER:
+            res["is_risk_free"] = True
+            res["recommended_stop"] = entry_price * 1.005  # +0.5% floor
 
-        # Tier 2: +8% Peak Gain -> Lock +5.5% Floor
-        elif max_pnl_pct >= 8.0:
-            floor_pct = 5.5
-            stop_price = entry_price * (1.0 + floor_pct / 100.0)
-            res['locked_stop_price'] = round(stop_price, 2)
-            res['locked_profit_pct'] = floor_pct
-            if current_price <= stop_price:
-                res['should_exit'] = True
-                res['reason'] = f"PROFIT_LOCK_TIER2: Peak +{max_pnl_pct:.1f}% -> Exited at +{cur_pnl_pct:.1f}% to lock +{floor_pct}% profit floor!"
-                logger.info("🔒 [PROFIT_LOCK_EXIT] {}: {}", symbol, res['reason'])
+            # Check if current price dropped below breakeven floor
+            if current_price <= res["recommended_stop"]:
+                res["should_exit"] = True
+                res["reason"] = f"🛡️ [BREAKEVEN_PROFIT_LOCK] Price dropped to ${current_price:.2f} (Floor: ${res['recommended_stop']:.2f}) - Exiting with +0.5% profit to preserve capital!"
+                logger.info(res["reason"])
+                return res
 
-        # Tier 1: +4% Peak Gain -> Lock +2.0% Floor
-        elif max_pnl_pct >= 4.0:
-            floor_pct = 2.0
-            stop_price = entry_price * (1.0 + floor_pct / 100.0)
-            res['locked_stop_price'] = round(stop_price, 2)
-            res['locked_profit_pct'] = floor_pct
-            if current_price <= stop_price:
-                res['should_exit'] = True
-                res['reason'] = f"PROFIT_LOCK_TIER1: Peak +{max_pnl_pct:.1f}% -> Exited at +{cur_pnl_pct:.1f}% to lock +{floor_pct}% profit floor!"
-                logger.info("🔒 [PROFIT_LOCK_EXIT] {}: {}", symbol, res['reason'])
+        # 2. Tier 1 Profit Lock (+7.0% trigger -> +3.5% floor)
+        if max_pnl_pct >= 0.070:
+            res["recommended_stop"] = entry_price * 1.035
+            if current_price <= res["recommended_stop"]:
+                res["should_exit"] = True
+                res["reason"] = f"💰 [TIER_1_PROFIT_LOCK] Price dropped to ${current_price:.2f} (Floor: ${res['recommended_stop']:.2f}) - Locking in +3.5% profit!"
+                logger.info(res["reason"])
+                return res
+
+        # 3. Tier 2 Profit Lock (+12.0% trigger -> +7.0% floor)
+        if max_pnl_pct >= 0.120:
+            res["recommended_stop"] = entry_price * 1.070
+            if current_price <= res["recommended_stop"]:
+                res["should_exit"] = True
+                res["reason"] = f"💰💰 [TIER_2_PROFIT_LOCK] Price dropped to ${current_price:.2f} (Floor: ${res['recommended_stop']:.2f}) - Locking in +7.0% profit!"
+                logger.info(res["reason"])
+                return res
+
+        # 4. Tier 3 Profit Lock (+18.0% trigger -> +12.0% floor)
+        if max_pnl_pct >= 0.180:
+            res["recommended_stop"] = entry_price * 1.120
+            if current_price <= res["recommended_stop"]:
+                res["should_exit"] = True
+                res["reason"] = f"🏆 [TIER_3_PROFIT_LOCK] Price dropped to ${current_price:.2f} (Floor: ${res['recommended_stop']:.2f}) - Locking in +12.0% profit!"
+                logger.info(res["reason"])
+                return res
+
+        # 5. Peak Trailing Pullback Lock (After +10.0% gain, 3.0% pullback from peak triggers exit)
+        if max_pnl_pct >= 0.100 and high_since_entry > 0:
+            peak_pullback = (high_since_entry - current_price) / high_since_entry
+            if peak_pullback >= 0.030:
+                res["should_exit"] = True
+                res["reason"] = f"🔥 [PEAK_TRAILING_PROFIT_CAPTURE] Pulled back {peak_pullback*100:.1f}% from peak (${high_since_entry:.2f}) - Exiting to lock in max profit!"
+                logger.info(res["reason"])
+                return res
 
         return res
