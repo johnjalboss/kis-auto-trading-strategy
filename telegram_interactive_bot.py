@@ -94,7 +94,8 @@ class TelegramInteractiveBot:
                                     "• <code>/pause</code> : 신규 매매 탐색 일시 중단\n"
                                     "• <code>/resume</code> : 매매 다시 시작\n"
                                     "• <code>/close_all</code> : 보유 포지션 전량 긴급 청산\n"
-                                    "• <code>/help</code> : 도움말 출력"
+                                    "• <code>/help</code> : 도움말 출력\n\n"
+                                    "🌐 <b>실시간 웹 대시보드 주소</b>:\nhttp://141.148.172.12:8080"
                                 )
             except Exception as e:
                 logger.debug("Telegram poll error: {}", e)
@@ -117,6 +118,7 @@ class TelegramInteractiveBot:
                 f"• 주문 가능 현금: <b>${bp:,.2f}</b>\n"
                 f"• 매매 상태: {'⏸️ 일시정지' if _is_bot_paused else '🟢 정상 가동 중'}\n"
                 f"• 보유 포지션 수: <b>{len(positions)}개</b>\n\n"
+                f"🌐 <b>실시간 웹 대시보드</b>: http://141.148.172.12:8080\n\n"
             )
 
             if positions:

@@ -72,6 +72,7 @@ class DailyPerformanceReport:
             else:
                 report += "ℹ️ 금일 청산된 거래 내역이 없습니다. (포지션 보유 유지 중)\n"
                 
+            report += "\n🌐 <b>실시간 웹 대시보드</b>: http://141.148.172.12:8080\n"
             return report
 
         except Exception as e:
