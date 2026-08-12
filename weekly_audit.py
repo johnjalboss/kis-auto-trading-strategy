@@ -19,7 +19,7 @@ class WeeklySelfHealingAudit:
         self.db_path = db_path
         self.backup_dir = backup_dir
 
-    def run_audit_and_backup((self) -> dict:
+    def run_audit_and_backup(self) -> dict:
         """
         Executes database backup, checks integrity, and returns performance stats.
         """
