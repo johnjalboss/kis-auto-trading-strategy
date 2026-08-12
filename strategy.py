@@ -737,8 +737,8 @@ class StrategyEngine:
         min_entry_score 60~65 , 4    .
         """
         price = float(df['Close'].iloc[-1]) if df is not None and not df.empty else 0.0
-        score = 30  # Base score
-        breakdown = ["• Base 기본 점수: +30점"]
+        score = 15  # Base score (Calibrated v11.0: 15 pts base for sharp selectivity)
+        breakdown = ["• Base 기본 점수: +15점"]
         
         # Macro contribution
         if macro_score > 30:
@@ -1014,21 +1014,21 @@ class StrategyEngine:
         current_regime = getattr(self, '_last_regime', 'BULL_NORMAL')
         is_bear_or_choppy = ("BEAR" in current_regime) or (current_regime in {"CHOPPY", "TRANSITION", "RISK_OFF", "CRASH"})
 
-        # Check Dow Jones & Tech leadership
+        # Check Dow Jones & Tech leadership (Calibrated v11.0: +10 pts max boost)
         if symbol in dow_leaders:
-            score += 25
-            logger.info("🏛️ [DOW_LEADERSHIP_BOOST] +25 pts added for Dow/Industrial/Financial Leader {}", symbol)
+            score += 10
+            logger.info("🏛️ [DOW_LEADERSHIP_BOOST] +10 pts added for Dow/Industrial/Financial Leader {}", symbol)
         elif symbol in tech_growth_symbols:
             if not is_bear_or_choppy:
-                score += 30
-                logger.info("⚡ [BULL_TECH_BOOST] +30 pts added for Tech leader {} during {}", symbol, current_regime)
+                score += 10
+                logger.info("⚡ [BULL_TECH_BOOST] +10 pts added for Tech leader {} during {}", symbol, current_regime)
             else:
-                score -= 20
-                logger.info("🔻 [BEAR_TECH_PENALTY] -20 pts deducted from Tech leader {} during {}", symbol, current_regime)
+                score -= 15
+                logger.info("🔻 [BEAR_TECH_PENALTY] -15 pts deducted from Tech leader {} during {}", symbol, current_regime)
         elif symbol in defensive_pharma_symbols:
             if is_bear_or_choppy:
-                score += 35
-                logger.info("🛡️ [BEAR_DEFENSIVE_BOOST] +35 pts added for Defensive stock {} during {}", symbol, current_regime)
+                score += 15
+                logger.info("🛡️ [BEAR_DEFENSIVE_BOOST] +15 pts added for Defensive stock {} during {}", symbol, current_regime)
         # ================================
         # [v3.0.0 INSTITUTIONAL TRUE BREAKOUT VERIFICATION ENGINE]
         # Prevents buying False Breakouts & Exhaustion Tops at ATH / 20d Highs!
