@@ -51,6 +51,10 @@ CORE_FILES = [
     "safe_math.py",
     "adaptive_vix_engine.py",
     "mtf_confluence_filter.py",
+    "gamma_squeeze_radar.py",
+    "risk_parity_allocator.py",
+    "cross_asset_momentum.py",
+    "order_flow_imbalance.py",
 ]
 
 def run(cmd):
