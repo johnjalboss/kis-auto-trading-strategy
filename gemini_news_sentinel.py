@@ -43,15 +43,15 @@ class GeminiNewsSentinel:
         }
 
         try:
-            # 1. Fetch recent news headlines from Finnhub / KIS
+            # 1. Fetch recent news headlines from Finnhub / KIS / yfinance
             from news_analyzer import get_news_analyzer
-            raw_news = get_news_analyzer()._fetch_company_news(symbol)
+            raw_news_items = get_news_analyzer()._fetch_news(symbol)
             
-            if not raw_news:
+            if not raw_news_items:
                 _NEWS_CACHE[symbol] = (now, res)
                 return res
 
-            headlines = [n.get('headline', '') for n in raw_news[:5] if n.get('headline')]
+            headlines = [n.title for n in raw_news_items[:5] if hasattr(n, 'title') and n.title]
             combined_text = " | ".join(headlines)
 
             if not combined_text:
