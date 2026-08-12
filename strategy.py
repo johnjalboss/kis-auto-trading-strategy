@@ -434,7 +434,7 @@ class StrategyEngine:
             logger.debug("Composite signal fetch skipped for {}: {}", symbol, e)
 
         # Calculate exact 0-100 Quant Confidence Score using our advanced formula
-        confidence, score_breakdown = self._calc_entry_confidence(
+        confidence, score_breakdown, raw_score = self._calc_entry_confidence(
             ind=indicators,
             macro_score=macro_score,
             cfg=self.get_phase_config(),
@@ -1155,7 +1155,8 @@ class StrategyEngine:
             logger.debug("KalmanFilterEngine skipped for {}: {}", symbol, _kf_err)
 
         final_score = min(100, max(0, int(score)))
-        return final_score, breakdown
+        logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
+        return final_score, breakdown, float(score)
     
     def check_exit(self, symbol: str, realtime_price: float = None) -> ExitSignal:
         """Comprehensive exit check
