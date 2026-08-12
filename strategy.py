@@ -1437,25 +1437,23 @@ class StrategyEngine:
                     price, pnl_pct)
 
         # 
-        # [  ]   5 (32.5h)   15:30 
-        #     (  )
-        # 
-        if _hold_hours >= 32.5:
-            try:
-                et = pytz.timezone('US/Eastern')
-                now_et = datetime.now(et)
-                #  15:30     
-                if now_et.weekday() == 4 and now_et.time() >= time(15, 30):
-                    return ExitSignal("SELL_ALL",
-                        f"SWING_WEEKLY_EXIT: {_hold_hours/6.5:.1f}     ({pnl_pct:+.1%})",
-                        price, pnl_pct)
-                #   7 (45.5h)     (  )
-                if _hold_hours >= 45.5:
-                    return ExitSignal("SELL_ALL",
-                        f"MAX_HOLD: {_hold_hours/6.5:.1f} ,   ({pnl_pct:+.1%})",
-                        price, pnl_pct)
-            except Exception as err:
-                logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
+        # [v10.0 DYNAMIC ADAPTIVE HOLDING ENGINE]
+        # Replaces fixed 5-day holding limit with adaptive rules:
+        # - Winners (+2.0% & Uptrend): Extend hold to 15 days (Let Winners Run)
+        # - Dead Money (-1% to +1% for 3 days): Exit early at Day 3
+        # - Underperformers: Strict exit at Day 5
+        try:
+            from adaptive_hold_engine import AdaptiveHoldingEngine
+            hold_res = AdaptiveHoldingEngine().evaluate_holding_status(
+                symbol=symbol,
+                hold_hours=_hold_hours,
+                pnl_pct=pnl_pct,
+                df=df
+            )
+            if hold_res['should_exit']:
+                return ExitSignal("SELL_ALL", hold_res['reason'], price, pnl_pct)
+        except Exception as _hold_err:
+            logger.debug("AdaptiveHoldingEngine skipped for {}: {}", symbol, _hold_err)
 
         return ExitSignal("HOLD", f"SWING_HOLD: {pnl_pct:+.1%} ({_hold_hours:.0f}h)", price, pnl_pct)
 
