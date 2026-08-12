@@ -475,6 +475,18 @@ class BotOrchestrator:
                     logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             
         self.state.last_macro_refresh = datetime.now()
+
+        # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)
+        try:
+            from extended_hours_sentinel import _EASTERN_TZ
+            now_et = datetime.now(_EASTERN_TZ)
+            if now_et.hour == 16 and now_et.minute < 5 and getattr(self, '_last_daily_report_date', None) != now_et.date():
+                self._last_daily_report_date = now_et.date()
+                from daily_performance_report import DailyPerformanceReport
+                DailyPerformanceReport().send_daily_report_to_telegram()
+        except Exception as _rpt_err:
+            logger.debug("DailyPerformanceReport trigger skipped: {}", _rpt_err)
+
         logger.info("Phase 2 Complete. Exposure: {:.0%}, Risk: {}, Regime: {}", 
                     self.state.max_exposure_pct, self.state.global_risk_level, self.state.current_regime)
         self.update_and_save_status()
@@ -609,6 +621,19 @@ class BotOrchestrator:
             logger.info("??Checking exits for {} positions first...", len(positions))
             for sym, pos in list(positions.items()):
                 try:
+                    # [v11.0.6 EXTENDED HOURS DEFENSE] Check Pre-Market & After-Hours Emergency Liquidation (-7.0% gap down / disaster news)
+                    try:
+                        from extended_hours_sentinel import ExtendedHoursRiskSentinel
+                        sentinel = ExtendedHoursRiskSentinel(self.trader, self.strategy)
+                        ext_res = sentinel.check_extended_hours_emergency(sym, pos.entry_price, pos.quantity)
+                        if ext_res.get('should_liquidate', False):
+                            logger.error("🚨 [EXTENDED_HOURS_DEFENSE] Emergency Liquidation for {}: {}", sym, ext_res['reason'])
+                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, ext_res.get('extended_price', pos.current_price), ext_res['reason'])
+                            self.strategy.remove_position(sym)
+                            continue
+                    except Exception as _ext_err:
+                        logger.debug("ExtendedHoursRiskSentinel check skipped for {}: {}", sym, _ext_err)
+
                     curr_price = self.trader.get_price(sym)
                     exit_sig = self.strategy.check_exit(sym, curr_price)
                     if exit_sig and exit_sig.action != "HOLD":
@@ -1028,11 +1053,21 @@ class BotOrchestrator:
             except Exception as e:
                 logger.debug("Trade logic failed for {}: {}", symbol, e)
         
-        # --- Position Upgrade Logic ( ) ---
+        # --- Position Upgrade Logic (v11.0.6 Portfolio Rebalancer Engine) ---
         if best_buy_signal and self._daily_upgrade_count < config.UPGRADE_MAX_PER_DAY:
             try:
                 positions = self.strategy.get_all_positions()
                 if positions:
+                    # Check PortfolioRebalancer upgrade swapping
+                    try:
+                        from portfolio_rebalancer import PortfolioRebalancer
+                        rebal_res = PortfolioRebalancer(self).evaluate_upgrade_swapping(best_buy_signal, positions, self.trader)
+                        if rebal_res.get('should_swap', False):
+                            worst_sym = rebal_res['weak_symbol']
+                            logger.info("  -> PortfolioRebalancer Swapper Triggered: {}", rebal_res['reason'])
+                    except Exception as _pr_e:
+                        logger.debug("PortfolioRebalancer check error: {}", _pr_e)
+
                     # Find weakest position that qualifies for upgrade
                     worst_sym = None
                     worst_score = float('inf')
