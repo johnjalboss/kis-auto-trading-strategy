@@ -1,42 +1,30 @@
-# ==========================================
-# AI 스윙 트레이딩 봇 배포용 보안 필터 (.gitignore)
-# ==========================================
-
-# 1. 민감 정보가 포함된 환경 변수 파일 (API 키, 텔레그램 토큰, 계좌번호 등)
+# Environment
 .env
-.env.production
-.env.local
-.env.*
+token.json
 
-# 2. 거래 기록 및 자산 현황이 보관된 실제 데이터베이스 파일
-*.db
-*.db-journal
-*.sqlite
-
-# 3. SSH 서버 접속용 개인키 및 보안 인증서 파일
-*.key
+# SSH Keys
+id_rsa
 *.pem
-id_rsa*
-oracle_key*
 
-# 4. 실시간 거래 기록 로그 폴더 및 파일
-*.log
-logs/
-
-# 5. 파이썬 임시 컴파일 및 캐시 파일
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-.pytest_cache/
-.idea/
-.vscode/
+venv/
 
-# 6. 로컬 운영체제(OS) 메타데이터 파일
+# Logs
+*.log
+tuning_history.json
+universe_cache.json
+
+# Database
+*.db
+*.sqlite3
+
+# OS
 .DS_Store
 Thumbs.db
 
-# ==========================================
-# 제외 예외 (배포에 반드시 포함되어야 할 템플릿)
-# ==========================================
-!.env.example
+# IDE
+.vscode/
+.idea/

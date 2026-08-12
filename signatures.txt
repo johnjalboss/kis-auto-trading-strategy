@@ -1,0 +1,152 @@
+
+--- performance_diagnosis ---
+class DiagnosisReport:
+  def __init__(self, period: str, total_return_pct: float, benchmark_return_pct: float, alpha: float, problems: List[str], severity: str, root_causes: List[str], recommendations: List[str], suggested_changes: Dict[str, str]) -> None
+class PerformanceDiagnosis:
+  def __init__(self, data_file: str = 'trade_history.json')
+  def analyze_by_regime(self) -> Dict[str, Dict]
+  def analyze_by_strategy(self) -> Dict[str, Dict]
+  def diagnose(self, days: int = 30) -> performance_diagnosis.DiagnosisReport
+  def get_improvement_priority(self) -> List[str]
+  def get_problem_trades(self) -> List[Dict]
+  def record_trade(self, trade: Dict)
+class TradeAnalysis:
+  def __init__(self, total_trades: int, winners: int, losers: int, win_rate: float, avg_win: float, avg_loss: float, profit_factor: float, biggest_losers: List[Dict], problem_patterns: List[str]) -> None
+def get_diagnosis() -> performance_diagnosis.PerformanceDiagnosis
+
+--- winrate_optimizer ---
+class TradeQualityScore:
+  def __init__(self, trend_alignment: int, momentum_confirmation: int, volume_confirmation: int, regime_match: int, risk_reward: int, timing_quality: int, total_quality: int, pass_filters: bool, rejection_reasons: List[str]) -> None
+class WinRateOptimizer:
+  def __init__(self, threshold: int = 70)
+  def evaluate(self, price_above_sma20: bool, sma20_above_sma50: bool, macd_bullish: bool, rsi_favorable: bool, volume_above_avg: bool, regime_aligned: bool, risk_reward_ratio: float, not_at_resistance: bool, not_overextended: bool) -> winrate_optimizer.TradeQualityScore
+  def quick_check(self, trend_ok: bool, momentum_ok: bool, volume_ok: bool, rr_ok: bool) -> Tuple[bool, str]
+def get_winrate_optimizer(threshold: int = 70) -> winrate_optimizer.WinRateOptimizer
+
+--- performance_attribution ---
+class PerformanceAttribution:
+  def __init__(self, state_file: str = 'performance_attribution.json')
+  def get_best_performers(self) -> Dict
+  def get_strategy_stats(self) -> List[performance_attribution.StrategyStats]
+  def record_trade(self, symbol: str, strategy: str, regime: str, signal_type: str, sector: str, pnl: float, pnl_pct: float)
+class StrategyStats:
+  def __init__(self, name: str, trades: int, wins: int, losses: int, win_rate: float, total_pnl: float, avg_pnl: float, profit_factor: float, best_trade: float, worst_trade: float) -> None
+def get_attribution() -> performance_attribution.PerformanceAttribution
+
+--- auto_compound ---
+class AutoCompound:
+  def __init__(self, initial_capital: float, reinvest_pct: float = 0.8, state_file: str = 'compound_state.json')
+  def add_deposit(self, amount: float)
+  def update(self, new_capital: float) -> auto_compound.CompoundState
+class CompoundState:
+  def __init__(self, initial_capital: float, current_capital: float, total_profit: float, total_profit_pct: float, reinvested: float, withdrawn: float, days_active: int, monthly_return_pct: float, annual_projected_pct: float, next_milestone: float, next_milestone_pct: float) -> None
+def get_compound(initial: float = 1500) -> auto_compound.AutoCompound
+
+--- auto_tuner ---
+def analyze_performance(trades, daily_stats)
+def apply_changes(changes)
+def calculate_adjustments(analysis)
+def get_daily_stats(days=14)
+def get_recent_trades(days=14)
+def run_auto_tune()
+def save_tuning_log(result)
+def send_tg(msg)
+
+--- trade_journal ---
+class TradeJournal:
+  def __init__(self, db_path: str = 'trade_journal.db')
+  def close_trade(self, trade_id: str, close_price: float, notes: str = '')
+  def get_recent(self, n: int = 10) -> List[dict]
+  def get_stats(self) -> dict
+  def log_trade(self, trade: trade_journal.TradeLog)
+class TradeLog:
+  def __init__(self, id: str, timestamp: str, symbol: str, action: str, quantity: int, price: float, total_value: float, strategy: str, regime: str, composite_score: int, stop_loss: float, take_profit: float, pnl: Optional[float], pnl_pct: Optional[float], closed_at: Optional[str], notes: str) -> None
+def get_trade_journal() -> trade_journal.TradeJournal
+
+--- ml_predictor ---
+class MLPrediction:
+  def __init__(self, symbol: str, prediction: str, probability: float, confidence: int, model_accuracy: float, features_used: int, top_features: List[str], details: List[str]) -> None
+class MLPredictor:
+  def __init__(self)
+  def predict(self, symbol: str) -> ml_predictor.MLPrediction
+def get_ml_predictor() -> ml_predictor.MLPredictor
+
+--- fed_watch ---
+class FedSignal:
+  def __init__(self, current_rate: float, expected_rate_1m: float, expected_rate_3m: float, expected_rate_6m: float, rate_direction: str, rate_momentum: str, yield_2y: float, yield_10y: float, yield_spread: float, stock_impact: str, sector_rotation: List[str], fed_score: int, signal: str, details: List[str]) -> None
+class FedWatchAnalyzer:
+  def __init__(self)
+  def analyze(self) -> fed_watch.FedSignal
+def analyze_fed_policy()
+def get_fed_analyzer() -> fed_watch.FedWatchAnalyzer
+
+--- intermarket ---
+class IntermarketAnalyzer:
+  def __init__(self)
+  def analyze(self) -> intermarket.IntermarketSignal
+class IntermarketSignal:
+  def __init__(self, dxy: float, dxy_trend: str, gold: float, gold_trend: str, oil: float, oil_trend: str, bonds_10y: float, yield_trend: str, vix: float, vix_level: str, risk_sentiment: str, stock_outlook: str, key_insights: list, trading_recommendation: str) -> None
+def analyze_intermarket()
+def get_intermarket() -> intermarket.IntermarketAnalyzer
+
+--- correlation_regime ---
+class CorrelationRegime:
+  def __init__(self, regime: str, avg_correlation: float, spy_qqq: float, spy_gold: float, spy_bonds: float, diversification_benefit: str, risk_level: str, recommendation: str) -> None
+class CorrelationRegimeDetector:
+  def __init__(self)
+  def analyze(self, lookback: int = 30) -> correlation_regime.CorrelationRegime
+def get_correlation_regime() -> correlation_regime.CorrelationRegimeDetector
+
+--- sector_rotator ---
+class SectorRanking:
+  def __init__(self, sector: str, etf: str, momentum_1m: float, momentum_3m: float, relative_strength: float, rank: int, recommendation: str, rs_5d_vel: float = 0.0, rs_accel: float = 0.0) -> None
+class SectorRotator:
+  def __init__(self)
+  def analyze(self) -> List[sector_rotator.SectorRanking]
+  def get_sector_for_stock(self, symbol: str) -> Optional[str]
+  def get_top_sectors(self, n: int = 3) -> List[str]
+def analyze_sectors()
+def get_sector_rotator() -> sector_rotator.SectorRotator
+
+--- economic_calendar ---
+class CalendarCheck:
+  def __init__(self, has_high_impact: bool, events_today: List[economic_calendar.EconomicEvent], events_this_week: List[economic_calendar.EconomicEvent], trading_recommendation: str, avoid_hours: List[int]) -> None
+class EconomicCalendar:
+  def __init__(self)
+  def check_today(self) -> economic_calendar.CalendarCheck
+  def get_todays_events(self) -> list
+  def is_safe_to_trade(self) -> tuple
+  def should_reduce_exposure(self) -> tuple
+class EconomicEvent:
+  def __init__(self, name: str, date: datetime.datetime, impact: str, actual: Optional[str], forecast: Optional[str], previous: Optional[str]) -> None
+def get_economic_calendar() -> economic_calendar.EconomicCalendar
+def get_upcoming_events()
+
+--- stress_test ---
+class PortfolioStressTest:
+  def __init__(self, capital: float, positions: Dict[str, float] = None)
+  def run_test(self, max_risk_pct: float = 100) -> stress_test.StressTestResult
+class StressScenario:
+  def __init__(self, name: str, description: str, market_drop_pct: float, correlation_spike: float, volatility_mult: float, portfolio_impact_pct: float, positions_liquidated: int, recovery_days_est: int) -> None
+class StressTestResult:
+  def __init__(self, current_capital: float, scenarios: List[stress_test.StressScenario], worst_case_loss_pct: float, survival_rate: float, recommendations: List[str]) -> None
+def get_stress_test(capital: float = 100000) -> stress_test.PortfolioStressTest
+def run_stress_test(portfolio)
+
+--- liquidity_filter ---
+class LiquidityCheck:
+  def __init__(self, symbol: str, avg_volume: float, avg_dollar_volume: float, bid_ask_spread_pct: float, liquidity_grade: str, is_tradeable: bool, max_position_value: float, warnings: list) -> None
+class LiquidityFilter:
+  def __init__(self, min_volume: float = 5000000)
+  def check(self, symbol: str) -> liquidity_filter.LiquidityCheck
+  def filter_tradeable(self, symbols: list) -> list
+def get_liquidity_filter() -> liquidity_filter.LiquidityFilter
+
+--- vix_structure ---
+class VixSignal:
+  def __init__(self, vix: float, vix_3m: float, term_structure: str, vix_spread: float, spread_percentile: float, vix_percentile: float, vix_zscore: float, is_spike: bool, is_crushed: bool, mean_reversion_signal: str, vvix_level: float, uncertainty: str, vol_regime: str, strategy: str, vix_score: int, details: List[str]) -> None
+class VixStructureAnalyzer:
+  def __init__(self)
+  def analyze(self) -> vix_structure.VixSignal
+def get_vix_analyzer() -> vix_structure.VixStructureAnalyzer
+def get_vix_metrics()

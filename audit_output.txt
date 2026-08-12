@@ -1,0 +1,31 @@
+============================================================
+PHASE 1: IMPORT TEST
+============================================================
+  OK  config
+  OK  trader
+  OK  database
+  OK  risk_manager
+  OK  strategy
+  OK  notification
+  OK  keepalive
+  OK  kis_data
+  OK  data_proxy
+  OK  macro
+  OK  regime_detector
+  OK  fed_watch
+  OK  macro_shield
+  OK  geopolitical
+  OK  intermarket
+  OK  correlation_matrix
+  OK  correlation_regime
+  OK  sector_rotation
+  OK  economic_calendar
+  OK  event_calendar
+  OK  market_breadth
+  OK  market_internals
+  OK  stress_test
+  OK  alpha_generator
+  OK  candlestick
+  OK  divergence
+  OK  fibonacci
+  OK  gap_scanner

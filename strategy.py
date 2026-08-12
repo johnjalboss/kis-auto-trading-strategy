@@ -1243,6 +1243,7 @@ class StrategyEngine:
         pos.high_since_entry = max(pos.high_since_entry, price)
         if pos.high_since_entry != old_high:
             try:
+                from database import get_database
                 db_mgr = get_database()
                 db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price)
             except Exception as e:

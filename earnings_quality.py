@@ -22,6 +22,7 @@ from loguru import logger
 from typing import Dict, Any
 
 try:
+    import config
     from base_analyzer import BaseAnalyzer
 except ImportError:
     class BaseAnalyzer:

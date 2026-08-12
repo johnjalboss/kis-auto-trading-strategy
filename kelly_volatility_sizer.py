@@ -39,21 +39,21 @@ class KellyVolatilitySizer:
             vol_scale = self.target_daily_vol / max(0.005, asset_daily_vol)
             vol_scale = max(0.40, min(1.60, vol_scale))  # Cap volatility scaling between 40% and 160%
 
-            # 3. Target Slot Capital
-            base_slot_capital = total_equity / getattr(config, 'MAX_POSITIONS', 5)
-            adjusted_capital = base_slot_capital * (half_kelly / 0.10) * vol_scale
-
-            # Cap position capital to max 35% of total equity
-            max_cap = total_equity * 0.35
-            target_capital = min(adjusted_capital, max_cap, buying_power)
-
+            # 3. Target Slot Capital (자금 최대 활용 모드)
+            max_positions = getattr(config, 'MAX_POSITIONS', 5)
+            base_slot_capital = total_equity / max_positions
+            
+            # 사용자 요구사항: 구매 시 보유 자금 적극 활용 (최대 슬롯 자금 또는 주문 가능 현금 투입)
+            # 수량 계산: 슬롯 한도 금액($base_slot_capital)과 주문가능현금($buying_power) 중 최소값으로 풀매수
+            target_capital = min(base_slot_capital * 1.25, buying_power)  # 슬롯 자금 125%까지 유연하게 활용
+            
             qty = int(target_capital / entry_price)
-            if qty == 0 and entry_price <= target_capital * 1.5 and entry_price <= buying_power:
-                qty = 1  # Allow 1 share entry if close to budget
+            if qty == 0 and entry_price <= buying_power:
+                qty = 1  # 현금이 되면 최소 1주 매수
 
-            logger.info("📐 [KELLY_VOLATILITY_SIZER] {}: Qty {} shares (VolScale: {:.2f}, TargetCap: ${:.2f})",
-                        symbol, qty, vol_scale, target_capital)
+            logger.info("📐 [KELLY_VOLATILITY_SIZER] {}: Qty {} shares (TargetCap: ${:.2f}, BuyingPower: ${:.2f})",
+                        symbol, qty, target_capital, buying_power)
             return qty
         except Exception as e:
             logger.debug("KellyVolatilitySizer error for {}: {}", symbol, e)
-            return int(min(buying_power, total_equity * 0.20) / entry_price)
+            return int(buying_power / entry_price) if entry_price > 0 else 0

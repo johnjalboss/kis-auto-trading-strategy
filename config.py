@@ -54,11 +54,11 @@ ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "999"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 
-# Position limits (4개 종목 분산으로 개별 종목 손절 타격 최소화)
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.25"))  # 25% max per position
+# Position limits (5개 종목 분산으로 각 20%씩 총 자산의 100% 투입)
+MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.25"))  # 20~25% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "4"))  # 4종목 분산 투자
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 5종목 집중/분산 투자
 
 # ==============================================
 # [ENABLED] UPGRADE 교체매매 활성화 — 최소 30점 차이날 때만 교체

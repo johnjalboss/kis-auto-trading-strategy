@@ -1,0 +1,7 @@
+=== DB TRADES ===
+--- trade_journal.db ---
+Empty DataFrame
+Columns: [id, timestamp, symbol, action, quantity, price, total_value, strategy, regime, composite_score, stop_loss, take_profit, pnl, pnl_pct, closed_at, notes]
+Index: []
+
+=== TEXT LOGS ===

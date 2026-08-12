@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>KIS Trading Bot Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:#0d1117; color:#c9d1d9; padding:30px; min-height:100vh }
+.header { display:flex; justify-content:space-between; align-items:center; padding-bottom:15px; border-bottom:1px solid #30363d; margin-bottom:20px }
+.header h1 { font-size:22px }
+.grid { display:grid; grid-template-columns:repeat(5,1fr); gap:15px; margin-bottom:20px }
+.card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; transition:border-color 0.2s }
+.card:hover { border-color:#58a6ff }
+.card h3 { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px }
+.big { font-size:28px; font-weight:bold }
+table { width:100%; border-collapse:collapse }
+th,td { padding:12px 14px; text-align:left; border-bottom:1px solid #21262d }
+th { color:#8b949e; font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:600 }
+.log { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:18px;
+      font-family:Consolas,'Courier New',monospace; font-size:11px; line-height:1.7; 
+      max-height:350px; overflow-y:auto; margin-top:20px; word-wrap:break-word }
+.status { display:inline-flex; align-items:center; gap:8px; padding:5px 16px; border-radius:20px; font-size:12px; font-weight:bold }
+.dot { width:8px; height:8px; border-radius:50%; animation:pulse 2s infinite }
+.btn-group { display:flex; gap:8px; margin-bottom:15px }
+.btn { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:6px 14px; border-radius:6px; 
+       font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s }
+.btn:hover { background:#30363d; border-color:#8b949e }
+.btn.active { background:#238636; border-color:#2ea043; color:white }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.footer { text-align:center; color:#484f58; margin-top:25px; font-size:11px }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head><body>
+
+<div class="header">
+  <h1>🚀 KIS Auto-Trading Bot</h1>
+  <div>
+    <span class="status" style="background:rgba(63,185,80,0.15);color:#3fb950">
+      <span class="dot" style="background:#3fb950"></span>ACTIVE
+    </span>
+    <span style="color:#8b949e;margin-left:15px;font-size:13px">2026-03-10 23:15:57</span>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>💰 Total Portfolio</h3>
+    <div class="big">$758.59</div>
+  </div>
+  <div class="card">
+    <h3>📈 Avg Daily Return (CAGR)</h3>
+    <div class="big" style="color:#3fb950">+0.10%</div>
+    <div style="color:#8b949e;margin-top:4px;font-size:11px">Compound daily growth</div>
+  </div>
+  <div class="card">
+    <h3>📊 Today's Net P&L</h3>
+    <div class="big" style="color:#3fb950">+$1.10</div>
+    <div style="color:#3fb950;margin-top:4px;font-size:13px">+0.15%</div>
+  </div>
+  <div class="card">
+    <h3>💵 Buying Power</h3>
+    <div class="big">$503.48</div>
+  </div>
+  <div class="card">
+    <h3>⚠️ Fatal Errors</h3>
+    <div class="big" style="color:#3fb950">0</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+    <h3>📈 Historical Performance (Daily P&L)</h3>
+    <div class="btn-group">
+      <button class="btn" onclick="updateTimeframe(7, this)">1W</button>
+      <button class="btn active" onclick="updateTimeframe(30, this)">1M</button>
+      <button class="btn" onclick="updateTimeframe(180, this)">6M</button>
+      <button class="btn" onclick="updateTimeframe(365, this)">1Y</button>
+    </div>
+  </div>
+  <div style="height:350px; width:100%">
+    <canvas id="pnlChart"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h3>📋 Open Positions</h3>
+  <table>
+    <thead><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&L %</th><th>Unrealized</th><th>Value</th></tr></thead>
+    <tbody><tr>
+        <td style="font-weight:bold;color:#58a6ff">HST</td>
+        <td>1</td>
+        <td>$19.91</td>
+        <td>$19.05</td>
+        <td style="color:#f85149;font-weight:bold">-4.30% (<b>$0.86</b>)</td>
+        <td>$0.86</td>
+        <td>$19.05</td>
+    </tr><tr>
+        <td style="font-weight:bold;color:#58a6ff">MRNA</td>
+        <td>2</td>
+        <td>$53.05</td>
+        <td>$53.53</td>
+        <td style="color:#3fb950;font-weight:bold">+0.90% (<b>+$0.96</b>)</td>
+        <td>+$0.96</td>
+        <td>$107.06</td>
+    </tr><tr>
+        <td style="font-weight:bold;color:#58a6ff">TALK</td>
+        <td>25</td>
+        <td>$5.12</td>
+        <td>$5.16</td>
+        <td style="color:#3fb950;font-weight:bold">+0.88% (<b>+$1.00</b>)</td>
+        <td>+$1.00</td>
+        <td>$129.00</td>
+    </tr></tbody>
+  </table>
+</div>
+
+<div class="log">
+  <div style="color:#8b949e;font-weight:bold;margin-bottom:10px">📜 Recent Server Log</div>
+  2026-03-10 23:15:33.163 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:33.832 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:34.432 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:35.417 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:36.088 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:36.957 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:37.621 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:38.261 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:38.870 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:39.580 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:40.327 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:41.091 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:42.024 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:42.668 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-03-11 22:33:50.124809<br>2026-03-10 23:15:43.640 | INFO     | orchestrator:_liq:319 -   -&gt; liquidity_filter.py: 9 survive liquidity check<br>2026-03-10 23:15:43.640 | INFO     | orchestrator:phase_3_run_screener:332 - Phase 3 Complete. Universe: ['FIGR', 'HIMS', 'AVGO', 'UVIX', 'KSS', 'LCID', 'MRVL', 'VRT', 'USO']<br>2026-03-10 23:15:48.922 | DEBUG    | trader:_load_from_file:260 - Loaded token from file<br>2026-03-10 23:15:55.077 | INFO     | trader:sell:521 - SELL SQQQ x 1 @ $70.00 (NASD)<br>2026-03-10 23:15:55.077 | DEBUG    | trader:_load_from_file:260 - Loaded token from file<br>2026-03-10 23:15:55.719 | ERROR    | trader:sell:535 - SELL failed: 주문수량이 가능수량보다 큽니다
+</div>
+
+<div class="footer">
+  봇현황.bat 을 다시 더블클릭하면 새로고침됩니다 | Oracle Server: 141.148.172.12
+</div>
+
+<script>
+  const fullHistoryData = [{"date": "2025-03-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-03-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-04-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-05-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-24", "net_pnl": 0.0, "wins": 0, "losses": 1, "win_rate": 0.0}, {"date": "2026-02-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-26", "net_pnl": -0.5099999999999909, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-02-27", "net_pnl": 0.0, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-02-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-05", "net_pnl": -3.2619999999999933, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-03-06", "net_pnl": 4.091100000000036, "wins": 4, "losses": 4, "win_rate": 0.5}, {"date": "2026-03-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-09", "net_pnl": -2.9072000000000076, "wins": 7, "losses": 4, "win_rate": 0.6363636363636364}, {"date": "2026-03-10", "net_pnl": 6.8805000000000405, "wins": 1, "losses": 0, "win_rate": 1.0}];
+  let myChart = null;
+  
+  function updateTimeframe(days, btn) {
+    // Update active button
+    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Filter data
+    const filteredData = fullHistoryData.slice(-days);
+    const labels = filteredData.map(d => d.date);
+    const pnlData = filteredData.map(d => d.net_pnl || 0);
+    const bgColors = pnlData.map(v => v >= 0 ? 'rgba(63, 185, 80, 0.6)' : 'rgba(248, 81, 73, 0.6)');
+    const borderColors = pnlData.map(v => v >= 0 ? 'rgb(63, 185, 80)' : 'rgb(248, 81, 73)');
+
+    let cumPnL = [];
+    let currentSum = fullHistoryData.slice(0, fullHistoryData.length - days).reduce((a, b) => a + (b.net_pnl || 0), 0);
+    for (let i = 0; i < pnlData.length; i++) {
+      currentSum += pnlData[i];
+      cumPnL.push(currentSum);
+    }
+
+    if (!myChart) {
+      const ctx = document.getElementById('pnlChart').getContext('2d');
+      myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Cumulative P&L',
+              data: cumPnL,
+              borderColor: '#58a6ff',
+              borderWidth: 2,
+              pointRadius: days > 60 ? 0 : 3,
+              tension: 0.2,
+              fill: false,
+              yAxisID: 'y1'
+            },
+            {
+              type: 'bar',
+              label: 'Daily Net P&L ($)',
+              data: pnlData,
+              backgroundColor: bgColors,
+              borderColor: borderColors,
+              borderWidth: 1,
+              yAxisID: 'y'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#c9d1d9' } }
+          },
+          scales: {
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              grid: { color: '#30363d' },
+              ticks: { color: '#8b949e' }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#58a6ff' }
+            },
+            x: {
+              grid: { color: '#30363d' },
+              ticks: { 
+                color: '#8b949e',
+                maxRotation: 45,
+                minRotation: 45,
+                autoSkip: true,
+                maxTicksLimit: 12
+              }
+            }
+          }
+        }
+      });
+    } else {
+      myChart.data.labels = labels;
+      myChart.data.datasets[0].data = cumPnL;
+      myChart.data.datasets[0].pointRadius = days > 60 ? 0 : 3;
+      myChart.data.datasets[1].data = pnlData;
+      myChart.data.datasets[1].backgroundColor = bgColors;
+      myChart.data.datasets[1].borderColor = borderColors;
+      myChart.update();
+    }
+  }
+
+  if (fullHistoryData && fullHistoryData.length > 0) {
+    // Initialize with 1M (30 days)
+    const initialBtn = document.querySelectorAll('.btn')[1];
+    updateTimeframe(30, initialBtn);
+  } else {
+    document.getElementById('pnlChart').parentElement.innerHTML = '<div style="color:#8b949e;text-align:center;padding-top:100px;">No historical data available yet.</div>';
+  }
+</script>
+
+</body></html>

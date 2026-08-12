@@ -58,9 +58,6 @@ class CompositeSignal:
     action: ActionType
     confidence: int  # 0-100
     composite_score: int  # -100 to +100
-    raw_score: float = 0.0  # Unclamped score (e.g. 145.5 pts) for 100% deterministic tie-breaking
-    kalman_velocity: float = 0.0
-    rs_alpha: float = 0.0
     
     # Category Breakdown
     macro_score: CategoryScore
@@ -84,6 +81,11 @@ class CompositeSignal:
     
     # Summary
     summary: str
+    
+    # Optional / default fields (must come AFTER non-default fields for Python 3.10 compatibility)
+    raw_score: float = 0.0  # Unclamped score for 100% deterministic tie-breaking
+    kalman_velocity: float = 0.0
+    rs_alpha: float = 0.0
 
 
 class CompositeSignalEngine:

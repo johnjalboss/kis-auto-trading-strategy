@@ -1,0 +1,15 @@
+{
+  "initial_capital": 100000.0,
+  "current_capital": 105000.0,
+  "peak_capital": 105000.0,
+  "daily_start": 105000.0,
+  "weekly_start": 100000.0,
+  "monthly_start": 100000.0,
+  "day_start_date": "2026-03-17",
+  "week_start_date": "2026-03-17",
+  "month_start_date": "2026-03-17",
+  "consecutive_green_days": 0,
+  "is_stopped": false,
+  "stop_reason": "",
+  "last_update": "2026-03-17T00:01:46.416115"
+}

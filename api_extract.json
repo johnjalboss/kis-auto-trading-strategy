@@ -1,0 +1,24 @@
+{
+  "해외주식 신고_신저가": {
+    "TR_ID": "13",
+    "Params": [
+      {
+        "param": "KEYB",
+        "desc_kr": "NEXT KEY BUFF",
+        "req": "Y",
+        "desc": "공백"
+      }
+    ]
+  },
+  "해외주식 거래대금순위": {
+    "TR_ID": "13",
+    "Params": [
+      {
+        "param": "KEYB",
+        "desc_kr": "NEXT KEY BUFF",
+        "req": "Y",
+        "desc": "공백"
+      }
+    ]
+  }
+}

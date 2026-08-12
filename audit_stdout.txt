@@ -1,0 +1,1287 @@
+2026-06-08 18:21:32.656 | INFO     | data_proxy:<module>:324 - Data Proxy initialized: yfinance.download AND yfinance.Ticker have been shimmed to kis_data.
+=================================================================
+DEFINITIVE FULL MODULE AUDIT
+=================================================================
+
+[1] Testing all BaseAnalyzer subclasses (composite_signal adapters)...
+[AGGRESSIVE-TECH] Loading modules...
+=== 1. Wikipedia S&P500 Fetch Test ===
+FAILED: HTTP Error 403: Forbidden
+
+=== 2. Current Cache State ===
+Count: 1170, Updated: 2026-06-08T18:10:25.489475
+
+=== 3. Force Refresh Universe ===
+Cache deleted
+AFTER REFRESH: 1165 symbols
+Cache now: 1170
+[Errno 2] No such file or directory: 'C:\\Users\\wngud\\Downloads\\한국투자증권_오픈API_전체문서_20260217_030000.xlsx'
+=== TABLES ===
+[]
+  [1/3] data_proxy.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [2/3] data_proxy.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [3/3] data_proxy.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  FAILED after 3 attempts: data_proxy.py
+  [1/3] base_adapters.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [2/3] base_adapters.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [3/3] base_adapters.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  FAILED after 3 attempts: base_adapters.py
+  [1/3] kis_data.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [2/3] kis_data.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  [3/3] kis_data.py: rc=1 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE
+  FAILED after 3 attempts: kis_data.py
+Restarting service...
+  restart: 
+Done!
+MAX_POSITIONS: 7
+UPGRADE_SCORE_GAP: 25
+UPGRADE_MIN_HOLD_MINUTES: 120
+UPGRADE_PROFIT_PROTECT_PCT: 0.02
+UPGRADE_MAX_PER_DAY: 5
+======================================================================
+FINAL SYSTEM VERIFICATION
+======================================================================
+
+[1/6] CORE MODULE IMPORTS
+{"status": "active", "positions": [{"symbol": "AWR", "qty": 1, "entry": 76.82, "current": 77.98, "pnl_pct": 1.51, "value": 77.98}, {"symbol": "CDP", "qty": 5, "entry": 31.71, "current": 32.65, "pnl_pct": 2.96, "value": 163.25}, {"symbol": "DINO", "qty": 1, "entry": 72.44, "current": 71.4, "pnl_pct": -1.44, "value": 71.4}, {"symbol": "MNST", "qty": 1, "entry": 89.21, "current": 89.37, "pnl_pct": 0.18, "value": 89.37}, {"symbol": "QCOM", "qty": 1, "entry": 221.75, "current": 216.68, "pnl_pct": -2.29, "value": 216.68}, {"symbol": "WPC", "qty": 1, "entry": 74.08, "current": 74.49, "pnl_pct": 0.55, "value": 74.49}], "buying_power": 91.74, "total_value": 784.91, "total_pnl": 0.32, "errors": "0", "log": "2026-06-08 18:21:28.204 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:28.810 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:29.806 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:30.787 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:31.657 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:32.561 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:33.698 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:34.762 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:35.664 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:36.417 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:37.383 | INFO     | data_proxy:_safe_original_yf_download:57 - yfinance proxy call (Count: 51/300) for XLK\n2026-06-08 18:21:37.971 | DEBUG    | kis_data:download:931 - Index symbol ^VIX not supported by KIS API, returning empty\n2026-06-08 18:21:38.054 | INFO     | data_proxy:_safe_original_yf_download:57 - yfinance proxy call (Count: 52/300) for TLT\n2026-06-08 18:21:38.457 | INFO     | data_proxy:_safe_original_yf_download:57 - yfinance proxy call (Count: 53/300) for GLD\n2026-06-08 18:21:38.860 | INFO     | data_proxy:_safe_original_yf_download:57 - yfinance proxy call (Count: 54/300) for UUP\n2026-06-08 18:21:39.275 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:40.315 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:41.256 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:42.461 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742\n2026-06-08 18:21:43.658 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742", "exchange_rate": 1543.0, "timestamp": "2026-06-08 18:21:38", "avg_daily_pnl_pct": -0.0679, "history": [{"date": "2025-06-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-06-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-07-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-08-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-09-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-10-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-11-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2025-12-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-01-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-13", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-24", "net_pnl": 0.0, "wins": 0, "losses": 1, "win_rate": 0.0}, {"date": "2026-02-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-02-26", "net_pnl": -0.5099999999999909, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-02-27", "net_pnl": 0.0, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-02-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-01", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-05", "net_pnl": -3.2619999999999933, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-03-06", "net_pnl": 4.091100000000036, "wins": 4, "losses": 4, "win_rate": 0.5}, {"date": "2026-03-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-09", "net_pnl": -2.9072000000000076, "wins": 7, "losses": 4, "win_rate": 0.6363636363636364}, {"date": "2026-03-10", "net_pnl": 8.400500000000022, "wins": 2, "losses": 1, "win_rate": 0.6666666666666666}, {"date": "2026-03-11", "net_pnl": -22.732, "wins": 4, "losses": 1, "win_rate": 0.8}, {"date": "2026-03-12", "net_pnl": 1.0000000000000009, "wins": 1, "losses": 0, "win_rate": 1.0}, {"date": "2026-03-13", "net_pnl": -5.289900000000003, "wins": 0, "losses": 1, "win_rate": 0.0}, {"date": "2026-03-14", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-15", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-17", "net_pnl": -7.653499999999992, "wins": 1, "losses": 2, "win_rate": 0.3333333333333333}, {"date": "2026-03-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-19", "net_pnl": 2.594999999999999, "wins": 1, "losses": 0, "win_rate": 1.0}, {"date": "2026-03-20", "net_pnl": -31.78500000000003, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-03-21", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-23", "net_pnl": 3.060000000000006, "wins": 2, "losses": 0, "win_rate": 1.0}, {"date": "2026-03-24", "net_pnl": -13.752099999999944, "wins": 1, "losses": 2, "win_rate": 0.3333333333333333}, {"date": "2026-03-25", "net_pnl": -0.8700000000000081, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-03-26", "net_pnl": -33.48310000000005, "wins": 0, "losses": 4, "win_rate": 0.0}, {"date": "2026-03-27", "net_pnl": -24.44529999999999, "wins": 5, "losses": 7, "win_rate": 0.4166666666666667}, {"date": "2026-03-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-03-30", "net_pnl": -11.154700000000004, "wins": 4, "losses": 5, "win_rate": 0.4444444444444444}, {"date": "2026-03-31", "net_pnl": 2.334999999999982, "wins": 2, "losses": 2, "win_rate": 0.5}, {"date": "2026-04-01", "net_pnl": -1.6745999999999892, "wins": 1, "losses": 4, "win_rate": 0.2}, {"date": "2026-04-02", "net_pnl": 13.70819999999999, "wins": 3, "losses": 0, "win_rate": 1.0}, {"date": "2026-04-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-04", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-05", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-06", "net_pnl": -8.23339999999999, "wins": 2, "losses": 5, "win_rate": 0.2857142857142857}, {"date": "2026-04-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-08", "net_pnl": -34.83149999999999, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-04-09", "net_pnl": -3.3400000000000034, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-04-10", "net_pnl": -4.400000000000048, "wins": 1, "losses": 3, "win_rate": 0.25}, {"date": "2026-04-11", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-12", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-13", "net_pnl": 2.6408999999999736, "wins": 2, "losses": 1, "win_rate": 0.6666666666666666}, {"date": "2026-04-14", "net_pnl": -1.3050000000000068, "wins": 1, "losses": 2, "win_rate": 0.3333333333333333}, {"date": "2026-04-15", "net_pnl": 3.339999999999989, "wins": 4, "losses": 3, "win_rate": 0.5714285714285714}, {"date": "2026-04-16", "net_pnl": 0.29950274658200726, "wins": 1, "losses": 4, "win_rate": 0.2}, {"date": "2026-04-17", "net_pnl": 6.4350000000000165, "wins": 3, "losses": 0, "win_rate": 1.0}, {"date": "2026-04-18", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-20", "net_pnl": -0.6559999999999988, "wins": 1, "losses": 2, "win_rate": 0.3333333333333333}, {"date": "2026-04-21", "net_pnl": -8.72509999999997, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-04-22", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-24", "net_pnl": -3.819999999999993, "wins": 0, "losses": 1, "win_rate": 0.0}, {"date": "2026-04-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-26", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-04-27", "net_pnl": 0.9449999999999648, "wins": 3, "losses": 2, "win_rate": 0.6}, {"date": "2026-04-28", "net_pnl": 0.5999999999999943, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-04-29", "net_pnl": -8.809999999999974, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-04-30", "net_pnl": 5.6699999999999875, "wins": 3, "losses": 1, "win_rate": 0.75}, {"date": "2026-05-01", "net_pnl": 0.11999999999999034, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-05-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-03", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-04", "net_pnl": 27.42019999999995, "wins": 5, "losses": 1, "win_rate": 0.8333333333333334}, {"date": "2026-05-05", "net_pnl": 7.810000000000031, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-05-06", "net_pnl": 39.90000000000002, "wins": 1, "losses": 0, "win_rate": 1.0}, {"date": "2026-05-07", "net_pnl": 12.777000000000015, "wins": 3, "losses": 2, "win_rate": 0.6}, {"date": "2026-05-08", "net_pnl": 7.504300000000011, "wins": 3, "losses": 1, "win_rate": 0.75}, {"date": "2026-05-09", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-10", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-11", "net_pnl": 8.719999999999999, "wins": 4, "losses": 1, "win_rate": 0.8}, {"date": "2026-05-12", "net_pnl": -2.690000000000005, "wins": 0, "losses": 2, "win_rate": 0.0}, {"date": "2026-05-13", "net_pnl": 2.7369902343749715, "wins": 4, "losses": 1, "win_rate": 0.8}, {"date": "2026-05-14", "net_pnl": 19.9703, "wins": 2, "losses": 6, "win_rate": 0.25}, {"date": "2026-05-15", "net_pnl": -20.86900000000001, "wins": 1, "losses": 3, "win_rate": 0.25}, {"date": "2026-05-16", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-17", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-18", "net_pnl": -8.131299999999996, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-05-19", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-20", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-21", "net_pnl": 29.370005493164058, "wins": 2, "losses": 0, "win_rate": 1.0}, {"date": "2026-05-22", "net_pnl": 13.405001525878916, "wins": 2, "losses": 0, "win_rate": 1.0}, {"date": "2026-05-23", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-24", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-25", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-26", "net_pnl": -5.154996337890623, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-05-27", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-28", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-29", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-30", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-05-31", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-06-01", "net_pnl": 15.194999999999993, "wins": 1, "losses": 0, "win_rate": 1.0}, {"date": "2026-06-02", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-06-03", "net_pnl": 14.100000000000023, "wins": 1, "losses": 0, "win_rate": 1.0}, {"date": "2026-06-04", "net_pnl": -0.21000000000000796, "wins": 1, "losses": 1, "win_rate": 0.5}, {"date": "2026-06-05", "net_pnl": -14.754999999999995, "wins": 0, "losses": 3, "win_rate": 0.0}, {"date": "2026-06-06", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-06-07", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}, {"date": "2026-06-08", "net_pnl": 0, "wins": 0, "losses": 0, "win_rate": 0}]}
+  Result: 28/28 PASS, 0 FAIL
+  ✅ ALL CORE MODULES OK
+
+[2/6] CONFIG VALUES CHECK
+  ❌ MAX_POSITIONS: 7 (expected 3)
+  ❌ TAKE_PROFIT_PCT: 0.12 (expected 0.03)
+  ❌ MAX_POSITION_PCT: 0.3 (expected 0.35)
+  ✅ ATR_STOP_MULTIPLIER: 1.5 (expected 1.5)
+  ✅ LEVERAGED_MAX_HOLD_HOURS: 24 (expected 24)
+  ✅ LEVERAGED_TAKE_PROFIT_PCT: 0.02 (expected 0.02)
+  ✅ CONFLICTING_PAIRS has TQQQ: True (expected True)
+  ✅ LEVERAGED_ETFS has SQQQ: True (expected True)
+
+[3/6] STRATEGY LEVERAGED ETF RULES
+  ✅ LEVERAGED_TIMEOUT exit: Found
+  ✅ LEVERAGED_TP exit: Found
+  ✅ LEVERAGED_SL exit: Found
+  ❌ config.LEVERAGED_ETFS check: MISSING
+
+[4/6] ORCHESTRATOR ANTI-CONFLICT FILTER
+  ✅ CONFLICT BLOCKED logic: Found
+  ❌ CONFLICTING_PAIRS check: MISSING
+
+[5/6] DATABASE & SERVICE
+  Tables: ['trades', 'sqlite_sequence', 'daily_stats', 'positions', 'sent_reports']
+  trades: 430 rows
+  sqlite_sequence: 1 rows
+  daily_stats: 65 rows
+  positions: 6 rows
+  sent_reports: 65 rows
+  ✅ DATABASE OK
+  Service: active
+  ✅ SERVICE RUNNING
+
+[6/6] RECENT LOG ANALYSIS
+  ✅ NO ERRORS in recent logs
+  Warnings: 0 (normal)
+
+======================================================================
+FINAL VERDICT: 0 critical failures found
+🎉 ALL SYSTEMS OPERATIONAL — BOT IS HEALTHY!
+======================================================================
+======================================================================
+1. insider_tracker — 실제 데이터 반환 구조
+======================================================================
+타입: <class 'insider_tracker.OwnershipSignal'>
+필드들: ['details', 'insider_buys_90d', 'insider_net_pct', 'insider_net_value', 'insider_sells_90d', 'insider_sentiment', 'inst_change_qtr', 'inst_ownership_pct', 'ownership_score', 'short_pct_float', 'short_ratio', 'signal', 'symbol']
+sentiment=SELLING
+net_value=-266135718.8043
+→ ✅ 실제 데이터 있음
+
+======================================================================
+2. HiddenMarkovRegime.analyze() 반환값
+======================================================================
+타입: <class 'dict'>
+필드들: ['clear', 'copy', 'fromkeys', 'get', 'items', 'keys', 'pop', 'popitem', 'setdefault', 'update', 'values']
+regime=None
+risk_score=None
+→ orchestrator에서 strategy._last_regime에 저장 확인 필요
+
+======================================================================
+3. earnings_analyzer.analyze() 실제 반환값 구조
+======================================================================
+타입: <class 'earnings_analyzer.EarningsSignal'>
+필드들: ['beat_streak', 'days_since_earnings', 'days_to_earnings', 'details', 'earnings_score', 'eps_growth_yoy', 'eps_revision_30d', 'last_eps_surprise', 'last_revenue_surprise', 'next_earnings_date', 'revenue_growth_yoy', 'revision_direction', 'signal', 'symbol']
+
+======================================================================
+4. strategy.check_entry() 실제 동작 — 시간 가드 포함
+======================================================================
+❌ ET 11:00-12:30 데드존: 코드에 없음
+✅ SPY SMA20 브레드스: 코드에 있음
+❌ 섹터 가드: 코드에 없음
+✅ PEAD 보너스: 코드에 있음
+❌ RS 필터: 코드에 없음
+✅ 52주 신고가: 코드에 있음
+✅ 갭필 회피: 코드에 있음
+❌ 연속손절 쿨다운: 코드에 없음
+❌ VIX 동적 TP/SL: 코드에 없음
+❌ ATR 사이징: 코드에 없음
+
+======================================================================
+5. options_flow.get_options_score() 실제 데이터
+======================================================================
+AAPL: score=0, signals=options_disabled
+NVDA: score=0, signals=options_disabled
+→ ⚠️ 모두 0 — 데이터 없을 수 있음
+
+======================================================================
+6. strategy.is_safe_to_trade() — 경제 캘린더 연결 확인
+======================================================================
+❌ is_safe_to_trade 없음
+
+======================================================================
+7. risk_manager 실제 사용 API 검증
+======================================================================
+모든 메서드: ['CONSECUTIVE_LOSS_LIMIT', 'COOLDOWN_MINUTES', 'DAILY_STOP_LOSS_PCT', 'MAX_POSITION_PCT', 'MAX_TOTAL_POSITIONS', 'add_position', 'can_trade', 'check_position_limit', 'consecutive_limit', 'cooldown_mins', 'daily_stop_pct', 'get_daily_stats', 'get_risk_summary', 'get_systemic_risk_multiplier', 'max_position_pct', 'max_positions', 'record_trade', 'remove_position', 'reset_cooldown', 'start_day', 'update_balance', 'update_position', 'weekly_stop_pct']
+✅ rm.get_daily_stats(): 있음
+✅ rm.get_risk_summary(): 있음
+❌ rm.is_halted(): 없음
+✅ rm.can_trade(): 있음
+❌ rm.update(): 없음
+
+======================================================================
+8. composite_signal.CompositeSignalEngine 분석기 동작
+======================================================================
+✅ technical 카테고리: 있음
+✅ momentum 카테고리: 있음
+✅ macro 카테고리: 있음
+✅ volume 카테고리: 있음
+✅ quality 카테고리: 있음
+=== TABLES === ['trades', 'sqlite_sequence', 'daily_stats', 'positions', 'sent_reports']
+
+=== LAST 50 TRADES ===
+{'id': 430, 'symbol': 'ARE', 'side': 'SELL', 'quantity': 1, 'price': 51.46, 'total': 51.46, 'entry_time': None, 'exit_time': '2026-06-06 02:30:51.467610', 'pnl': -1.3900000000000006, 'pnl_pct': -0.02630085146641439, 'reason': 'UPGRADE: ARE(62) -> NOV(89)', 'regime': None, 'created_at': '2026-06-05 17:30:51'}
+{'id': 429, 'symbol': 'QCOM', 'side': 'BUY', 'quantity': 1, 'price': 221.67, 'total': 221.67, 'entry_time': '2026-06-06 01:20:03.357985', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-05 16:20:03'}
+{'id': 428, 'symbol': 'CBT', 'side': 'SELL', 'quantity': 1, 'price': 81.4, 'total': 81.4, 'entry_time': None, 'exit_time': '2026-06-06 01:19:19.092215', 'pnl': -3.9849999999999994, 'pnl_pct': -0.04667096094161737, 'reason': 'UPGRADE: CBT(59) -> QCOM(84)', 'regime': None, 'created_at': '2026-06-05 16:19:19'}
+{'id': 427, 'symbol': 'ARE', 'side': 'BUY', 'quantity': 1, 'price': 52.85, 'total': 52.85, 'entry_time': '2026-06-06 00:07:31.358055', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-05 15:07:31'}
+{'id': 426, 'symbol': 'DINO', 'side': 'BUY', 'quantity': 1, 'price': 72.44, 'total': 72.44, 'entry_time': '2026-06-05 23:47:19.159005', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-05 14:47:19'}
+{'id': 425, 'symbol': 'AKAM', 'side': 'SELL', 'quantity': 1, 'price': 152.74, 'total': 152.74, 'entry_time': None, 'exit_time': '2026-06-05 22:51:03.425122', 'pnl': -9.379999999999995, 'pnl_pct': -0.057858376511226224, 'reason': 'HARD_STOP: P&L -5.8% <= -5%', 'regime': None, 'created_at': '2026-06-05 13:51:03'}
+{'id': 424, 'symbol': 'WPC', 'side': 'BUY', 'quantity': 1, 'price': 74.0475, 'total': 74.0475, 'entry_time': '2026-06-05 22:44:34.714583', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-05 13:44:34'}
+{'id': 423, 'symbol': 'BTSG', 'side': 'SELL', 'quantity': 1, 'price': 57.32, 'total': 57.32, 'entry_time': None, 'exit_time': '2026-06-05 03:18:02.560606', 'pnl': -3.0600000000000023, 'pnl_pct': -0.05067903279231537, 'reason': 'HARD_STOP: P&L -5.1% <= -5%', 'regime': None, 'created_at': '2026-06-04 18:18:02'}
+{'id': 422, 'symbol': 'MNST', 'side': 'BUY', 'quantity': 1, 'price': 89.2, 'total': 89.2, 'entry_time': '2026-06-05 02:54:58.655062', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-04 17:54:58'}
+{'id': 421, 'symbol': 'CNC', 'side': 'SELL', 'quantity': 1, 'price': 62.48, 'total': 62.48, 'entry_time': None, 'exit_time': '2026-06-05 02:31:02.979339', 'pnl': 2.8499999999999943, 'pnl_pct': 0.047794734194197455, 'reason': 'TRAIL(Lock): $62.48 <= $62.50', 'regime': None, 'created_at': '2026-06-04 17:31:02'}
+{'id': 420, 'symbol': 'AWR', 'side': 'BUY', 'quantity': 1, 'price': 76.77, 'total': 76.77, 'entry_time': '2026-06-05 02:12:03.599794', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-04 17:12:03'}
+{'id': 419, 'symbol': 'CBT', 'side': 'BUY', 'quantity': 1, 'price': 85.31, 'total': 85.31, 'entry_time': '2026-06-04 03:14:36.207764', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'BULL_NORMAL', 'created_at': '2026-06-03 18:14:36'}
+{'id': 418, 'symbol': 'BTSG', 'side': 'BUY', 'quantity': 1, 'price': 60.35, 'total': 60.35, 'entry_time': '2026-06-04 03:05:27.905258', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'BULL_NORMAL', 'created_at': '2026-06-03 18:05:27'}
+{'id': 417, 'symbol': 'CNC', 'side': 'BUY', 'quantity': 1, 'price': 59.63, 'total': 59.63, 'entry_time': '2026-06-04 02:49:54.049712', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'BULL_NORMAL', 'created_at': '2026-06-03 17:49:54'}
+{'id': 416, 'symbol': 'CDP', 'side': 'BUY', 'quantity': 5, 'price': 31.71, 'total': 158.55, 'entry_time': '2026-06-04 02:22:44.759733', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'BULL_NORMAL', 'created_at': '2026-06-03 17:22:44'}
+{'id': 415, 'symbol': 'ADM', 'side': 'SELL', 'quantity': 4, 'price': 84.01, 'total': 336.04, 'entry_time': None, 'exit_time': '2026-06-03 23:30:46.403501', 'pnl': 14.100000000000023, 'pnl_pct': 0.04379698080387657, 'reason': 'StochRSI extreme: 1.00', 'regime': None, 'created_at': '2026-06-03 14:30:46'}
+{'id': 414, 'symbol': 'AKAM', 'side': 'BUY', 'quantity': 1, 'price': 162.095, 'total': 162.095, 'entry_time': '2026-06-03 00:57:27.370436', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-06-02 15:57:27'}
+{'id': 413, 'symbol': 'CDNS', 'side': 'SELL', 'quantity': 1, 'price': 394.995, 'total': 394.995, 'entry_time': None, 'exit_time': '2026-06-02 00:06:27.778272', 'pnl': 15.194999999999993, 'pnl_pct': 0.0400078988941548, 'reason': 'StochRSI extreme: 1.00', 'regime': None, 'created_at': '2026-06-01 15:06:27'}
+{'id': 412, 'symbol': 'ADM', 'side': 'BUY', 'quantity': 4, 'price': 80.56, 'total': 322.24, 'entry_time': '2026-05-30 03:18:11.277280', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-05-29 18:18:11'}
+{'id': 411, 'symbol': 'CDNS', 'side': 'BUY', 'quantity': 1, 'price': 379.42, 'total': 379.42, 'entry_time': '2026-05-26 23:03:29.261434', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-05-26 14:03:29'}
+{'id': 410, 'symbol': 'CDNS', 'side': 'BUY', 'quantity': 1, 'price': 376.54, 'total': 376.54, 'entry_time': '2026-05-26 22:52:27.532880', 'exit_time': None, 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': None, 'regime': 'CHOPPY', 'created_at': '2026-05-26 13:52:27'}
+{'id': 409, 'symbol': 'ORCL', 'side': 'SELL', 'quantity': 1, 'price': 192.69, 'total': 192.69, 'entry_time': None, 'exit_time': '2026-05-26 22:42:44.744901', 'pnl': 0.21999999999999886, 'pnl_pct': 0.001143035278225172, 'reason': 'MAX_HOLD: 14.6 ,   (+0.1%)', 'regime': None, 'created_at': '2026-05-26 13:42:44'}
+{'id': 408, 'symbol': 'FANG', 'side': 'SELL', 'quantity': 1, 'price': 199.59, 'total': 199.59, 'entry_time': None, 'exit_time': '2026-05-26 22:37:26.655038', 'pnl': -5.374996337890622, 'pnl_pct': -0.02622397206316042, 'reason': 'MAX_HOLD: 18.3거래일 초과, 강제 청산 (-2.6%)', 'regime': None, 'created_at': '2026-05-26 13:37:26'}
+{'id': 407, 'symbol': 'ORCL', 'side': 'BUY', 'quantity': 1, 'price': 192.27999877929688, 'total': 192.27999877929688, 'entry_time': '2026-05-22 23:58:29.217033', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-22 14:58:29'}
+{'id': 406, 'symbol': 'ON', 'side': 'SELL', 'quantity': 1, 'price': 115.54, 'total': 115.54, 'entry_time': None, 'exit_time': '2026-05-22 23:41:03.680022', 'pnl': 6.805000000000007, 'pnl_pct': 0.0625833448291719, 'reason': 'TAKE_PROFIT: +6.3% >= +6.0% ( 24h)', 'regime': None, 'created_at': '2026-05-22 14:41:03'}
+{'id': 405, 'symbol': 'ON', 'side': 'SELL', 'quantity': 1, 'price': 115.45, 'total': 115.45, 'entry_time': None, 'exit_time': '2026-05-22 23:40:55.431334', 'pnl': 6.600001525878909, 'pnl_pct': 0.06063391473035297, 'reason': 'TAKE_PROFIT: +6.1% >= +6.0% (보유 24h)', 'regime': None, 'created_at': '2026-05-22 14:40:55'}
+{'id': 404, 'symbol': 'FANG', 'side': 'BUY', 'quantity': 1, 'price': 204.96499633789062, 'total': 204.96499633789062, 'entry_time': '2026-05-21 23:26:47.800194', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-21 14:26:47'}
+{'id': 403, 'symbol': 'ON', 'side': 'BUY', 'quantity': 1, 'price': 108.8499984741211, 'total': 108.8499984741211, 'entry_time': '2026-05-21 23:15:58.934818', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-21 14:15:58'}
+{'id': 402, 'symbol': 'ON', 'side': 'BUY', 'quantity': 1, 'price': 108.63999938964844, 'total': 108.63999938964844, 'entry_time': '2026-05-21 23:05:23.674060', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-21 14:05:23'}
+{'id': 401, 'symbol': 'ARM', 'side': 'SELL', 'quantity': 1, 'price': 281.35, 'total': 281.35, 'entry_time': None, 'exit_time': '2026-05-21 22:42:31.482068', 'pnl': 27.090005493164085, 'pnl_pct': 0.10654450593263012, 'reason': 'TAKE_PROFIT: +10.7% >= +6.0% (보유 24h)', 'regime': None, 'created_at': '2026-05-21 13:42:31'}
+{'id': 400, 'symbol': 'NXPI', 'side': 'SELL', 'quantity': 1, 'price': 303.32, 'total': 303.32, 'entry_time': None, 'exit_time': '2026-05-21 22:37:02.107581', 'pnl': 2.2799999999999727, 'pnl_pct': 0.0075737443529098215, 'reason': 'TRAILING_STOP: $303.32 <= $305.99 (보유 24h)', 'regime': None, 'created_at': '2026-05-21 13:37:02'}
+{'id': 399, 'symbol': 'ARM', 'side': 'BUY', 'quantity': 1, 'price': 254.25999450683594, 'total': 254.25999450683594, 'entry_time': '2026-05-20 23:05:13.976511', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-20 14:05:13'}
+{'id': 398, 'symbol': 'NXPI', 'side': 'BUY', 'quantity': 1, 'price': 301.04, 'total': 301.04, 'entry_time': '2026-05-20 22:54:15.317310', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'CHOPPY', 'created_at': '2026-05-20 13:54:15'}
+{'id': 397, 'symbol': 'DELL', 'side': 'BUY', 'quantity': 1, 'price': 240.2375, 'total': 240.2375, 'entry_time': '2026-05-18 23:15:45.269970', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-18 14:15:45'}
+{'id': 396, 'symbol': 'SNPS', 'side': 'BUY', 'quantity': 1, 'price': 496.35, 'total': 496.35, 'entry_time': '2026-05-18 23:04:55.799771', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-18 14:04:55'}
+{'id': 395, 'symbol': 'ON', 'side': 'SELL', 'quantity': 2, 'price': 112.53, 'total': 225.06, 'entry_time': None, 'exit_time': '2026-05-18 22:48:41.258610', 'pnl': -2.6691999999999894, 'pnl_pct': -0.011720938728981568, 'reason': 'MAX_HOLD: 10.8거래일 초과, 강제 청산 (-1.2%)', 'regime': None, 'created_at': '2026-05-18 13:48:41'}
+{'id': 394, 'symbol': 'MNST', 'side': 'SELL', 'quantity': 1, 'price': 87.35, 'total': 87.35, 'entry_time': None, 'exit_time': '2026-05-18 22:43:11.144613', 'pnl': -0.1121000000000123, 'pnl_pct': -0.0012816980154834185, 'reason': 'MAX_HOLD: 10.8거래일 초과, 강제 청산 (-0.1%)', 'regime': None, 'created_at': '2026-05-18 13:43:11'}
+{'id': 393, 'symbol': 'LNTH', 'side': 'SELL', 'quantity': 2, 'price': 93.435, 'total': 186.87, 'entry_time': None, 'exit_time': '2026-05-18 22:37:28.100978', 'pnl': -5.349999999999994, 'pnl_pct': -0.027832691707418554, 'reason': 'MAX_HOLD: 14.1거래일 초과, 강제 청산 (-2.8%)', 'regime': None, 'created_at': '2026-05-18 13:37:28'}
+{'id': 392, 'symbol': 'DELL', 'side': 'SELL', 'quantity': 1, 'price': 242.74, 'total': 242.74, 'entry_time': None, 'exit_time': '2026-05-16 04:56:13.507083', 'pnl': 3.680000000000007, 'pnl_pct': 0.015393625031372905, 'reason': 'TRAILING_STOP: $242.74 <= $242.97 (보유 6h)', 'regime': None, 'created_at': '2026-05-15 19:56:13'}
+{'id': 391, 'symbol': 'ON', 'side': 'BUY', 'quantity': 2, 'price': 113.88, 'total': 227.76, 'entry_time': '2026-05-16 00:41:34.992486', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'UNKNOWN', 'created_at': '2026-05-15 15:41:34'}
+{'id': 390, 'symbol': 'MNST', 'side': 'BUY', 'quantity': 1, 'price': 87.55, 'total': 87.55, 'entry_time': '2026-05-16 00:19:05.431950', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'UNKNOWN', 'created_at': '2026-05-15 15:19:05'}
+{'id': 389, 'symbol': 'DELL', 'side': 'BUY', 'quantity': 1, 'price': 239.06, 'total': 239.06, 'entry_time': '2026-05-15 23:05:27.747830', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-15 14:05:27'}
+{'id': 388, 'symbol': 'MARA', 'side': 'SELL', 'quantity': 18, 'price': 12.6, 'total': 226.79999999999998, 'entry_time': None, 'exit_time': '2026-05-15 22:55:13.279798', 'pnl': -11.340000000000014, 'pnl_pct': -0.04761904761904768, 'reason': 'SWING_STOP: P&L -4.8%', 'regime': None, 'created_at': '2026-05-15 13:55:13'}
+{'id': 387, 'symbol': 'LI', 'side': 'SELL', 'quantity': 10, 'price': 18.33, 'total': 183.29999999999998, 'entry_time': None, 'exit_time': '2026-05-15 22:48:24.120444', 'pnl': -9.679000000000002, 'pnl_pct': -0.05015571642510326, 'reason': 'HARD_STOP: -5.0% <= -4.9% (보유 22h)', 'regime': None, 'created_at': '2026-05-15 13:48:24'}
+{'id': 386, 'symbol': 'ON', 'side': 'SELL', 'quantity': 1, 'price': 112.5, 'total': 112.5, 'entry_time': None, 'exit_time': '2026-05-15 22:44:39.617908', 'pnl': -3.530000000000001, 'pnl_pct': -0.030423166422476954, 'reason': 'SWING_STOP: P&L -3.0%', 'regime': None, 'created_at': '2026-05-15 13:44:39'}
+{'id': 385, 'symbol': 'MARA', 'side': 'BUY', 'quantity': 18, 'price': 13.23, 'total': 238.14000000000001, 'entry_time': '2026-05-15 02:54:33.585416', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-14 17:54:33'}
+{'id': 384, 'symbol': 'LNTH', 'side': 'BUY', 'quantity': 2, 'price': 96.01, 'total': 192.02, 'entry_time': '2026-05-15 02:43:09.682191', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-14 17:43:09'}
+{'id': 383, 'symbol': 'MRVL', 'side': 'SELL', 'quantity': 1, 'price': 181.88, 'total': 181.88, 'entry_time': None, 'exit_time': '2026-05-15 02:21:40.373998', 'pnl': -4.2450000000000045, 'pnl_pct': -0.022807253190060467, 'reason': 'SWING_STOP: P&L -2.3%', 'regime': None, 'created_at': '2026-05-14 17:21:40'}
+{'id': 382, 'symbol': 'ARM', 'side': 'SELL', 'quantity': 1, 'price': 220.705, 'total': 220.705, 'entry_time': None, 'exit_time': '2026-05-15 02:16:52.163596', 'pnl': 3.719999999999999, 'pnl_pct': 0.01714404221489964, 'reason': 'TRAILING_STOP: $220.71 <= $221.44 (보유 3h)', 'regime': None, 'created_at': '2026-05-14 17:16:52'}
+{'id': 381, 'symbol': 'MRVL', 'side': 'BUY', 'quantity': 1, 'price': 186.125, 'total': 186.125, 'entry_time': '2026-05-15 00:55:32.425412', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-05-14 15:55:32'}
+
+=== ALL-TIME CLOSED TRADE STATS ===
+  total_closed: 416
+  wins: 96
+  losses: 320
+  avg_pnl_pct: -0.036
+  total_pnl: -31.3
+  worst_trade_pct: -17.99
+  best_trade_pct: 20.48
+
+=== LAST 30 DAILY STATS ===
+{'date': '2026-05-25', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': -5.154996337890623, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-22', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 13.405001525878916, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-20', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 29.370005493164058, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-17', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 0, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': -8.131299999999996, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-15', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 3.680000000000007, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-14', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 5, 'gross_pnl': 0.0, 'net_pnl': -26.979000000000024, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-13', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 4, 'losses': 4, 'gross_pnl': 0.0, 'net_pnl': 35.56690000000001, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-12', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': -13.119609765625036, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-11', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 3.490000000000009, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-10', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 5.22999999999999, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-08', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 3, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 7.504300000000011, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-07', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 2, 'gross_pnl': 0.0, 'net_pnl': -3.394999999999982, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-06', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 16.171999999999997, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-05', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 47.71000000000005, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-04', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 3, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 5.710199999999972, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-03', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 21.70999999999998, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-05-01', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 0.11999999999999034, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-30', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 3, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 5.6699999999999875, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-29', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 0, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': -8.809999999999974, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-28', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 0.5999999999999943, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-27', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 3, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 4.5849999999999795, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-26', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 0, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': -3.640000000000015, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-24', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 0, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': -3.819999999999993, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-21', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 0, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': -1.3900999999999897, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-20', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': -7.990999999999978, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-17', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 0, 'gross_pnl': 0.0, 'net_pnl': 1.8700000000000045, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-16', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 3, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': 6.1615027465820305, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-15', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 4, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': 3.3279999999999745, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-14', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 1, 'losses': 3, 'gross_pnl': 0.0, 'net_pnl': -2.5900000000000034, 'max_drawdown': 0.0, 'regime': None}
+{'date': '2026-04-13', 'starting_balance': None, 'ending_balance': None, 'trades_count': 0, 'wins': 2, 'losses': 1, 'gross_pnl': 0.0, 'net_pnl': 2.6408999999999736, 'max_drawdown': 0.0, 'regime': None}
+
+=== OPEN POSITIONS ===
+{'symbol': 'CDP', 'quantity': 5, 'avg_price': 31.71, 'entry_time': '2026-06-04 02:22:44.761812', 'updated_at': '2026-06-04 02:22:44.761820'}
+{'symbol': 'AWR', 'quantity': 1, 'avg_price': 76.77, 'entry_time': '2026-06-05 02:12:03.600856', 'updated_at': '2026-06-05 02:12:03.600860'}
+{'symbol': 'MNST', 'quantity': 1, 'avg_price': 89.2, 'entry_time': '2026-06-05 02:54:58.655428', 'updated_at': '2026-06-05 02:54:58.655432'}
+{'symbol': 'WPC', 'quantity': 1, 'avg_price': 74.0475, 'entry_time': '2026-06-05 22:44:34.716329', 'updated_at': '2026-06-05 22:44:34.716333'}
+{'symbol': 'DINO', 'quantity': 1, 'avg_price': 72.44, 'entry_time': '2026-06-05 23:47:19.161268', 'updated_at': '2026-06-05 23:47:19.161277'}
+{'symbol': 'QCOM', 'quantity': 1, 'avg_price': 221.67, 'entry_time': '2026-06-06 01:20:03.358337', 'updated_at': '2026-06-06 01:20:03.358341'}
+=== HMM dict keys ===
+keys: ['regime', 'risk_score', 'signals', 'state_probabilities', 'entropy', 'confidence']
+full: {'regime': 'BEAR_NORMAL', 'risk_score': 70, 'signals': ['HMM Probability Edge: BEAR_NORMAL (Volatility 28.2% vs 21.0%)', 'HMM Entropy: 1.050 | State Confidence: 4.5%'], 'state_probabilities': {'BULL': 0.19245796645708832, 'BEAR': 0.4040461894821148, 'CHOP': 0.40349584406079697}, 'entropy': 1.0495127702519496, 'confidence': 0.04469230767087584}
+
+=== earnings_analyzer PEAD fields ===
+type: <class 'earnings_analyzer.EarningsSignal'>
+fields: ['beat_streak', 'days_since_earnings', 'days_to_earnings', 'details', 'earnings_score', 'eps_growth_yoy', 'eps_revision_30d', 'last_eps_surprise', 'last_revenue_surprise', 'next_earnings_date', 'revenue_growth_yoy', 'revision_direction', 'signal', 'symbol']
+last_eps_surprise: 1.0863
+days_to_earnings: 999
+beat_streak: 4
+
+=== insider_tracker actual data source ===
+fetch 방법:
+  info = self._fetch_info(symbol)
+  insiders = self._fetch_insider_transactions(symbol)
+{'id': 15, 'symbol': 'HST', 'side': 'BUY', 'quantity': 1, 'price': 19.91, 'total': 19.91, 'entry_time': '2026-03-06 00:20:02.805775', 'exit_time': '2026-05-30 02:54:11', 'pnl': 0.0, 'pnl_pct': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API', 'regime': 'BULL_NORMAL', 'created_at': '2026-03-05 15:20:02'}
+15 HST 1 BUY 2026-03-06 00:20:02.805775
+19 MRVL 2 BUY 2026-03-07 02:41:36.284704
+21 MRVL 2 BUY 2026-03-07 03:23:49.180070
+22 DAWN 6 BUY 2026-03-07 03:56:43.383411
+25 DAWN 6 BUY 2026-03-07 04:36:19.592238
+28 DAWN 6 BUY 2026-03-07 05:15:38.909501
+31 TALK 25 BUY 2026-03-09 23:02:44.265593
+32 MRNA 2 BUY 2026-03-09 23:18:54.208436
+34 MRNA 2 BUY 2026-03-09 23:46:31.979807
+36 RLMD 22 BUY 2026-03-10 00:58:55.880474
+40 TURB 24 BUY 2026-03-10 02:33:19.718234
+45 AVGO 1 BUY 2026-03-10 03:40:51.592684
+47 AVGO 1 BUY 2026-03-10 23:30:31.970860
+48 MRVL 1 BUY 2026-03-10 23:46:04.281650
+50 INTC 6 BUY 2026-03-11 01:13:10.558311
+52 FIGR 7 BUY 2026-03-11 04:42:51.793581
+55 TSSI 22 BUY 2026-03-11 23:00:17.822006
+61 WULF 10 BUY 2026-03-17 03:02:44.699339
+62 WULF 7 BUY 2026-03-17 03:17:07.462078
+63 MU 1 BUY 2026-03-17 03:27:36.813807
+64 CTMX 6 BUY 2026-03-17 04:23:27.679191
+68 GOOGL 1 BUY 2026-03-18 22:48:16.257139
+69 ARM 1 BUY 2026-03-18 23:44:27.782423
+70 KLAC 1 BUY 2026-03-19 00:14:02.962954
+71 KLAC 1 BUY 2026-03-19 00:26:13.989363
+72 KLAC 1 BUY 2026-03-19 00:37:38.922004
+73 KLAC 1 BUY 2026-03-19 00:55:39.260681
+74 KLAC 1 BUY 2026-03-19 01:08:47.668724
+75 LCID 2 BUY 2026-03-19 22:58:25.568764
+77 RIVN 6 BUY 2026-03-20 04:26:58.274247
+79 KLAC 1 BUY 2026-03-20 23:14:29.898458
+82 ARM 1 BUY 2026-03-21 00:41:57.052640
+83 GOOGL 1 BUY 2026-03-23 22:50:34.148593
+84 PLTR 1 BUY 2026-03-23 23:01:06.673544
+86 RIVN 13 BUY 2026-03-23 23:48:19.454354
+88 KLAC 1 BUY 2026-03-24 01:44:09.966405
+89 ONDS 6 BUY 2026-03-24 02:03:44.501117
+91 ONDS 6 BUY 2026-03-24 23:02:38.756141
+94 AMAT 1 BUY 2026-03-25 01:30:33.084148
+95 WULF 6 BUY 2026-03-25 22:46:36.305201
+98 BIIB 1 BUY 2026-03-26 00:24:13.378153
+101 BIIB 1 BUY 2026-03-26 23:09:29.948301
+102 BIIB 1 BUY 2026-03-26 23:19:47.364782
+103 MRNA 1 BUY 2026-03-27 00:23:38.891118
+104 JNJ 1 BUY 2026-03-27 01:59:17.682517
+105 EEIQ 1 BUY 2026-03-27 02:11:26.317863
+107 EEIQ 1 BUY 2026-03-27 02:35:03.099680
+110 NVD 6 BUY 2026-03-27 23:00:41.461664
+111 NVD 4 BUY 2026-03-27 23:11:10.558918
+114 MRVL 1 BUY 2026-03-27 23:46:27.715418
+115 XOM 1 BUY 2026-03-28 00:28:20.669925
+117 XOM 1 BUY 2026-03-28 00:50:12.578041
+119 XOM 1 BUY 2026-03-28 01:19:37.302219
+121 XOM 1 BUY 2026-03-28 01:40:40.473890
+123 XOM 1 BUY 2026-03-28 02:11:33.555395
+125 XOM 1 BUY 2026-03-28 02:32:32.967517
+127 XOM 1 BUY 2026-03-28 02:59:31.668664
+129 ARTL 11 BUY 2026-03-28 03:52:20.484744
+131 XOM 1 BUY 2026-03-28 04:15:09.085816
+132 PLTD 20 BUY 2026-03-28 04:29:10.267248
+134 SQQQ 2 BUY 2026-03-28 04:54:09.661140
+138 AXTI 2 BUY 2026-03-30 23:31:40.520258
+140 XOM 1 BUY 2026-03-30 23:53:29.004492
+142 PLTD 12 BUY 2026-03-31 00:16:48.250028
+143 ASTC 22 BUY 2026-03-31 00:46:35.199442
+144 SGML 5 BUY 2026-03-31 00:58:07.087165
+146 SGML 8 BUY 2026-03-31 01:22:49.657038
+Wiped XOM ghost position from DB.
+CandlePattern: []
+CandlestickDetector: ['analyze']
+CandlestickSignal: []
+======================================================================
+136 Modules Full System Integrity Check
+======================================================================
+데이터 수집 엔진 가동 중...
+[OK] AAPL 데이터 90일치 로드 완료 (Shape: (100, 6))
+
+총 49개의 분석기 어댑터가 감지되었습니다. 전수 검사를 시작합니다.
+
+[PASS] AccumulationDetectorAdapter    | 점수:  -60 | 신호: ['RANGE_AFTER_UPTREND', 'UPTHRUST_DETECTED']
+[PASS] AntiFrагilityAdapter           | 점수:    0 | 신호: []
+[PASS] CandlestickDetectorAdapter     | 점수:    0 | 신호: []
+[PASS] CreditSpreadAnalyzerAdapter    | 점수:   35 | 신호: []
+[PASS] CryptoSentimentIndicatorAdapter | 점수:   50 | 신호: ['No crypto data']
+[PASS] DivergenceDetectorAdapter      | 점수:  -95 | 신호: ['REG_BEAR_DIV:RSI', 'REG_BEAR_DIV:MACD', 'MULTI_BEAR_DIV']
+[PASS] EarningsAnalyzerAdapter        | 점수:   20 | 신호: ['BEAT_STREAK:4']
+[PASS] EarningsCalendarAdapter        | 점수:    0 | 신호: ['CLEAR']
+[PASS] EarningsQualityScorer          | 점수:    0 | 신호: []
+[PASS] EconomicSurpriseAnalyzer       | 점수:    8 | 신호: ['Financial Health:POSITIVE']
+[PASS] EstimateRevisionAnalyzer       | 점수:    0 | 신호: []
+[PASS] ETFFlowTrackerAdapter          | 점수:  -10 | 신호: ["INFLOWS:['XLV', 'XLRE']", "OUTFLOWS:['XLY', 'XLC']"]
+[PASS] EventCalendarAdapter           | 점수:    0 | 신호: []
+[PASS] FactorAnalyzerAdapter          | 점수:   13 | 신호: ['Momentum:+35']
+[PASS] FibonacciAnalyzerAdapter       | 점수:   15 | 신호: ['GOOD_RR:3.1']
+[PASS] FundamentalAnalyzerAdapter     | 점수:   55 | 신호: ['NO_PEG_DATA']
+[PASS] GapFillAnalyzerAdapter         | 점수:    0 | 신호: []
+[PASS] HighPerformanceOptimizerAdapter | 점수:    0 | 신호: []
+[PASS] InsiderInstitutionalTrackerAdapter | 점수:  -25 | 신호: ['INSIDER_NET_SELL_MASSIVE:$-97.9M (-0.033% of MC)']
+[PASS] LiquidityAnalyzerAdapter       | 점수:   50 | 신호: []
+[PASS] LiquidityFilterAdapter         | 점수:    0 | 신호: []
+[PASS] MacroAnalyzerAdapter           | 점수:   80 | 신호: ['REGIME_MarketRegime.RISK_ON', "MacroSignal(name='VIX', value=np.float64(24.24), threshold=np.float64(28.8005), is_risk_off=False, weight=25)", "MacroSignal(name='TNX', value=np.float64(0.0026922172584058217), threshold=0.004, is_risk_off=False, weight=15)", "MacroSignal(name='DXY', value=np.float64(0.0020306923625981028), threshold=0.003, is_risk_off=False, weight=15)"]
+[PASS] ManipulationDefenseAdapter     | 점수:    0 | 신호: []
+[PASS] MarketBreadthAnalyzerAdapter   | 점수:  -35 | 신호: ['HI_LO_WEAK:0H/1L']
+[PASS] MarketInternalsAnalyzerAdapter | 점수:   35 | 신호: ['TRIN_BULLISH', '⚠️ DIVERGENCE']
+[PASS] MarketPsychologyAdapter        | 점수:   46 | 신호: ['Normal strategy']
+[PASS] MeanReversionDetectorAdapter   | 점수:    0 | 신호: []
+[PASS] MLPredictorAdapter             | 점수:    0 | 신호: ['NO_ML']
+[PASS] MomentumRankerAdapter          | 점수:    0 | 신호: []
+[PASS] MultiTimeframeAdapter          | 점수:   25 | 신호: ["TimeframeSignal(timeframe='1d', trend='BULLISH', strength=80, key_level=305.01176, details=['Price > SMA20 > SMA50'])"]
+[PASS] NewsAnalyzerAdapter            | 점수:   54 | 신호: ['FAVORABLE - News supports long entry']
+[PASS] OilImpactAnalyzerAdapter       | 점수:    0 | 신호: ['No oil-driven adjustment needed']
+[PASS] OptionsAnalyzerAdapter         | 점수:   50 | 신호: []
+[PASS] OrderFlowAnalyzerAdapter       | 점수:  -50 | 신호: ['AD_DISTRIBUTION', 'OBV_BEARISH_DIVERGENCE']
+[PASS] PerformanceAttributionAdapter  | 점수:    0 | 신호: []
+[PASS] RegimeDetectorAdapter          | 점수:   70 | 신호: ['STRONG_UPTREND']
+[PASS] SectorFundFlow                 | 점수:    0 | 신호: ['TOP_INFLOW:Healthcare(+4.0%)', 'TOP_OUTFLOW:Communication(-3.8%)', 'SECTOR_UNKNOWN']
+[PASS] SentimentAnalyzerAdapter       | 점수:   30 | 신호: ['F&G:8 EXTREME_FEAR (BUY)']
+[PASS] ShortSqueezeMonitor            | 점수:    5 | 신호: ['LOW_SHORT_INTEREST:0%']
+[PASS] SmartMoneyTrackerAdapter       | 점수:   55 | 신호: ['INST_BUYING:+5.7%', 'BLOCK_TRADES:7']
+[PASS] SocialSentimentAnalyzerAdapter | 점수:    0 | 신호: []
+[PASS] SqueezeDetectorAdapter         | 점수:    0 | 신호: []
+[PASS] StatArbEngineAdapter           | 점수:    0 | 신호: []
+[PASS] StatArbAdapter                 | 점수:    0 | 신호: []
+[PASS] SupportResistanceAnalyzerAdapter | 점수:   36 | 신호: []
+[PASS] TailRiskAnalyzerAdapter        | 점수:    5 | 신호: ['NORMAL_TAIL', 'CORRELATION_SPIKE']
+[PASS] TechnicalAnalyzerAdapter       | 점수:    0 | 신호: []
+[PASS] VolumeProfileAnalyzerAdapter   | 점수:    0 | 신호: ['ABOVE_VALUE_AREA:Extended', 'AT_LVN:Breakout_Zone']
+[PASS] YenCarryMonitorAdapter         | 점수:    0 | 신호: ['[OK] Yen carry stable, no immediate risk']
+
+======================================================================
+📊 검사 결과 요약 (SUMMARY)
+======================================================================
+총 검사 모듈 수 : 49 개
+정상 작동 (PASS): 49 개
+오류 발생 (FAIL): 0 개
+
+[SUCCESS] 완벽합니다! 모든 모듈이 정상적으로 데이터를 받아오고 점수를 산출합니다.
+
+실제 분석 결과 (AAPL):
+  composite_score=73
+  action=ActionType.STRONG_BUY
+  summary=🚀 STRONG_BUY (Score: +73, Confidence: 60%)
+📈 Bullish: MACRO: No oil-driven adjustment needed, MACRO:
+
+======================================================================
+9. screener.screen() 실제 메서드 동작
+======================================================================
+메서드 목록: ['screen']
+점수 계산 메서드: None
+
+======================================================================
+10. orchestrator._run_phase_4_cycle에 ATR 사이징 코드 포함 여부
+======================================================================
+❌ ERROR: module 'orchestrator' has no attribute 'GrandOrchestrator'
+KST: 2026-06-08 18:24
+ET:  2026-06-08 05:24
+
+KST date: 2026-06-08
+ET  date: 2026-06-08
+
+=== FOMC 스케줄 전체 ===
+  FOMC: 2026-01-28
+  FOMC: 2026-03-18
+  FOMC: 2026-04-29
+  FOMC: 2026-06-17
+  FOMC: 2026-07-29
+  FOMC: 2026-09-16
+  FOMC: 2026-10-28
+  FOMC: 2026-12-09
+
+현재 KST date로 체크하면: []
+현재 ET date 기준으로 체크하면:
+  없음
+File latest_remote_log.txt not found
+=================================================================
+전체 매매 시스템 완전 감사 보고서
+=================================================================
+
+[1] 실제 성과 (전체 기간)
+  총 청산: 204건  WR: 47%  PF: 0.93
+  총 P&L: $-31.30
+  평균 수익: $+4.10  평균 손실: $3.93
+  기대값(EV): $-0.153/trade
+
+[2] 청산 이유별 성과
+  HARD_STOP                  38건 WR=0% tot=$-186.28
+  TIME_STOP                  19건 WR=68% tot=$+15.60
+  TRAILING_STOP              18건 WR=100% tot=$+50.47
+  SWING_STOP                 17건 WR=0% tot=$-58.46
+  Overbought                 16건 WR=69% tot=$+2.36
+  UPGRADE                    16건 WR=56% tot=$+5.41
+  TAKE_PROFIT                16건 WR=100% tot=$+170.93
+  MAX_HOLD                   14건 WR=43% tot=$-2.66
+  STOP                       11건 WR=0% tot=$-65.61
+  StochRSI extreme           10건 WR=100% tot=$+64.03
+  VWAP_BREAK                  6건 WR=33% tot=$+1.26
+  STALE                       5건 WR=60% tot=$-7.76
+  MACRO EXPOSURE              4건 WR=0% tot=$+0.00
+  LEVERAGED_SL                3건 WR=0% tot=$-5.75
+  TP +4.9% >= 4%              2건 WR=100% tot=$+14.70
+  TP +6.1% >= 5%              1건 WR=100% tot=$+5.69
+  TP +7.4% >= 3%              1건 WR=100% tot=$+1.33
+  TP +5.8% >= 3%              1건 WR=100% tot=$+0.34
+  TP +5.1% >= 4%              1건 WR=100% tot=$+0.27
+  TP +3.5% >= 3%              1건 WR=100% tot=$+3.75
+  EARLY_CUT                   1건 WR=0% tot=$-7.79
+  LEVERAGED_TIMEOUT           1건 WR=0% tot=$-0.77
+  EMERGENCY_STOP              1건 WR=0% tot=$-35.23
+  TRAIL(Lock)                 1건 WR=100% tot=$+2.85
+
+[3] 보유 시간 분석
+
+[4] 핵심 파라미터
+  STOP_LOSS_PCT: 0.04
+  TAKE_PROFIT_PCT: 0.12
+  TRAILING_TRIGGER_PCT: 0.04
+  TRAILING_STOP_PCT: 0.02
+  MAX_POSITIONS: 7
+  MAX_DAILY_TRADES: 6
+
+[5] 진입 조건 핵심 체크
+  RSI 사용: True  MACD: False  BB: True
+  Volume: True  Trend: True
+  차단 조건: 17개  진입 조건: 1개
+
+[6] 현재 포지션 상태
+  포지션 조회 실패: module 'config' has no attribute 'APP_KEY'
+Strategy members:
+  Dict
+  EntrySignal
+  Enum
+  ExitSignal
+  FALLBACK_SYMBOLS
+  IndicatorSummary
+  List
+  MarketPhase
+  Optional
+  PHASE_CONFIGS
+  PhaseConfig
+  Position
+  StrategyEngine
+  _build_phase_configs
+  _strategy
+  analyze_all
+  calculate_adx
+  calculate_atr
+  calculate_bollinger
+  calculate_macd
+  calculate_stochastic_rsi
+  calculate_vwap
+  config
+  dataclass
+  datetime
+  get_composite_engine
+  get_market_phase
+  get_options_score
+  get_sigma_range
+  get_signal_aggregator
+  get_strategy
+  get_vix_snapshot
+  is_near_max_pain
+  logger
+  pd
+  pytz
+  time
+  yf
+----------------------------------------
+Python Path: ['/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '.', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/home/ubuntu/kis-auto-trading/venv/lib/python3.10/site-packages', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading', '/home/ubuntu/kis-auto-trading']
+Strategy File: /home/ubuntu/kis-auto-trading/strategy.py
+Strategy Members: ['Dict', 'EntrySignal', 'Enum', 'ExitSignal', 'FALLBACK_SYMBOLS', 'IndicatorSummary', 'List', 'MarketPhase', 'Optional', 'PHASE_CONFIGS', 'PhaseConfig', 'Position', 'StrategyEngine', '_build_phase_configs', '_strategy', 'analyze_all', 'calculate_adx', 'calculate_atr', 'calculate_bollinger', 'calculate_macd', 'calculate_stochastic_rsi', 'calculate_vwap', 'config', 'dataclass', 'datetime', 'get_composite_engine', 'get_market_phase', 'get_options_score', 'get_sigma_range', 'get_signal_aggregator', 'get_strategy', 'get_vix_snapshot', 'is_near_max_pain', 'logger', 'pd', 'pytz', 'time', 'yf']
+----------------------------------------
+SUCCESS: get_strategy imported successfully
+Total Python Modules Scanned: 426
+========================================
+Modules using API [yfinance] (Count: 120):
+  liquidity_analyzer.py, adaptive_strategy.py, manipulation_defense.py, anti_fragility.py, main.py, multi_timeframe.py, candlestick.py, divergence.py, oil_impact.py, economic_surprise.py, remote_module_test.py, alpha_generator.py, support_resistance.py, test_ticker_shim.py, social_sentiment.py... and 105 more
+
+Modules using API [kis_data] (Count: 48):
+  orchestrator.py, deploy_reliable.py, final_verify.py, sentiment.py, premarket.py, multi_timeframe.py, candlestick.py, full_audit.py, remote_kis_data.py, strategy.py, test_adapters.py, test_ohlcv.py, remote_data_proxy.py, test_fetch.py, momentum_ranking.py... and 33 more
+
+Modules using API [requests] (Count: 44):
+  sentiment.py, debug_kis_pos.py, test_ohlcv_detail5.py, sell_hst_exact.py, auth.py, check_paper_balance.py, server_raw_balance.py, sell_hst_only.py, remote_kis_data.py, check_state.py, deploy_fix.py, test_ohlcv_detail3.py, notifier.py, check_kis_detail.v2.py, test_kis_api.py... and 29 more
+
+Modules using API [beautiful_soup] (Count: 1):
+  audit_script.py
+
+Modules using API [selenium] (Count: 1):
+  audit_script.py
+
+Modules using API [database] (Count: 75):
+  server_read_db.py, reset_server_bot.py, diag.py, inspect_db_local.py, final_verify.py, server_check_db_v2.py, clean_stale.py, full_audit.py, audit_swap.py, dashboard_app.py, list_trades.py, database.py, check_hst_trades.py, query_cbt_trade.py, inspect_trades.py... and 60 more
+
+Found dates to backfill: ['2026-02-24', '2026-02-26', '2026-02-27', '2026-03-05', '2026-03-06', '2026-03-08', '2026-03-09', '2026-03-10', '2026-03-11', '2026-03-12', '2026-03-13', '2026-03-16', '2026-03-17', '2026-03-19', '2026-03-20', '2026-03-23', '2026-03-24', '2026-03-25', '2026-03-26', '2026-03-27', '2026-03-29', '2026-03-30', '2026-03-31', '2026-04-01', '2026-04-02', '2026-04-06', '2026-04-07', '2026-04-08', '2026-04-09', '2026-04-10', '2026-04-13', '2026-04-14', '2026-04-15', '2026-04-16', '2026-04-17', '2026-04-20', '2026-04-21', '2026-04-24', '2026-04-26', '2026-04-27', '2026-04-28', '2026-04-29', '2026-04-30', '2026-05-01', '2026-05-03', '2026-05-04', '2026-05-05', '2026-05-06', '2026-05-07', '2026-05-08', '2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14', '2026-05-15', '2026-05-17', '2026-05-20', '2026-05-22', '2026-05-25', '2026-06-01', '2026-06-03', '2026-06-04', '2026-06-05']
+Date: 2026-02-24 | PNL: 0.0 | W: 0 | L: 1
+Date: 2026-02-26 | PNL: -0.5099999999999909 | W: 0 | L: 3
+Date: 2026-02-27 | PNL: 0.0 | W: 0 | L: 2
+Date: 2026-03-05 | PNL: -3.2619999999999933 | W: 0 | L: 2
+Date: 2026-03-06 | PNL: 4.091100000000036 | W: 4 | L: 4
+Date: 2026-03-08 | PNL: 0.2192999999999934 | W: 2 | L: 0
+Date: 2026-03-09 | PNL: 3.7540000000000395 | W: 6 | L: 4
+Date: 2026-03-10 | PNL: 14.839999999999982 | W: 3 | L: 1
+Date: 2026-03-11 | PNL: -36.052 | W: 2 | L: 1
+Date: 2026-03-12 | PNL: 1.0000000000000009 | W: 1 | L: 0
+Date: 2026-03-13 | PNL: -5.289900000000003 | W: 0 | L: 1
+Date: 2026-03-16 | PNL: -3.2699999999999996 | W: 0 | L: 1
+Date: 2026-03-17 | PNL: -4.383499999999993 | W: 1 | L: 1
+Date: 2026-03-19 | PNL: 2.594999999999999 | W: 1 | L: 0
+Date: 2026-03-20 | PNL: -31.78500000000003 | W: 0 | L: 3
+Date: 2026-03-23 | PNL: 6.184200000000015 | W: 3 | L: 0
+Date: 2026-03-24 | PNL: -14.026299999999964 | W: 1 | L: 2
+Date: 2026-03-25 | PNL: -36.89000000000004 | W: 0 | L: 3
+Date: 2026-03-26 | PNL: -5.050099999999995 | W: 0 | L: 3
+Date: 2026-03-27 | PNL: -19.708299999999994 | W: 5 | L: 6
+Date: 2026-03-29 | PNL: -3.2852999999999923 | W: 0 | L: 1
+Date: 2026-03-30 | PNL: -7.869400000000011 | W: 4 | L: 4
+Date: 2026-03-31 | PNL: 2.334999999999982 | W: 2 | L: 2
+Date: 2026-04-01 | PNL: -1.6745999999999892 | W: 1 | L: 4
+Date: 2026-04-02 | PNL: 13.70819999999999 | W: 3 | L: 0
+Date: 2026-04-06 | PNL: -8.23339999999999 | W: 2 | L: 5
+Date: 2026-04-07 | PNL: -35.2315 | W: 0 | L: 1
+Date: 2026-04-08 | PNL: -4.590000000000003 | W: 1 | L: 1
+Date: 2026-04-09 | PNL: 1.6500000000000057 | W: 1 | L: 0
+Date: 2026-04-10 | PNL: -4.400000000000048 | W: 1 | L: 3
+Date: 2026-04-13 | PNL: 2.6408999999999736 | W: 2 | L: 1
+Date: 2026-04-14 | PNL: -2.5900000000000034 | W: 1 | L: 3
+Date: 2026-04-15 | PNL: 3.3279999999999745 | W: 4 | L: 3
+Date: 2026-04-16 | PNL: 6.1615027465820305 | W: 3 | L: 3
+Date: 2026-04-17 | PNL: 1.8700000000000045 | W: 1 | L: 0
+Date: 2026-04-20 | PNL: -7.990999999999978 | W: 1 | L: 3
+Date: 2026-04-21 | PNL: -1.3900999999999897 | W: 0 | L: 1
+Date: 2026-04-24 | PNL: -3.819999999999993 | W: 0 | L: 1
+Date: 2026-04-26 | PNL: -3.640000000000015 | W: 0 | L: 1
+Date: 2026-04-27 | PNL: 4.5849999999999795 | W: 3 | L: 1
+Date: 2026-04-28 | PNL: 0.5999999999999943 | W: 1 | L: 1
+Date: 2026-04-29 | PNL: -8.809999999999974 | W: 0 | L: 3
+Date: 2026-04-30 | PNL: 5.6699999999999875 | W: 3 | L: 1
+Date: 2026-05-01 | PNL: 0.11999999999999034 | W: 1 | L: 1
+Date: 2026-05-03 | PNL: 21.70999999999998 | W: 2 | L: 0
+Date: 2026-05-04 | PNL: 5.710199999999972 | W: 3 | L: 1
+Date: 2026-05-05 | PNL: 47.71000000000005 | W: 2 | L: 1
+Date: 2026-05-06 | PNL: 16.171999999999997 | W: 2 | L: 0
+Date: 2026-05-07 | PNL: -3.394999999999982 | W: 1 | L: 2
+Date: 2026-05-08 | PNL: 7.504300000000011 | W: 3 | L: 1
+Date: 2026-05-10 | PNL: 5.22999999999999 | W: 2 | L: 1
+Date: 2026-05-11 | PNL: 3.490000000000009 | W: 2 | L: 0
+Date: 2026-05-12 | PNL: -13.119609765625036 | W: 1 | L: 3
+Date: 2026-05-13 | PNL: 35.56690000000001 | W: 4 | L: 4
+Date: 2026-05-14 | PNL: -26.979000000000024 | W: 1 | L: 5
+Date: 2026-05-15 | PNL: 3.680000000000007 | W: 1 | L: 0
+Date: 2026-05-17 | PNL: -8.131299999999996 | W: 0 | L: 3
+Date: 2026-05-20 | PNL: 29.370005493164058 | W: 2 | L: 0
+Date: 2026-05-22 | PNL: 13.405001525878916 | W: 2 | L: 0
+Date: 2026-05-25 | PNL: -5.154996337890623 | W: 1 | L: 1
+Date: 2026-06-01 | PNL: 15.194999999999993 | W: 1 | L: 0
+Date: 2026-06-03 | PNL: 14.100000000000023 | W: 1 | L: 0
+Date: 2026-06-04 | PNL: -9.590000000000003 | W: 1 | L: 2
+Date: 2026-06-05 | PNL: -5.375 | W: 0 | L: 2
+Backfill complete.
+=== ARTL TRADES ===
+{'id': 151, 'side': 'SELL', 'entry': None, 'exit': '2026-04-01 00:42:43', 'pnl': 6.96, 'reason': 'TAKE_PROFIT: P&L +7.0% >= +2.4%'}
+{'id': 150, 'side': 'BUY', 'entry': '2026-04-01 00:16:59', 'exit': '2026-05-30 02:54:11', 'pnl': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API'}
+{'id': 130, 'side': 'SELL', 'entry': None, 'exit': '2026-03-28 04:03:01', 'pnl': -7.1, 'reason': 'HARD_STOP: P&L -7.1% <= -3%'}
+{'id': 129, 'side': 'BUY', 'entry': '2026-03-28 03:52:20', 'exit': '2026-05-30 02:54:11', 'pnl': 0.0, 'reason': 'DB_SYNC_FIX: position no longer in KIS API'}
+=== ARTL TRADES ===
+[SELL] PnL: 6.96% | Price: 9.91 | Reason: TAKE_PROFIT: P&L +7.0% >= +2.4% | In: None | Out: 2026-04-01 00:42:43
+[BUY] PnL: 0.0% | Price: 9.265 | Reason: DB_SYNC_FIX: position no longer in KIS API | In: 2026-04-01 00:16:59 | Out: 2026-05-30 02:54:11
+[SELL] PnL: -7.1% | Price: 12.0469 | Reason: HARD_STOP: P&L -7.1% <= -3% | In: None | Out: 2026-03-28 04:03:01
+[BUY] PnL: 0.0% | Price: 12.9672 | Reason: DB_SYNC_FIX: position no longer in KIS API | In: 2026-03-28 03:52:20 | Out: 2026-05-30 02:54:11
+=== CDNS 전체 거래 내역 ===
+  ID=410 | BUY  | qty=1 | $376.54 | 2026-05-26 22:52 | OPEN | None
+  ID=411 | BUY  | qty=1 | $379.42 | 2026-05-26 23:03 | OPEN | None
+  ID=413 | SELL | qty=1 | $395.00 | None | CLOSED | StochRSI extreme: 1.00
+DB: trades.db | Tables: ['trades', 'sqlite_sequence', 'daily_stats', 'positions', 'sent_reports']
+  trades: ['id', 'symbol', 'side', 'quantity', 'price', 'total', 'entry_time', 'exit_time', 'pnl', 'pnl_pct', 'reason', 'regime', 'created_at']
+    rows: 430
+  sqlite_sequence: ['name', 'seq']
+    rows: 1
+  daily_stats: ['date', 'starting_balance', 'ending_balance', 'trades_count', 'wins', 'losses', 'gross_pnl', 'net_pnl', 'max_drawdown', 'regime']
+    rows: 69
+  positions: ['symbol', 'quantity', 'avg_price', 'entry_time', 'updated_at']
+    rows: 6
+  sent_reports: ['report_type', 'report_date', 'sent_at']
+    rows: 65
+DB: server_trades.db | Tables: []
+DB: trading.db | Tables: []
+DB: trade_journal.db | Tables: ['trades']
+  trades: ['id', 'timestamp', 'symbol', 'action', 'quantity', 'price', 'total_value', 'strategy', 'regime', 'composite_score', 'stop_loss', 'take_profit', 'pnl', 'pnl_pct', 'closed_at', 'notes']
+    rows: 0
+
+
+=== 거래 데이터 분석 ===
+Found data in trades.db.trades:
+  Columns: ['id', 'symbol', 'side', 'quantity', 'price', 'total', 'entry_time', 'exit_time', 'pnl', 'pnl_pct', 'reason', 'regime', 'created_at']
+  Total rows: 430
+--- MODULE LOAD SUMMARY ---
+2026-06-08 03:52:13.235 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:05:06.627 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:05:28.331 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:06:15.461 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:06:42.981 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:07:10.491 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:08:23.524 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:08:58.871 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:10:06.284 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:10:37.716 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:12:08.360 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:12:45.521 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:13:24.314 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+2026-06-08 18:14:02.526 | INFO     | orchestrator:phase_1_boot_infrastructure:202 - Phase 1 Complete. Modules: 11/11 loaded
+
+--- RECENT ERRORS (last 20) ---
+Mapping in ExchangeMapper: NASD
+
+Checking exchange: NASD
+
+Checking exchange: NYS
+
+Checking exchange: AMS
+
+Checking exchange: NAS
+
+Checking exchange: NYS
+
+Checking exchange: AMS
+KIS_CANO: 44017117
+--- API Status ---
+HST not found in API positions
+
+--- Strategy Internal Status ---
+HST not in strategy positions
+Discovered 83 potential modules
+Check complete.
+Traceback (most recent call last):
+  File "/home/ubuntu/kis-auto-trading/check_macro_score.py", line 10, in <module>
+    from global_macro import get_macro_module
+ImportError: cannot import name 'get_macro_module' from 'global_macro' (/home/ubuntu/kis-auto-trading/global_macro.py)
+
+Error analyzing macro: cannot import name 'get_macro_module' from 'global_macro' (/home/ubuntu/kis-auto-trading/global_macro.py)
+  ai_judge.Position: ['update_trailing_stop']
+  ai_judge.StrategyConfig: []
+  alpha_generator.AlphaGenerator: ['generate', 'rank_symbols']
+  alpha_generator.AlphaSignal: []
+  anti_fragility.AntiFragilePosition: []
+  anti_fragility.AntiFrагility: ['get_crisis_actions', 'get_hedge_positions', 'get_opportunity_score']
+  cost_model.CostModel: ['adjust_target', 'calculate_entry_cost', 'calculate_round_trip', 'get_cap_size', 'is_trade_worth_it']
+  cost_model.TradeCost: []
+  drawdown_controller.DrawdownController: ['force_stop', 'is_halted', 'reset', 'update_capital']
+  drawdown_controller.DrawdownState: []
+  drawdown_recovery.DrawdownRecovery: ['get_adjusted_score_threshold', 'get_drawdown', 'get_phase', 'get_position_size', 'update']
+  drawdown_recovery.RecoveryConfig: []
+  drawdown_recovery.RecoveryPhase: []
+  dynamic_scaling.DynamicScaler: ['calculate_position_size', 'get_config', 'get_growth_plan', 'update_capital']
+  dynamic_scaling.ScalingConfig: []
+  dynamic_stop.DynamicStopManager: ['get_stops', 'register_position']
+  dynamic_stop.DynamicStopResult: []
+  dynamic_stop.StopLossLevels: []
+  dynamic_stop.VolatilityRegime: []
+  economic_calendar.CalendarCheck: []
+  economic_calendar.EconomicCalendar: ['check_today', 'get_todays_events', 'is_safe_to_trade', 'should_reduce_exposure']
+  economic_calendar.EconomicEvent: []
+  emergency_stop.EmergencyState: []
+  emergency_stop.EmergencyStop: ['check_daily_loss', 'check_flash_crash', 'check_portfolio_loss', 'check_recovery', 'check_vix_spike', 'report_error', 'reset']
+  execution_tracker.ExecutionRecord: []
+  execution_tracker.ExecutionStats: []
+  execution_tracker.ExecutionTracker: ['get_optimal_time', 'get_stats', 'record']
+  exit_optimizer.ExitOptimizer: ['should_exit']
+  exit_optimizer.ExitSignal: []
+  frequency_controller.FrequencyConfig: []
+  frequency_controller.FrequencyController: ['can_trade', 'get_scan_interval', 'record_trade']
+  frequency_controller.TradeWindow: []
+  frequency_controller.TradingStyle: []
+  gap_scanner.GapScanResult: []
+  gap_scanner.GapScanner: ['scan']
+  gap_scanner.GapStock: []
+  hedge_manager.HedgeAllocation: []
+  hedge_manager.HedgeManager: ['get_allocation', 'get_total_hedge_pct', 'update_hedge', 'update_portfolio']
+  high_performance.HighPerformanceOptimizer: ['calculate_position_size', 'get_expected_metrics', 'get_targets', 'set_mode', 'should_trade']
+  high_performance.PerformanceConfig: []
+  high_performance.PerformanceMode: []
+  kelly_criterion.KellyCriterion: ['calculate', 'from_historical']
+  kelly_criterion.KellyResult: []
+  macro_shield.FilterResult: []
+  macro_shield.MacroRiskManager: ['calculate_macro_score', 'fetch_data', 'filter_macro_headwinds', 'filter_market_breadth', 'filter_sector_sentiment', 'filter_vix_regime', 'get_position_size', 'get_safe_basket', 'should_rotate_to_safe']
+  macro_shield.MacroScore: []
+  macro_shield.RiskLevel: []
+  macro_shield.SafeBasket: []
+  manipulation_defense.ManipulationAlert: []
+  manipulation_defense.ManipulationDefense: ['analyze_volume_spike', 'detect_fake_breakout', 'detect_stop_hunt', 'full_scan', 'get_smart_stop', 'is_safe_time']
+  manipulation_defense.SmartStopLevel: []
+  ml_predictor.MLPrediction: []
+  ml_predictor.MLPredictor: ['predict', 'retrain']
+  monte_carlo.MonteCarloResult: []
+  monte_carlo.MonteCarloSimulator: ['simulate']
+  notification.NotificationManager: ['alert_daily_summary', 'alert_emergency', 'alert_status', 'alert_trade', 'send_all', 'send_discord', 'send_telegram']
+  performance_attribution.PerformanceAttribution: ['analyze', 'get_best_performers', 'get_strategy_stats', 'record_trade']
+  performance_attribution.StrategyStats: []
+  performance_diagnosis.DiagnosisReport: []
+  performance_diagnosis.PerformanceDiagnosis: ['analyze_by_regime', 'analyze_by_strategy', 'diagnose', 'get_improvement_priority', 'get_problem_trades', 'record_trade', 'run_diagnosis']
+  performance_diagnosis.TradeAnalysis: []
+  portfolio.OptimizedPortfolio: []
+  portfolio.PortfolioAllocation: []
+  portfolio.PortfolioOptimizer: ['optimize']
+  position_sizer.PositionSizeResult: []
+  position_sizer.PositionSizer: ['calculate']
+  premarket.PremarketAnalyzer: ['analyze_stock', 'get_gap_down_candidates', 'get_gap_up_candidates', 'is_premarket_hours', 'scan_and_alert', 'scan_watchlist']
+  premarket.PremarketStock: []
+  realtime_monitor.NewsAlert: []
+  realtime_monitor.PriceAlert: []
+  realtime_monitor.RealTimeMonitor: ['add_position', 'check_now', 'remove_position', 'set_watchlist', 'start_monitoring', 'stop_monitoring']
+  reporter.PerformanceReporter: ['generate_daily_report', 'generate_weekly_report', 'get_symbol_performance', 'get_top_performers', 'send_daily_summary', 'send_weekly_report', 'send_yearly_report']
+  reporter.TradingReporter: ['generate_daily_report', 'generate_weekly_report', 'get_symbol_performance', 'get_top_performers', 'send_daily_summary', 'send_weekly_report', 'send_yearly_report']
+  smart_order.ExecutionPlan: []
+  smart_order.OrderStatus: []
+  smart_order.OrderType: []
+  smart_order.SmartOrder: []
+  smart_order.SmartOrderExecutor: ['cancel_order', 'create_execution_plan', 'execute', 'get_order']
+  stress_test.PortfolioStressTest: ['run_test']
+  stress_test.StressScenario: []
+  stress_test.StressTestResult: []
+  tax_optimizer.HarvestOpportunity: []
+  tax_optimizer.TaxLot: []
+  tax_optimizer.TaxOptimizer: ['add_realized', 'find_harvest_opportunities', 'get_tax_summary', 'record_harvest', 'should_harvest']
+  trade_journal.TradeJournal: ['close_trade', 'get_recent', 'get_stats', 'log_trade']
+  trade_journal.TradeLog: []
+  trailing_stop.TrailingStopManager: ['add_position', 'remove_position', 'update']
+  trailing_stop.TrailingStopState: []
+  winrate_optimizer.TradeQualityScore: []
+  winrate_optimizer.WinRateOptimizer: ['evaluate', 'optimize', 'quick_check']
+=== 동작하는 데이터 모듈 ===
+  OK: earnings_analyzer
+  OK: earnings_calendar
+  OK: insider_tracker
+  OK: news_analyzer
+  OK: social_sentiment
+  OK: sentiment
+  OK: options_flow
+  OK: options_metrics
+  OK: order_flow
+  OK: smart_money
+  OK: market_breadth
+  OK: market_internals
+  OK: etf_flows
+  OK: sector_fund_flow
+  OK: short_squeeze
+  OK: crypto_sentiment
+  OK: geopolitical
+  OK: intermarket
+  OK: fundamental_analyzer
+  OK: factor_analysis
+  OK: seasonality
+  OK: fed_watch
+  OK: vix_structure
+  OK: global_macro
+  OK: macro
+
+=== 오류 모듈 ===
+--- Trades DB ---
+ID:383 Side:SELL Price:181.88 Qty:1 Time:2026-05-15 02:21:40.373998 Reason:SWING_STOP: P&L -2.3% Regime:None
+ID:381 Side:BUY Price:186.125 Qty:1 Time:2026-05-15 00:55:32.425412 Reason:DB_SYNC_FIX: position no longer in KIS API Regime:BULL_NORMAL
+ID:375 Side:SELL Price:189.6 Qty:2 Time:2026-05-14 22:52:32.859702 Reason:TAKE_PROFIT: +7.5% >= +6.0% ( 22h) Regime:None
+ID:366 Side:BUY Price:176.99 Qty:1 Time:2026-05-14 00:27:18.426851 Reason:DB_SYNC_FIX: position no longer in KIS API Regime:BULL_NORMAL
+ID:362 Side:BUY Price:175.45 Qty:1 Time:2026-05-13 22:55:47.957906 Reason:DB_SYNC_FIX: position no longer in KIS API Regime:BULL_NORMAL
+ID:135 Side:SELL Price:91.1697 Qty:1 Time:2026-03-30 22:49:23.375298 Reason:HARD_STOP: P&L -3.5% <= -1.2% Regime:None
+ID:114 Side:BUY Price:94.53 Qty:1 Time:2026-03-27 23:46:27.715418 Reason:DB_SYNC_FIX: position no longer in KIS API Regime:BEAR_NORMAL
+ID:60 Side:SELL Price:87.8351 Qty:1 Time:2026-03-14 00:40:16.303004 Reason:STALE: 73h held, P&L -5.7% Regime:None
+ID:48 Side:BUY Price:93.1 Qty:1 Time:2026-03-10 23:46:04.281650 Reason:DB_SYNC_FIX: position no longer in KIS API Regime:CHOPPY
+ID:44 Side:SELL Price:90.61 Qty:2 Time:2026-03-10 03:27:14.062835 Reason:STALE: 72h held, P&L -2.5% Regime:None
+
+--- Recent MRVL Log Entries ---
+Scanning /home/ubuntu/kis-auto-trading/logs/trading_bot.log...
+Scanning /home/ubuntu/kis-auto-trading/logs/trading_bot.2026-06-03_05-27-58_200427.log...
+=== 현재 오픈 포지션 (DB) ===
+  QCOM   | BUY  | qty=1 | price=$221.67 | entry=2026-06-06 01:20
+  ARE    | BUY  | qty=1 | price=$52.85 | entry=2026-06-06 00:07
+  DINO   | BUY  | qty=1 | price=$72.44 | entry=2026-06-05 23:47
+  WPC    | BUY  | qty=1 | price=$74.05 | entry=2026-06-05 22:44
+  MNST   | BUY  | qty=1 | price=$89.20 | entry=2026-06-05 02:54
+  AWR    | BUY  | qty=1 | price=$76.77 | entry=2026-06-05 02:12
+  CBT    | BUY  | qty=1 | price=$85.31 | entry=2026-06-04 03:14
+  BTSG   | BUY  | qty=1 | price=$60.35 | entry=2026-06-04 03:05
+  CNC    | BUY  | qty=1 | price=$59.63 | entry=2026-06-04 02:49
+  CDP    | BUY  | qty=5 | price=$31.71 | entry=2026-06-04 02:22
+
+=== 최근 BUY 10건 ===
+  QCOM   | qty=1 | $221.67 | 2026-06-06 01:20 | OPEN
+  ARE    | qty=1 | $52.85 | 2026-06-06 00:07 | OPEN
+  DINO   | qty=1 | $72.44 | 2026-06-05 23:47 | OPEN
+  WPC    | qty=1 | $74.05 | 2026-06-05 22:44 | OPEN
+  MNST   | qty=1 | $89.20 | 2026-06-05 02:54 | OPEN
+  AWR    | qty=1 | $76.77 | 2026-06-05 02:12 | OPEN
+  CBT    | qty=1 | $85.31 | 2026-06-04 03:14 | OPEN
+  BTSG   | qty=1 | $60.35 | 2026-06-04 03:05 | OPEN
+  CNC    | qty=1 | $59.63 | 2026-06-04 02:49 | OPEN
+  CDP    | qty=5 | $31.71 | 2026-06-04 02:22 | OPEN
+Tables: []
+trades table error: no such table: trades
+=== 전체 거래 통계 (0 건) ===
+승률: 0/0 = 0.0%
+총 손익: $0.00
+평균 수익(승): $0.00
+평균 손실(패): $0.00
+
+=== 최근 30일 (0 건) ===
+승률: 0/0 = 0.0%
+총 손익: $0.00
+
+=== 최근 10건 ===
+
+=== 현재 보유 포지션 ===
+Position query error: no such table: trades
+==================================================
+전체 거래 통계 (총 204건)
+==================================================
+승률: 96/204 = 47.1%
+총 손익: $-31.30
+평균 수익: $4.10
+평균 손실: $-3.93
+손익비(PF): 1.04
+기대값(EV): $-0.15/trade
+
+=== 최근 30일 (44건) ===
+승률: 22/44 = 50.0%
+총 손익: $59.19
+
+=== 최근 7일 (7건) ===
+승률: 3/7 = 42.9%
+총 손익: $14.33
+
+=== 최근 20건 상세 ===
+종목          PNL     수익률  이유
+❌ ARE     -1.39$ (-0.0%)  UPGRADE: ARE(62) -> NOV(89)
+❌ CBT     -3.98$ (-0.0%)  UPGRADE: CBT(59) -> QCOM(84)
+❌ AKAM    -9.38$ (-0.1%)  HARD_STOP: P&L -5.8% <= -5%
+❌ BTSG    -3.06$ (-0.1%)  HARD_STOP: P&L -5.1% <= -5%
+✅ CNC     +2.85$ (+0.0%)  TRAIL(Lock): $62.48 <= $62.50
+✅ ADM     +14.10$ (+0.0%)  StochRSI extreme: 1.00
+✅ CDNS    +15.19$ (+0.0%)  StochRSI extreme: 1.00
+✅ ORCL    +0.22$ (+0.0%)  MAX_HOLD: 14.6 ,   (+0.1%)
+❌ FANG    -5.37$ (-0.0%)  MAX_HOLD: 18.3거래일 초과, 강제 청산 (-
+✅ ON      +6.81$ (+0.1%)  TAKE_PROFIT: +6.3% >= +6.0% ( 
+✅ ON      +6.60$ (+0.1%)  TAKE_PROFIT: +6.1% >= +6.0% (보
+✅ ARM     +27.09$ (+0.1%)  TAKE_PROFIT: +10.7% >= +6.0% (
+✅ NXPI    +2.28$ (+0.0%)  TRAILING_STOP: $303.32 <= $305
+❌ ON      -2.67$ (-0.0%)  MAX_HOLD: 10.8거래일 초과, 강제 청산 (-
+❌ MNST    -0.11$ (-0.0%)  MAX_HOLD: 10.8거래일 초과, 강제 청산 (-
+❌ LNTH    -5.35$ (-0.0%)  MAX_HOLD: 14.1거래일 초과, 강제 청산 (-
+✅ DELL    +3.68$ (+0.0%)  TRAILING_STOP: $242.74 <= $242
+❌ MARA    -11.34$ (-0.0%)  SWING_STOP: P&L -4.8%
+❌ LI      -9.68$ (-0.1%)  HARD_STOP: -5.0% <= -4.9% (보유 
+❌ ON      -3.53$ (-0.0%)  SWING_STOP: P&L -3.0%
+
+=== 종목별 성과 ===
+RIOT    3트레이드  승률67%  +39.59$
+ARM     6트레이드  승률67%  +32.82$
+LNTH    12트레이드  승률58%  +18.24$
+CDNS    1트레이드  승률100%  +15.19$
+ADM     1트레이드  승률100%  +14.10$
+FIGR    2트레이드  승률100%  +13.32$
+RKLB    3트레이드  승률100%  +10.79$
+MU      1트레이드  승률100%  +10.41$
+ON      5트레이드  승률60%  +9.30$
+MRVL    6트레이드  승률17%  +8.91$
+FORM    2트레이드  승률50%  +8.87$
+FANG    3트레이드  승률67%  +8.37$
+ROKU    3트레이드  승률67%  +7.99$
+RZLV    2트레이드  승률100%  +7.68$
+INTC    5트레이드  승률60%  +6.65$
+
+=== daily_stats 최근 7일 ===
+2026-06-05  0건 승률0%  +0.00$  잔고$0.00
+2026-06-04  0건 승률100%  +0.00$  잔고$0.00
+2026-06-03  0건 승률100%  +0.00$  잔고$0.00
+2026-06-01  0건 승률100%  +0.00$  잔고$0.00
+2026-05-25  0건 승률100%  +0.00$  잔고$0.00
+2026-05-22  0건 승률200%  +0.00$  잔고$0.00
+2026-05-20  0건 승률200%  +0.00$  잔고$0.00
+PLTD Close on Feb 27: 8.15
+PLTD ATR on Feb 27: 0.3961
+1.5x ATR Stop Loss: 7.56
+2.0x ATR Stop Loss: 7.36
+2.5x ATR Stop Loss: 7.16
+{'id': 430, 'symbol': 'ARE', 'quantity': 1, 'price': 51.46, 'total': 51.46, 'pnl': -1.3900000000000006, 'exit_time': '2026-06-06 02:30:51.467610'}
+{'id': 428, 'symbol': 'CBT', 'quantity': 1, 'price': 81.4, 'total': 81.4, 'pnl': -3.9849999999999994, 'exit_time': '2026-06-06 01:19:19.092215'}
+{'id': 425, 'symbol': 'AKAM', 'quantity': 1, 'price': 152.74, 'total': 152.74, 'pnl': -9.379999999999995, 'exit_time': '2026-06-05 22:51:03.425122'}
+{'id': 423, 'symbol': 'BTSG', 'quantity': 1, 'price': 57.32, 'total': 57.32, 'pnl': -3.0600000000000023, 'exit_time': '2026-06-05 03:18:02.560606'}
+{'id': 421, 'symbol': 'CNC', 'quantity': 1, 'price': 62.48, 'total': 62.48, 'pnl': 2.8499999999999943, 'exit_time': '2026-06-05 02:31:02.979339'}
+{'id': 415, 'symbol': 'ADM', 'quantity': 4, 'price': 84.01, 'total': 336.04, 'pnl': 14.100000000000023, 'exit_time': '2026-06-03 23:30:46.403501'}
+{'id': 413, 'symbol': 'CDNS', 'quantity': 1, 'price': 394.995, 'total': 394.995, 'pnl': 15.194999999999993, 'exit_time': '2026-06-02 00:06:27.778272'}
+{'id': 409, 'symbol': 'ORCL', 'quantity': 1, 'price': 192.69, 'total': 192.69, 'pnl': 0.21999999999999886, 'exit_time': '2026-05-26 22:42:44.744901'}
+{'id': 408, 'symbol': 'FANG', 'quantity': 1, 'price': 199.59, 'total': 199.59, 'pnl': -5.374996337890622, 'exit_time': '2026-05-26 22:37:26.655038'}
+{'id': 406, 'symbol': 'ON', 'quantity': 1, 'price': 115.54, 'total': 115.54, 'pnl': 6.805000000000007, 'exit_time': '2026-05-22 23:41:03.680022'}
+2026-06-08 18:25:16.089 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:16.685 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:17.238 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:17.991 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:18.542 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:19.092 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:19.643 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:20.194 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:20.744 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:21.295 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:21.845 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:22.396 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:22.947 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:23.497 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:24.048 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:24.599 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:25.149 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:25.700 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:26.251 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:26.801 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:27.352 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:27.902 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:28.453 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:29.004 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:29.554 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:30.105 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:30.656 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:31.206 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:31.757 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:32.308 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:32.858 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:33.409 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:33.960 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:34.510 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:35.061 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:35.611 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:36.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:36.713 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:37.264 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:37.815 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:38.365 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:38.916 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:39.467 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:40.017 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:40.568 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:41.119 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:41.669 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:42.220 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:42.771 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:43.321 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:43.872 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:44.422 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:44.973 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:45.524 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:46.074 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:46.625 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:47.176 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:47.726 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:48.277 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:48.827 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:49.378 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:49.929 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:50.479 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:51.030 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:51.581 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:52.131 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:52.682 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:53.232 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:53.783 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:54.334 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:54.884 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:55.435 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:55.986 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:56.536 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:57.087 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:57.638 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:58.188 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:58.739 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:59.289 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:25:59.840 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:00.391 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:00.941 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:01.492 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:02.043 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:02.593 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:03.144 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:03.695 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:04.245 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:04.796 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:05.346 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:05.897 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:06.448 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:06.998 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:07.549 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:08.099 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:08.650 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:09.201 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:09.753 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:10.303 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:10.854 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:11.405 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:11.955 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:12.506 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:13.057 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:13.607 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:14.158 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:14.686 | WARNING  | kis_data:get_daily_ohlcv:277 - Could not fetch daily OHLCV for BFB via KIS API, falling back to yfinance
+2026-06-08 18:26:14.686 | WARNING  | kis_data:get_daily_ohlcv:280 - yfinance daily OHLCV fallback bypassed because DISABLE_OPTIONS_FLOW=true
+2026-06-08 18:26:14.709 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:15.259 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:15.810 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:16.360 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:16.911 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:17.461 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:18.012 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:18.563 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:19.113 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:19.664 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:20.214 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:20.765 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:21.315 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:21.866 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:22.417 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:22.967 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:23.518 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:24.068 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:24.619 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:25.170 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:25.721 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:26.271 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:26.823 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:27.373 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:27.924 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:28.474 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:29.025 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:29.575 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:30.126 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:30.677 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:31.227 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:31.778 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:32.329 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:32.879 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:33.430 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:33.980 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:34.531 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:35.082 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:35.632 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:36.183 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:36.734 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:37.284 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:37.835 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:38.385 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:38.936 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:39.487 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:40.037 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:40.588 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:41.138 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:41.689 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:42.240 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:42.790 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:43.341 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:43.892 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:44.442 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:44.993 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:45.552 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:46.103 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:46.654 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:47.204 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:47.755 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:48.306 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:48.856 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:49.407 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:49.957 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:50.509 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:51.060 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:51.610 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:52.161 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:52.712 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:53.262 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:53.813 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:54.367 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:54.918 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:55.469 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:56.019 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:56.570 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:57.120 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:57.671 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:58.222 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:58.777 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:59.352 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:26:59.880 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:00.454 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:01.005 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:01.573 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:02.153 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:02.703 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:03.254 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:03.804 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:04.355 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:04.953 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:05.553 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:06.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:06.752 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:07.352 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:07.952 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:08.552 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:09.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:09.762 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:10.353 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:10.953 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:11.553 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:12.154 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:12.758 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:13.353 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:13.958 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:14.561 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:15.153 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:15.753 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:16.304 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:16.854 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:17.561 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:18.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:18.752 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:19.361 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:19.956 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:20.553 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:21.154 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:21.754 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:22.304 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:22.855 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:23.453 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:24.003 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:24.554 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:25.105 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:25.656 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:26.206 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:26.757 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:27.308 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:27.858 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:28.409 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:28.959 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:29.510 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:30.061 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:30.611 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:31.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:31.712 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:32.263 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:32.814 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:33.364 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:33.915 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:34.466 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:35.016 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:35.579 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:36.153 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:36.753 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:37.352 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:37.903 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:38.454 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:39.004 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:39.555 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:40.106 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:40.656 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:41.208 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:41.572 | WARNING  | kis_data:get_daily_ohlcv:277 - Could not fetch daily OHLCV for CWENA via KIS API, falling back to yfinance
+2026-06-08 18:27:41.576 | WARNING  | kis_data:get_daily_ohlcv:280 - yfinance daily OHLCV fallback bypassed because DISABLE_OPTIONS_FLOW=true
+2026-06-08 18:27:41.759 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:42.313 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:42.863 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:43.414 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:43.964 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:44.515 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:45.065 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:45.616 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:46.167 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:46.717 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:47.268 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:47.852 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:48.458 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:48.464 | INFO     | screener:_gather_squeeze_candidates:364 - Squeeze candidates top5 (parallel scan 300): [('EXEL', 109), ('AGX', 108), ('CDP', 106), ('STRL', 106), ('SLM', 99)]
+2026-06-08 18:27:49.162 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:49.966 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:50.560 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:51.153 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:51.754 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:52.368 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:52.955 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:53.552 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:54.153 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:54.764 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:55.356 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:56.480 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:57.060 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:57.658 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:58.253 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:58.865 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:27:59.464 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:00.053 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:00.654 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:01.203 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:01.754 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:02.304 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:02.855 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:03.406 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:03.956 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:04.507 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:04.759 | DEBUG    | screener:_score_stock:662 - LIQUIDITY_FILTER: CSW avg vol 127340 < 200k — skipped
+2026-06-08 18:28:05.058 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:05.608 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:06.159 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:06.709 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:07.260 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:07.811 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
+2026-06-08 18:28:08.361 | DEBUG    | auth:_ensure_valid_token:78 - Token valid until 2026-06-09 03:51:40.415742
