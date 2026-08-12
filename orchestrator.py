@@ -1425,16 +1425,11 @@ class BotOrchestrator:
                         notifier = get_notifier()
                         # Check if order was confirmed filled (order.status == FILLED)
                         if order.status == OrderStatus.FILLED:
-                            # Gemini Sentiment Judge 결과 추가 (매수 진입 시 텔레그램 연동)
                             if action == "BUY":
-                                try:
-                                    from news_analyzer import get_news_analyzer
-                                    sentiment = get_news_analyzer().analyze(symbol)
-                                    if sentiment and sentiment.recommendation:
-                                        reason = f"{reason} | [Gemini] {sentiment.recommendation}"
-                                except Exception as se:
-                                    logger.debug("Failed to append Gemini sentiment to trade alert for {}: {}", symbol, se)
-                            notifier.alert_trade(action, symbol, order.avg_fill_price or price, reason, order.filled_quantity, pnl_pct)
+                                sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
+                                notifier.trade_entry(symbol, order.filled_quantity, order.avg_fill_price or price, reason, score_breakdown=sb)
+                            else:
+                                notifier.trade_exit(symbol, order.filled_quantity, order.avg_fill_price or price, pnl_pct, reason)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",
                                        symbol, order.status.value)

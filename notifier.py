@@ -342,8 +342,8 @@ class TelegramNotifier:
         else:
             self.trade_exit(symbol, quantity, price, pnl_pct, details)
 
-    def trade_entry(self, symbol: str, quantity: int, price: float, reason: str = ""):
-        """Notify trade entry"""
+    def trade_entry(self, symbol: str, quantity: int, price: float, reason: str = "", score_breakdown: list = None):
+        """Notify trade entry with detailed score breakdown"""
         # 매수 이유 한국어 변환
         reason_ko = _translate_reason(reason)
         qty_str = f" x {quantity}주" if quantity > 0 else ""
@@ -355,6 +355,13 @@ class TelegramNotifier:
         if reason_ko:
             safe = reason_ko.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             msg += f"사유: {safe}\n"
+        
+        if score_breakdown:
+            msg += "\n📊 <b>점수 산출 세부 내역 (Score Breakdown)</b>:\n"
+            for item in score_breakdown:
+                safe_item = item.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                msg += f"{safe_item}\n"
+
         msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
         self.send(msg)
     

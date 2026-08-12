@@ -159,6 +159,7 @@ class EntrySignal:
     reason: str
     price: float
     indicators: Optional[IndicatorSummary] = None
+    score_breakdown: Optional[List[str]] = None
 
 
 @dataclass
@@ -433,7 +434,7 @@ class StrategyEngine:
             logger.debug("Composite signal fetch skipped for {}: {}", symbol, e)
 
         # Calculate exact 0-100 Quant Confidence Score using our advanced formula
-        confidence = self._calc_entry_confidence(
+        confidence, score_breakdown = self._calc_entry_confidence(
             ind=indicators,
             macro_score=macro_score,
             cfg=self.get_phase_config(),
@@ -675,8 +676,12 @@ class StrategyEngine:
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
 
+        if not hasattr(self, '_last_score_breakdown'):
+            self._last_score_breakdown = {}
+        self._last_score_breakdown[symbol] = score_breakdown
+
         logger.info(" ENTRY SIGNAL TRIGGERED [v1.0.7]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
-        return EntrySignal("BUY", confidence, setup_reason, current_price, indicators)
+        return EntrySignal("BUY", confidence, setup_reason, current_price, indicators, score_breakdown=score_breakdown)
 
 
     def _check_entry_filters(self, ind: IndicatorSummary, cfg: PhaseConfig,
@@ -732,17 +737,19 @@ class StrategyEngine:
         min_entry_score 60~65 , 4    .
         """
         price = float(df['Close'].iloc[-1]) if df is not None and not df.empty else 0.0
-        score = 30  # Base score ( 5030)
+        score = 30  # Base score
+        breakdown = ["• Base 기본 점수: +30점"]
         
-        # ================================
-        # Macro contribution (+/- 10)
-        # ================================
+        # Macro contribution
         if macro_score > 30:
             score += 10
+            breakdown.append("• 거시경제 리스크 매트릭스: +10점 (Risk-On 강세 환경)")
         elif macro_score > 10:
             score += 5
+            breakdown.append("• 거시경제 리스크 매트릭스: +5점 (안정적 매크로)")
         elif macro_score < -10:
             score -= 5
+            breakdown.append("• 거시경제 리스크 매트릭스: -5점 (매크로 경계)")
         
         
         # ================================
@@ -1051,6 +1058,7 @@ class StrategyEngine:
             score += pe_res['score_adj']
             if pe_res['is_pre_earnings_danger']:
                 logger.info("🚨 [PRE_EARNINGS_SHIELD] -50 pts: {}", pe_res['reason'])
+                breakdown.append("• 실적 발표 사전 방어막: -50점 (실적 공시 임박 위험)")
         except Exception as _pe_err:
             logger.debug("PreEarningsShield skipped for {}: {}", symbol, _pe_err)
 
@@ -1060,6 +1068,7 @@ class StrategyEngine:
             score += vp_res['score_adj']
             if vp_res['score_adj'] > 0:
                 logger.info("🎯 [VOLUME_PROFILE_POC] +{} pts: {}", vp_res['score_adj'], vp_res['reason'])
+                breakdown.append(f"• 매물대 POC 지지선: +{vp_res['score_adj']}점 (매물 중심 가격 ${vp_res['poc_price']:.2f} 지지)")
         except Exception as _vp_err:
             logger.debug("VolumeProfileAnalyzer skipped for {}: {}", symbol, _vp_err)
 
@@ -1069,21 +1078,18 @@ class StrategyEngine:
             score += mtf_res['score_adj']
             if abs(mtf_res['score_adj']) > 0:
                 logger.info("⏱️ [MULTI_TF_1H_ALIGN] {} pts: {}", mtf_res['score_adj'], mtf_res['reason'])
+                sign_str = "+" if mtf_res['score_adj'] > 0 else ""
+                breakdown.append(f"• 1시간봉/일봉 추세 정렬: {sign_str}{mtf_res['score_adj']}점 (EMA9 > EMA21 강세 정렬)")
         except Exception as _mtf_err:
             logger.debug("MultiTFAligner skipped for {}: {}", symbol, _mtf_err)
 
-        # ================================
-        # [v8.0 ULTRA QUANT ALPHA ENGINE]
-        # 5. Vectorized 3,500-Stock Dynamic Cointegration Matrix (ρ >= 0.80)
-        # 6. 24/7 Multi-Session Phase Radar (Pre-Market / Regular / Power Hour)
-        # 7. SEC Form 4 Multi-Executive Cluster Buy (+25 pts)
-        # ================================
         try:
             from dynamic_correlation_matrix import DynamicCorrelationMatrix
             matrix_res = DynamicCorrelationMatrix().get_dynamic_lag_alpha(symbol)
             score += matrix_res['score_adj']
             if matrix_res['score_adj'] > 0:
                 logger.info("⚡ [DYNAMIC_COINTEGRATION_MATRIX] +20 pts: {}", matrix_res['reason'])
+                breakdown.append(f"• 동적 피어슨 상관관계: +20점 (리더주 {matrix_res['leader_symbol']} 대비 시차 갭 포착)")
         except Exception as _matrix_err:
             logger.debug("DynamicCorrelationMatrix skipped for {}: {}", symbol, _matrix_err)
 
@@ -1093,22 +1099,21 @@ class StrategyEngine:
             score += session_info['score_adj']
             if session_info['score_adj'] > 0:
                 logger.info("⏱️ [SESSION_RADAR_{}] +{} pts: {}", session_info['session'], session_info['score_adj'], session_info['reason'])
+                breakdown.append(f"• 24/7 타임존 세션 라더: +{session_info['score_adj']}점 ({session_info['session']} 특화 수급)")
         except Exception as _ses_err:
             logger.debug("SessionRadar skipped for {}: {}", symbol, _ses_err)
 
-        # ================================
-        # [v9.0 MASTER QUANT ENGINE]
-        # 8. Gemini AI Real-time News Sentinel (Free-Tier Rate-Limit Shielded)
-        # 9. $10M+ Dark Pool Block Imbalance Radar (+18 / -18 pts)
-        # ================================
         try:
             from gemini_news_sentinel import GeminiNewsSentinel
             news_ai = GeminiNewsSentinel().analyze(symbol)
             score += news_ai['score_adj']
             if news_ai['has_catastrophic_risk']:
                 logger.error("🚨 [GEMINI_AI_NEWS_SHIELD] -60 pts: CATASTROPHIC RISK DETECTED FOR {}! Reason: {}", symbol, news_ai['catastrophic_reason'])
+                breakdown.append("• Gemini AI 뉴스 센티널: -60점 (비상 돌발 악재 포착)")
             elif abs(news_ai['score_adj']) > 0:
                 logger.info("🤖 [GEMINI_AI_NEWS] {} pts: {}", news_ai['score_adj'], news_ai['reason'])
+                sign_str = "+" if news_ai['score_adj'] > 0 else ""
+                breakdown.append(f"• Gemini AI 뉴스 센티널: {sign_str}{news_ai['score_adj']}점 (AI 감정 점수 {news_ai['sentiment_score']})")
         except Exception as _ai_err:
             logger.debug("GeminiNewsSentinel skipped for {}: {}", symbol, _ai_err)
 
@@ -1118,10 +1123,13 @@ class StrategyEngine:
             score += dp_res['score_adj']
             if abs(dp_res['score_adj']) > 0:
                 logger.info("🏦 [DARKPOOL_BLOCK_RADAR] {} pts: {}", dp_res['score_adj'], dp_res['reason'])
+                sign_str = "+" if dp_res['score_adj'] > 0 else ""
+                breakdown.append(f"• $10M+ 다크풀 블록 수급: {sign_str}{dp_res['score_adj']}점 (기관 ATS 대량 매집)")
         except Exception as _dp_err:
             logger.debug("DarkPoolBlockRadar skipped for {}: {}", symbol, _dp_err)
 
-        return min(100, max(0, int(score)))
+        final_score = min(100, max(0, int(score)))
+        return final_score, breakdown
     
     def check_exit(self, symbol: str, realtime_price: float = None) -> ExitSignal:
         """Comprehensive exit check
