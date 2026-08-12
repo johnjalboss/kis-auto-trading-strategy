@@ -83,28 +83,88 @@ def _translate_reason(reason: str) -> str:
         if match:
             old_s, old_sc, new_s, new_sc = match.groups()
             gap = int(new_sc) - int(old_sc)
-            return f"🔄 <b>우수 주도주 교체 매매</b>\n기존 보유주 <code>{old_s}</code>({old_sc}점)보다 모멘텀/수급 점수가 <b>+{gap}점</b> 더 높은 최정예 주도주 <code>{new_s}</code>({new_sc}점)를 포착하여 기존 포지션 전량 매도 후 교체 집행."
-        return f"🔄 <b>우수 주도주 교체 매매</b>\n수익률 및 수급 점수가 더 높은 우수 주도주로 교과서적 수급 이동 교체 매매 집행. (원문: {reason})"
+            return (
+                f"🔄 <b>우수 주도주 교체 매매 (Upgrade Rotation)</b>\n"
+                f"• <b>분류</b>: 포트폴리오 자금 우수 종목 이동\n"
+                f"• <b>상세 근거</b>: 기존 보유주 <code>{old_s}</code>({old_sc}점)보다 모멘텀/수급 점수가 <b>+{gap}점</b> 더 높은 최정예 주도주 <code>{new_s}</code>({new_sc}점)를 포착하여 기존 포지션 전량 매도 후 현금 확보."
+            )
+        return (
+            f"🔄 <b>우수 주도주 교체 매매</b>\n"
+            f"• <b>분류</b>: 포트폴리오 자금 우수 종목 이동\n"
+            f"• <b>상세 근거</b>: 점수가 더 높은 우수 주도주로 수급 이동 교체 매매 집행. (원문: {reason})"
+        )
 
     # 🔒 PROFIT LOCKING STOP (이익 보존 손절선)
     if "profit_lock" in r_lower:
-        return f"🔒 <b>이익 보존 손절선(Profit Lock) 발동</b>\n주가 최고 상승 후 이익 보호 바닥선에 도달하여 이미 확보한 수익을 안전하게 확정 청산. (상세: {reason})"
+        return (
+            f"🔒 <b>이익 보존 손절선 (Profit Locking Stop)</b>\n"
+            f"• <b>분류</b>: 확보 수익 안전 확정 익절\n"
+            f"• <b>상세 근거</b>: 주가 최고 상승 달성 후 가격 조정을 받을 때, 이익 보존 바닥선(+2.0%/+5.5%/+9.0%)에 도달하여 이미 확보한 수익을 뺏기지 않고 안전하게 확정 청산."
+        )
 
-    # 🚨 GEMINI AI EMERGENCY EXIT (실시간 악재 AI 청산)
-    if "gemini_ai" in r_lower or "catastrophic" in r_lower:
-        return f"🚨 <b>Gemini AI 실시간 악재 0.1초 긴급 청산</b>\n파산/SEC조사/사임 등 대형 악재 감지로 즉시 손실 차단 매도. (상세: {reason})"
-
-    # 💤 DEAD MONEY EXIT (횡보주 빠른 예수금 회수)
-    if "dead_money" in r_lower:
-        return f"💤 <b>횡보주 조기 회수 (Dead Money Exit)</b>\n3일간 주가 횡보로 주도주 교체를 위해 예수금을 빠르게 회수."
-
-    # ⏱️ DYNAMIC TIME EXPIRED (보유 기간 만료)
-    if "dynamic_time_expired" in r_lower or "max_hold" in r_lower:
-        return f"⏱️ <b>보유 기간 만료 청산</b>\n최대 보유 기간 도달로 포지션 정리 및 리스크 관리."
+    # 📈 TRAILING STOP (트레일링 스탑)
+    if "trailing_stop" in r_lower or "trailing" in r_lower:
+        return (
+            f"📈 <b>ATR 트레일링 스탑 (Trailing Stop)</b>\n"
+            f"• <b>분류</b>: 추세 꺾임 고점 수익 보호\n"
+            f"• <b>상세 근거</b>: 고점 대비 ATR 변동성 채널 이탈로 상승 모멘텀 둔화가 감지되어 고점 부근에서 수익을 보호하며 매도."
+        )
 
     # 🛑 HARD STOP (손절선 도달)
     if "hard_stop" in r_lower or "stop_loss" in r_lower:
-        return f"🛑 <b>손절선(Stop-Loss) 도달</b>\n원칙적 리스크 방어를 위한 손절 매도. (상세: {reason})"
+        return (
+            f"🛑 <b>원칙적 리스크 손절 (Hard Stop-Loss)</b>\n"
+            f"• <b>분류</b>: 원금 손실 방어 손절\n"
+            f"• <b>상세 근거</b>: 매수 단가 대비 -3.0% 손절 기준선 이하로 하락하여 원금 손실 확대를 방지하기 위해 원칙적 즉시 매도."
+        )
+
+    # 💤 DEAD MONEY EXIT (횡보주 빠른 예수금 회수)
+    if "dead_money" in r_lower:
+        return (
+            f"💤 <b>횡보주 조기 회수 (Dead Money Exit)</b>\n"
+            f"• <b>분류</b>: 자금 순환 속도(Capital Velocity) 극대화\n"
+            f"• <b>상세 근거</b>: 3일간 주가가 -1.0%~+1.0% 박스권에 갇혀 횡보함에 따라, 핫한 우수 주도주로 자금을 이동하기 위해 예수금 조기 회수."
+        )
+
+    # ⏱️ DYNAMIC TIME EXPIRED (보유 기간 만료)
+    if "dynamic_time_expired" in r_lower or "max_hold" in r_lower or "time_exit" in r_lower:
+        return (
+            f"⏱️ <b>동적 보유 기간 만료 청산</b>\n"
+            f"• <b>분류</b>: 포지션 쿨다운 리스크 관리\n"
+            f"• <b>상세 근거</b>: 적응형 보유 한도(5일)에 도달하여 장기 자금 묶임 방지를 위해 포지션 깔끔히 정리."
+        )
+
+    # 🚨 GEMINI AI EMERGENCY EXIT (실시간 악재 AI 청산)
+    if "gemini_ai" in r_lower or "catastrophic" in r_lower:
+        return (
+            f"🚨 <b>Gemini AI 실시간 악재 0.1초 긴급 청산</b>\n"
+            f"• <b>분류</b>: 돌발 리스크 비상 매도\n"
+            f"• <b>상세 근거</b>: 파산, SEC 조사, 경영진 비리 등 0.1초 돌발 대형 악재 뉴스 감지로 즉시 손실 차단 매도."
+        )
+
+    # 🏦 DARK POOL DUMP (다크풀 기관 매도)
+    if "dark_pool" in r_lower or "darkpool" in r_lower:
+        return (
+            f"🏦 <b>$10M+ 다크풀 기관 이탈 경보</b>\n"
+            f"• <b>분류</b>: 장외 ATS 기관 이탈 차단\n"
+            f"• <b>상세 근거</b>: 장외 시장에서 $1,000만 달러 이상의 기관 대량 이탈 블록 매도가 포착되어 선제적 위험 회피 매도."
+        )
+
+    # 🛡️ OVERNIGHT GAP SHIELD (오버나이트 갭하락 방어)
+    if "overnight" in r_lower or "gap_shield" in r_lower:
+        return (
+            f"🛡️ <b>레버리지/인버스 오버나이트 갭 방어</b>\n"
+            f"• <b>분류</b>: 장 마감 직전 위험 차단\n"
+            f"• <b>상세 근거</b>: 3x 레버리지/인버스 ETF의 밤사이 갭하락 폭락 위험을 100% 방지하기 위해 장 마감 전 전량 청산."
+        )
+
+    # 📅 SWING WEEKLY EXIT (주말 갭 방어)
+    if "weekly_exit" in r_lower or "swing_weekly" in r_lower:
+        return (
+            f"📅 <b>주말 휴장 리스크 방어 청산</b>\n"
+            f"• <b>분류</b>: 주말 돌발 변수 위험 방어\n"
+            f"• <b>상세 근거</b>: 금요일 장 마감 전 주말 동안의 국제 정세/지정학적 악재 갭하락 방지를 위한 주간 청산."
+        )
 
     for eng, kor in _REASON_MAP.items():
         if eng in r_lower:
