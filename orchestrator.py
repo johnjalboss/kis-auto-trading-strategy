@@ -787,6 +787,18 @@ class BotOrchestrator:
 
         signals_to_process.sort(key=_tie_breaker_key, reverse=True)
 
+        # [v2026 TAIL-RISK CIRCUIT BREAKER GUARD]
+        try:
+            from tail_risk_circuit_breaker import TailRiskCircuitBreaker
+            from options_flow import get_vix_snapshot
+            vix_val = get_vix_snapshot().vix
+            tr_res = TailRiskCircuitBreaker().check_tail_risk(vix_val=vix_val)
+            if tr_res['is_active'] and tr_res['freeze_buys']:
+                logger.warning("🛡️ [TAIL_RISK_BREAKER] BUY signals FROZEN due to macro black-swan: {}", tr_res['reasons'])
+                return
+        except Exception as _tr_e:
+            logger.debug("TailRiskCircuitBreaker check skipped: {}", _tr_e)
+
         # Check if Telegram remote control pause is active
         try:
             from telegram_interactive_bot import is_trading_paused

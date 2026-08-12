@@ -48,6 +48,14 @@ class WeeklySelfHealingAudit:
             if check_res and check_res[0] == "ok":
                 logger.info("✅ [WEEKLY_AUDIT] Database PRAGMA integrity check PASSED.")
 
+            # 3.1 Self-Tuning Alpha Attribution Optimization
+            try:
+                from self_tuning_alpha_attribution import SelfTuningAlphaAttribution
+                alpha_multipliers = SelfTuningAlphaAttribution(db_path=self.db_path).run_attribution_tuning()
+                logger.info("🧠 [WEEKLY_AUDIT] Self-Tuning Alpha Multipliers: {}", alpha_multipliers)
+            except Exception as _st_err:
+                logger.warning("Self-Tuning Alpha Attribution skipped: {}", _st_err)
+
             # Calculate metrics for closed trades
             cur.execute("SELECT pnl, pnl_pct FROM trades WHERE side='SELL' AND pnl IS NOT NULL")
             trades = cur.fetchall()
