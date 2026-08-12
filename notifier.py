@@ -70,14 +70,46 @@ _REASON_MAP = {
 }
 
 def _translate_reason(reason: str) -> str:
-    """매매 사유 문자열을 한국어로 번역. 매핑이 없으면 원문 반환."""
+    """매매 사유 문자열을 정밀하고 친절한 한국어 상세 설명으로 변환."""
     if not reason:
         return ""
+    
     r_lower = reason.lower()
+
+    # 🔄 UPGRADE / ROTATION (우수 종목 교체)
+    if "upgrade" in r_lower or "replaced" in r_lower:
+        import re
+        match = re.search(r'upgrade:\s*([A-Za-z0-9_]+)\((\d+)\)\s*->\s*([A-Za-z0-9_]+)\((\d+)\)', reason, re.IGNORECASE)
+        if match:
+            old_s, old_sc, new_s, new_sc = match.groups()
+            gap = int(new_sc) - int(old_sc)
+            return f"🔄 <b>우수 주도주 교체 매매</b>\n기존 보유주 <code>{old_s}</code>({old_sc}점)보다 모멘텀/수급 점수가 <b>+{gap}점</b> 더 높은 최정예 주도주 <code>{new_s}</code>({new_sc}점)를 포착하여 기존 포지션 전량 매도 후 교체 집행."
+        return f"🔄 <b>우수 주도주 교체 매매</b>\n수익률 및 수급 점수가 더 높은 우수 주도주로 교과서적 수급 이동 교체 매매 집행. (원문: {reason})"
+
+    # 🔒 PROFIT LOCKING STOP (이익 보존 손절선)
+    if "profit_lock" in r_lower:
+        return f"🔒 <b>이익 보존 손절선(Profit Lock) 발동</b>\n주가 최고 상승 후 이익 보호 바닥선에 도달하여 이미 확보한 수익을 안전하게 확정 청산. (상세: {reason})"
+
+    # 🚨 GEMINI AI EMERGENCY EXIT (실시간 악재 AI 청산)
+    if "gemini_ai" in r_lower or "catastrophic" in r_lower:
+        return f"🚨 <b>Gemini AI 실시간 악재 0.1초 긴급 청산</b>\n파산/SEC조사/사임 등 대형 악재 감지로 즉시 손실 차단 매도. (상세: {reason})"
+
+    # 💤 DEAD MONEY EXIT (횡보주 빠른 예수금 회수)
+    if "dead_money" in r_lower:
+        return f"💤 <b>횡보주 조기 회수 (Dead Money Exit)</b>\n3일간 주가 횡보로 주도주 교체를 위해 예수금을 빠르게 회수."
+
+    # ⏱️ DYNAMIC TIME EXPIRED (보유 기간 만료)
+    if "dynamic_time_expired" in r_lower or "max_hold" in r_lower:
+        return f"⏱️ <b>보유 기간 만료 청산</b>\n최대 보유 기간 도달로 포지션 정리 및 리스크 관리."
+
+    # 🛑 HARD STOP (손절선 도달)
+    if "hard_stop" in r_lower or "stop_loss" in r_lower:
+        return f"🛑 <b>손절선(Stop-Loss) 도달</b>\n원칙적 리스크 방어를 위한 손절 매도. (상세: {reason})"
+
     for eng, kor in _REASON_MAP.items():
         if eng in r_lower:
             return kor
-    return reason  # 매핑 없으면 원문 그대로
+    return reason
 
 
 @dataclass
