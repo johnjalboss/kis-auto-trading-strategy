@@ -150,6 +150,8 @@ def _handle_status() -> str:
     except Exception as e:
         lines.append(f"⚠️ 계좌 잔고 조회 실패: {e}")
         
+    lines.append("━" * 18)
+    lines.append("🌐 <b>실시간 웹 대시보드</b>: http://141.148.172.12:8080")
     return "\n".join(lines)
 
 
@@ -461,12 +463,16 @@ def _handle_alltime_pnl() -> str:
 def _handle_help() -> tuple:
     paused = "🔴 일시정지 중" if os.path.exists("/tmp/kis_trading_paused") else "✅ 정상 가동"
     text = (
-        f"📋 <b>AI 스윙 봇 인터랙티브 제어판 (14개 커스텀 메인 메뉴)</b> [{paused}]\n"
+        f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "원하시는 버튼을 터치하시면 0.1초 만에 실시간 상태, 장단기 성과, 추천주, 차트, 리스크 제어가 실행됩니다."
+        "원하시는 버튼을 터치하시면 실시간 상태, 성과, 추천주, 리스크 제어가 즉시 실행됩니다.\n\n"
+        "🌐 <b>실시간 웹 대시보드</b>:\nhttp://141.148.172.12:8080"
     )
     markup = {
         "inline_keyboard": [
+            [
+                {"text": "🌐 실시간 웹 대시보드 열기", "url": "http://141.148.172.12:8080"}
+            ],
             [
                 {"text": "📊 봇 상태 요약", "callback_data": "/status"},
                 {"text": "📈 보유 포지션", "callback_data": "/포지션"}
@@ -492,23 +498,47 @@ def _handle_help() -> tuple:
                 {"text": "📊 90일 차트", "callback_data": "/차트90"}
             ],
             [
-                {"text": "📊 180일 차트", "callback_data": "/차트180"},
-                {"text": "📊 1년 차트", "callback_data": "/차트365"}
-            ],
-            [
-                {"text": "🏆 전체 수익차트", "callback_data": "/차트전체"}
-            ],
-            [
                 {"text": "⏸️ 매수 일시정지", "callback_data": "/일시정지"},
                 {"text": "▶️ 매수 재개", "callback_data": "/재개"}
+            ],
+            [
+                {"text": "🚨 보유 종목 전량 긴급 청산", "callback_data": "/전량청산"}
             ]
         ]
     }
     return text, markup
 
 
+def _handle_close_all() -> str:
+    try:
+        from orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        if not orch:
+            return "⚠️ 오케스트레이터 미초기화 상태입니다."
+
+        positions = list(orch.strategy.positions.items())
+        if not positions:
+            return "📭 현재 청산할 보유 포지션이 없습니다."
+
+        sold_cnt = 0
+        for sym, pos in positions:
+            try:
+                price = orch.trader.get_price(sym)
+                orch.phase_5_execute_trade(sym, "SELL", pos.quantity, price, "TELEGRAM_EMERGENCY_CLOSE_ALL")
+                orch.strategy.remove_position(sym)
+                sold_cnt += 1
+            except Exception as se:
+                logger.error("Emergency sell failed for {}: {}", sym, se)
+
+        return f"🚨 <b>[보유 종목 긴급 전량 청산 완료]</b> 총 {sold_cnt}개 종목 청산 완료되었습니다."
+    except Exception as e:
+        return f"⚠️ 긴급 청산 중 오류 발생: {e}"
+
+
 _COMMANDS = {
     "/status":   _handle_status,
+    "/상태":     _handle_status,
+    "/잔고":     _handle_status,
     "/포지션":   _handle_positions,
     "/수익":     _handle_pnl,
     "/주간수익": _handle_weekly_pnl,
@@ -533,9 +563,14 @@ _COMMANDS = {
     "/chartall": _handle_chart_all,
     "/chart0":   _handle_chart_all,
     "/일시정지": _handle_pause,
+    "/pause":    _handle_pause,
     "/재개":     _handle_resume,
+    "/resume":   _handle_resume,
+    "/전량청산": _handle_close_all,
+    "/close_all": _handle_close_all,
     "/도움말":   _handle_help,
     "/help":     _handle_help,
+    "/start":    _handle_help,
 }
 
 
