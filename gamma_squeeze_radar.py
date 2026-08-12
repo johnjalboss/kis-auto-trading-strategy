@@ -41,9 +41,9 @@ class GammaSqueezeRadar:
                     reasons.append("NET_GEX_POSITIVE")
 
                 # 3. Low Put/Call Ratio (Bullish options bias)
-                if 0 < snap.pcr < 0.65:
+                if 0 < snap.put_call_ratio < 0.65:
                     score_bonus += 15
-                    reasons.append(f"BULLISH_PCR ({snap.pcr:.2f})")
+                    reasons.append(f"BULLISH_PCR ({snap.put_call_ratio:.2f})")
 
             final_bonus = max(-20, min(35, score_bonus))
             logger.info("⚡ [GAMMA_RADAR] {}: Bonus {} pts | Squeeze: {} | Reasons: {}",
