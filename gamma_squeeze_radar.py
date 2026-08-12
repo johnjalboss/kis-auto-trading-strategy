@@ -36,7 +36,7 @@ class GammaSqueezeRadar:
                     reasons.append(f"CALL_WALL_BREACH (${snap.call_wall:.2f})")
 
                 # 2. Positive Net GEX (Dealer Buying Support)
-                if snap.net_gex > 0:
+                if snap.gex > 0:
                     score_bonus += 10
                     reasons.append("NET_GEX_POSITIVE")
 
