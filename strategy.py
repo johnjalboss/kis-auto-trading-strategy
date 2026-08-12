@@ -1128,6 +1128,44 @@ class StrategyEngine:
         except Exception as _dp_err:
             logger.debug("DarkPoolBlockRadar skipped for {}: {}", symbol, _dp_err)
 
+        # ================================
+        # [v11.0 ULTRA QUANT MASTER ENGINE]
+        # 10. Dealer Gamma Exposure (GEX Squeeze +25 pts / Pinning -10 pts)
+        # 11. SEC Form 13D/13G Institutional Whale Accumulation (+25 pts)
+        # 12. 1D Kalman Filter Noise Elimination & Lag-Free Velocity (+15 / -15 pts)
+        # ================================
+        try:
+            from dealer_gex_radar import DealerGEXRadar
+            gex_res = DealerGEXRadar().analyze(symbol)
+            score += gex_res['score_adj']
+            if abs(gex_res['score_adj']) > 0:
+                logger.info("⚡ [DEALER_GEX_RADAR] {} pts: {}", gex_res['score_adj'], gex_res['reason'])
+                sign_str = "+" if gex_res['score_adj'] > 0 else ""
+                breakdown.append(f"• 딜러 감마 익스포저(GEX): {sign_str}{gex_res['score_adj']}점 ({gex_res['reason']})")
+        except Exception as _gex_err:
+            logger.debug("DealerGEXRadar skipped for {}: {}", symbol, _gex_err)
+
+        try:
+            from sec_13d_radar import SEC13DRadar
+            sec_res = SEC13DRadar().analyze(symbol)
+            score += sec_res['score_adj']
+            if sec_res['score_adj'] > 0:
+                logger.info("🐋 [SEC_13D_WHALE_RADAR] +25 pts: {}", sec_res['reason'])
+                breakdown.append(f"• SEC 13D 헤지펀드 대량 지분 매집: +25점 ({sec_res['reason']})")
+        except Exception as _sec_err:
+            logger.debug("SEC13DRadar skipped for {}: {}", symbol, _sec_err)
+
+        try:
+            from kalman_filter_engine import KalmanFilterEngine
+            kalman_res = KalmanFilterEngine().analyze(df)
+            score += kalman_res['score_adj']
+            if abs(kalman_res['score_adj']) > 0:
+                logger.info("🎯 [KALMAN_FILTER_ENGINE] {} pts: {}", kalman_res['score_adj'], kalman_res['reason'])
+                sign_str = "+" if kalman_res['score_adj'] > 0 else ""
+                breakdown.append(f"• 칼만 필터 추세 엔진: {sign_str}{kalman_res['score_adj']}점 ({kalman_res['reason']})")
+        except Exception as _kf_err:
+            logger.debug("KalmanFilterEngine skipped for {}: {}", symbol, _kf_err)
+
         final_score = min(100, max(0, int(score)))
         return final_score, breakdown
     

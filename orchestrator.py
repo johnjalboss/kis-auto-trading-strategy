@@ -256,12 +256,16 @@ class BotOrchestrator:
         api_positions = self.trader.get_positions()
         self.strategy.sync_positions(api_positions)
 
-        # 11. Telegram Commander (   )
+        # 11. Telegram Interactive Bot
         def _commander():
-            from telegram_commander import start_commander
-            start_commander()
-            logger.info("  -> telegram_commander.py: /status / /    ")
-        self._safe_import("telegram_commander", _commander)
+            try:
+                from telegram_interactive_bot import TelegramInteractiveBot
+                self._interactive_bot = TelegramInteractiveBot(orchestrator_ref=self)
+                self._interactive_bot.start()
+                logger.info("  -> telegram_interactive_bot.py: Bi-directional Telegram daemon active (/status, /pause, /resume, /close_all)")
+            except Exception as _tb_err:
+                logger.debug("TelegramInteractiveBot startup failed: {}", _tb_err)
+        self._safe_import("telegram_interactive_bot", _commander)
         
         logger.info("Phase 1 Complete. Modules: {}/{} loaded", 
                     self.state.modules_loaded, self.state.modules_loaded + self.state.modules_failed)
@@ -723,7 +727,14 @@ class BotOrchestrator:
             logger.error("Exception in Phase 4 symbol check thread pool: {}", e)
         
         # Sort by score to process best first
-        signals_to_process.sort(key=lambda x: x.composite_score, reverse=True)
+        # Check if Telegram remote control pause is active
+        try:
+            from telegram_interactive_bot import is_trading_paused
+            if is_trading_paused():
+                logger.info("⏸️ [TELEGRAM_REMOTE_CONTROL] Trading loop is PAUSED via /pause command. Skipping entry loop.")
+                return
+        except Exception:
+            pass
 
         for signal in signals_to_process:
             symbol = signal.symbol
@@ -736,6 +747,16 @@ class BotOrchestrator:
                     current_positions = self.strategy.get_all_positions()
                     if symbol in current_positions:
                         continue
+                    
+                    # [v11.0 QUANT] Check Pearson Correlation Cluster Risk Cap (max 40%)
+                    try:
+                        from correlation_cluster_cap import CorrelationClusterCap
+                        cluster_res = CorrelationClusterCap().check_cluster_cap(symbol, current_positions, total_equity)
+                        if not cluster_res['is_allowed']:
+                            logger.info("CLUSTER_CAP_GUARD: Entry blocked for {}: {}", symbol, cluster_res['reason'])
+                            continue
+                    except Exception as _cc_err:
+                        logger.debug("CorrelationClusterCap check skipped for {}: {}", symbol, _cc_err)
                     
                     # Check standard strategy entry rules (VIX, CHOPPY block, BEAR block, Earnings, Econ, Insider guards)
                     is_screened = symbol in getattr(self.state, 'screened_symbols', [])
@@ -935,13 +956,22 @@ class BotOrchestrator:
                                 #  =   
                                 _atr_qty = int(_risk_amount / _stop_dist) if _stop_dist > 0 else 1
                                 
-                                # Sizing: Equal-weight slot capital allocation based on Total Equity (not temporary cash/BP)
-                                # This avoids under-sizing positions due to T+2 settlement delays.
-                                _target_capital = total_equity / config.MAX_POSITIONS
-                                _slot_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 1
-                                raw_qty = min(_atr_qty, _slot_qty)
-                                logger.debug("ATR_SIZING {}: risk=${:.0f} atr={:.2f}  qty={} (slot={} atr={})",
-                                             symbol, _risk_amount, _atr, raw_qty, _slot_qty, _atr_qty)
+                                # [v11.0 QUANT] Kelly Criterion & ATR Volatility Parity Position Sizing
+                                try:
+                                    from kelly_volatility_sizer import KellyVolatilitySizer
+                                    raw_qty = KellyVolatilitySizer().calculate_qty(
+                                        symbol=symbol,
+                                        entry_price=signal.entry_price,
+                                        total_equity=total_equity,
+                                        buying_power=bp,
+                                        atr=_atr,
+                                        win_rate=0.65,
+                                        win_loss_ratio=1.5
+                                    )
+                                except Exception as _kelly_e:
+                                    logger.debug("KellyVolatilitySizer failed for {}: {}", symbol, _kelly_e)
+                                    _target_capital = total_equity / config.MAX_POSITIONS
+                                    raw_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 0
                             else:
                                 _target_capital = total_equity / config.MAX_POSITIONS
                                 raw_qty = int(_target_capital / signal.entry_price) if signal.entry_price > 0 else 0
