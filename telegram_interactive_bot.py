@@ -77,24 +77,26 @@ class TelegramInteractiveBot:
                             if sender_id != str(self.chat_id):
                                 continue
 
-                            if text == "/status" or text.startswith("/status"):
+                            cmd = text.lower().strip()
+
+                            if cmd in ["/status", "/상태", "/잔고", "상태", "잔고"] or cmd.startswith("/status"):
                                 self._handle_status()
-                            elif text == "/pause":
+                            elif cmd in ["/pause", "/정지", "/일시정지", "일시정지", "정지"]:
                                 _is_bot_paused = True
-                                self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 으로 재개)")
-                            elif text == "/resume":
+                                self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 또는 /재개 로 다시 가동)")
+                            elif cmd in ["/resume", "/재개", "/시작", "재개", "시작"]:
                                 _is_bot_paused = False
                                 self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 루프를 재가동합니다.")
-                            elif text == "/close_all":
+                            elif cmd in ["/close_all", "/전량청산", "/청산", "전량청산", "청산"]:
                                 self._handle_close_all()
-                            elif text == "/help" or text.startswith("/start"):
+                            elif cmd in ["/help", "/도움말", "/start", "도움말", "help"] or cmd.startswith("/start") or cmd.startswith("/help"):
                                 self._send_reply(
                                     "🤖 <b>v11.0 Ultra Quant 텔레그램 원격 제어 커맨드</b>\n\n"
-                                    "• <code>/status</code> : 현재 계좌 예수금, 보유 포지션, 손익 조회\n"
-                                    "• <code>/pause</code> : 신규 매매 탐색 일시 중단\n"
-                                    "• <code>/resume</code> : 매매 다시 시작\n"
-                                    "• <code>/close_all</code> : 보유 포지션 전량 긴급 청산\n"
-                                    "• <code>/help</code> : 도움말 출력\n\n"
+                                    "• <code>/status</code> 또는 <code>/상태</code> : 예수금, 보유 포지션, 손익 조회\n"
+                                    "• <code>/pause</code> 또는 <code>/일시정지</code> : 신규 매매 탐색 일시 중단\n"
+                                    "• <code>/resume</code> 또는 <code>/재개</code> : 매매 다시 시작\n"
+                                    "• <code>/close_all</code> 또는 <code>/전량청산</code> : 보유 포지션 전량 긴급 청산\n"
+                                    "• <code>/help</code> 또는 <code>/도움말</code> : 도움말 출력\n\n"
                                     "🌐 <b>실시간 웹 대시보드 주소</b>:\nhttp://141.148.172.12:8080"
                                 )
             except Exception as e:
