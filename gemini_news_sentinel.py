@@ -85,8 +85,15 @@ class GeminiNewsSentinel:
             if self.api_key and (now - _LAST_GEMINI_CALL >= 4.0):
                 try:
                     import google.generativeai as genai
-                    genai.configure(api_key=self.api_key)
-                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    model = None
+                    for m_name in ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-2.0-flash-lite"]:
+                        try:
+                            model = genai.GenerativeModel(m_name)
+                            break
+                        except Exception:
+                            continue
+                    if model is None:
+                        model = genai.GenerativeModel("gemini-1.5-flash")
                     
                     prompt = f"Analyze market sentiment for stock {symbol} from headlines: {combined_text}. Respond ONLY with a single integer score from -100 (extreme negative/disaster) to +100 (extreme positive/catalyst)."
                     
