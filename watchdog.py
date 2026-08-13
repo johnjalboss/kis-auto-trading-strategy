@@ -48,19 +48,20 @@ def run():
 
         runtime = (datetime.now() - start_time).total_seconds()
 
-        # 정상 종료(exit_code == 0)시 텔레그램 스팸 알림 없이 10초 후 24시간 무한 자동 재가동
+        # 프로세스가 어떤 이유로든 종료되었을 때 정확히 텔레그램 알림 발송 및 24시간 자동 재가동
         if exit_code == 0:
-            print(f"[WATCHDOG] main.py completed cycle (runtime: {runtime:.1f}s). Restarting in 10s...")
+            send_tg(f"⚪ <b>트레이딩봇 사이클 완료 / 재시작</b>\n실행시간: {runtime/3600:.1f}h\n10초 후 자동 지속 재가동...")
             time.sleep(10)
             continue
 
         restart_count += 1
         send_tg(
-            f"🔴 <b>트레이딩봇 재시작 경보</b>\n"
+            f"🔴 <b>트레이딩봇 종료 / 크래시 경보!</b>\n"
             f"Exit code: {exit_code}\n"
             f"실행시간: {runtime/3600:.1f}h\n"
             f"재시작: #{restart_count}\n"
-            f"10초 후 24시간 무한 자동 재가동..."
+            f"시간: {datetime.now().strftime('%H:%M:%S')}\n"
+            f"10초 후 자동 재가동 진행 중..."
         )
         time.sleep(10)
 
