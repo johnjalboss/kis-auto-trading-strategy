@@ -284,7 +284,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
 
         if has_qqq:
             ax2.plot(dates, qqq_dollars_filled, color='#f0b429', linewidth=2.0,
-                     linestyle='--', label='QQQ Equiv. ($)', alpha=0.85, zorder=2)
+                     linestyle='--', label='QQQ Benchmark PnL ($)', alpha=0.85, zorder=2)
 
         ax2.set_ylabel('Cumulative P&L ($)', color='#58a6ff', fontsize=10, fontweight='bold')
         ax2.tick_params(axis='y', labelcolor='#58a6ff', labelsize=9)
