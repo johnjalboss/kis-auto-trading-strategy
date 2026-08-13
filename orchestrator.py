@@ -1301,6 +1301,27 @@ class BotOrchestrator:
             
             for symbol, pos, curr_price, signal in top_eligible:
                 current_val = pos.quantity * curr_price
+
+                # [v2026 COST BASIS GUARD] 
+                # 1. Do NOT scale up if entry age > 48 hours (prevents late pyramiding days later)
+                # 2. Do NOT scale up if price is >2.0% above entry_price (prevents destroying cost basis)
+                entry_dt = getattr(pos, 'entry_time', None)
+                if entry_dt is not None:
+                    from datetime import datetime, timedelta
+                    if isinstance(entry_dt, str):
+                        try:
+                            entry_dt = datetime.fromisoformat(entry_dt)
+                        except Exception:
+                            entry_dt = None
+                    if entry_dt and (datetime.now() - entry_dt) > timedelta(hours=48):
+                        logger.info("SKIP REBALANCE {}: Entry age > 48h (Bought several days ago). Cost basis protected.", symbol)
+                        continue
+
+                pnl_pct = ((curr_price - pos.entry_price) / pos.entry_price) if pos.entry_price > 0 else 0.0
+                if pnl_pct > 0.02:
+                    logger.info("SKIP REBALANCE {}: Price up {:.2%} > 2.0% above entry. Protecting average cost basis.", symbol, pnl_pct*100)
+                    continue
+
                 # 목표 슬롯 금액의 75% 미만으로 부족하게 담긴 경우만 추매
                 if current_val < target_val * 0.75:
                     # 퀀트 분석 Action이 BUY 또는 STRONG_BUY (고득점)인 종목만 추매 승인
