@@ -41,6 +41,22 @@ class AtomicAccountSync:
                     discrepancies.append(f"REMOVED_STALE:{sym}")
                     del strategy_positions[sym]
 
+            # 3. Clean up SQLite DB positions table to purge ghost records
+            try:
+                import sqlite3
+                conn = sqlite3.connect("trades.db")
+                cur = conn.cursor()
+                cur.execute("SELECT symbol FROM positions")
+                db_syms = [r[0] for r in cur.fetchall()]
+                for ds in db_syms:
+                    if ds not in live_symbols:
+                        cur.execute("DELETE FROM positions WHERE symbol = ?", (ds,))
+                        logger.info("⚡ [ATOMIC_SYNC] Purged ghost DB position: {}", ds)
+                conn.commit()
+                conn.close()
+            except Exception as _dbe:
+                logger.debug("DB purge in sync failed: {}", _dbe)
+
             if discrepancies:
                 logger.info("⚡ [ATOMIC_SYNC] Account state reconciled: {}", discrepancies)
 
