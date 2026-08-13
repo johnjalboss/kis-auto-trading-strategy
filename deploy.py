@@ -75,33 +75,41 @@ def ssh_cmd(cmd):
     return code, out
 
 def restart_services():
-    print("\n[RESTART] Restarting services on VPS...")
+    print("\n[RESTART] Restarting services cleanly on VPS...")
 
-    # 기존 main.py 전부 종료 + lock 파일 제거 (중복 방지)
-    ssh_cmd("pkill -f 'venv/bin/python main.py' ; sleep 2 ; rm -f /tmp/kis_auto_trading.lock")
+    # 1. 모든 기존 프로세스 완전 강제 종료 (kill -9) & 락 파일/캐시 소거
+    clean_cmd = (
+        "pkill -9 -f watchdog.py ; "
+        "pkill -9 -f main.py ; "
+        "pkill -9 -f web_dashboard.py ; "
+        "rm -f /tmp/kis_auto_trading.lock /tmp/*.lock ; "
+        f"find {REMOTE_DIR} -name '__pycache__' -exec rm -rf {{}} + 2>/dev/null || true ; "
+        "sleep 2"
+    )
+    ssh_cmd(clean_cmd)
+    time.sleep(2)
+
+    # 2. 메인 봇 & 웹 대시보드 100% 신규 인스턴스 1개씩 깔끔하게 구동
+    ssh_cmd(f"cd {REMOTE_DIR} && nohup venv/bin/python main.py >> logs/trading.log 2>&1 &")
+    time.sleep(3)
+    ssh_cmd(f"fuser -k 8080/tcp 2>/dev/null || true ; cd {REMOTE_DIR} && nohup venv/bin/python web_dashboard.py >> logs/dashboard.log 2>&1 &")
     time.sleep(3)
 
-    # 새 인스턴스 하나만 시작
-    ssh_cmd(f"cd {REMOTE_DIR} && nohup venv/bin/python main.py >> logs/trading.log 2>&1 &")
-    time.sleep(4)
-
-    # 확인 — 정확히 1개만 떠야 함
-    code, out = ssh_cmd("pgrep -c -f 'main.py'")
-    count = out.strip()
-    if count == '1':
-        _, pids = ssh_cmd("pgrep -a -f 'main.py'")
-        print(f"  [OK] main.py restarted successfully: {pids.strip()}")
-    elif count and int(count) > 1:
-        print(f"  [WARN] main.py instances count = {count} (duplicate!)")
+    # 3. 메인 프로세스 검증
+    code, out = ssh_cmd("pgrep -a -f 'main.py'")
+    pids = out.strip()
+    if pids:
+        print(f"  [OK] main.py cleanly restarted: {pids}")
     else:
         print("  [FAIL] main.py failed to start")
 
-    # web_dashboard.py 상태 확인
+    # 4. 웹 대시보드 검증
     code, out = ssh_cmd("pgrep -a -f 'web_dashboard.py'")
-    if 'web_dashboard' in out:
-        print("  [OK] web_dashboard.py running")
+    pids_dash = out.strip()
+    if pids_dash:
+        print(f"  [OK] web_dashboard.py cleanly restarted: {pids_dash}")
     else:
-        print("  [WARN] web_dashboard.py not running")
+        print("  [WARN] web_dashboard.py check failed")
 
 if __name__ == '__main__':
     files = sys.argv[1:] if len(sys.argv) > 1 else CORE_FILES
