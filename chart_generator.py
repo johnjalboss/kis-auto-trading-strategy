@@ -57,21 +57,24 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
             except Exception as err:
                 logger.warning("⚠️ [chart_generator.py] Fallback triggered: {}", err)
 
-        df.index = df.index.normalize()
+        import pandas as pd
+        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
 
-        # 기준 가격: start_date 이전(포함) 중 가장 최근 거래일 종가
-        base_rows = df[df.index <= str(start_date)]
+        # 기준 가격: start_date 당일 또는 바로 이전 거래일 종가 (차트 1일차 무조건 0달러 / 0.0% 출발)
+        start_dt = pd.to_datetime(start_date).normalize()
+        base_rows = df[df.index <= start_dt]
         if base_rows.empty:
             base_rows = df  # fallback
         base_price = float(base_rows['Close'].iloc[-1])
         if base_price <= 0:
             return {}
 
-        # 각 날짜별로 forward-fill하며 달러 P&L 계산
+        # 각 날짜별로 forward-fill하며 달러 P&L 계산 (1일차 = 0.0% / $0.00 출발)
         result = {}
         cur_d = start_date
         while cur_d <= end_date:
-            rows_up = df[df.index <= str(cur_d)]
+            cur_dt = pd.to_datetime(cur_d).normalize()
+            rows_up = df[df.index <= cur_dt]
             if not rows_up.empty:
                 price = float(rows_up['Close'].iloc[-1])
                 pct_return = (price / base_price) - 1.0
