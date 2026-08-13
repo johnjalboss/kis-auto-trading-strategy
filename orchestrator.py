@@ -505,6 +505,11 @@ class BotOrchestrator:
                 self._last_daily_report_date = now_et.date()
                 from daily_performance_report import DailyPerformanceReport
                 DailyPerformanceReport().send_daily_report_to_telegram()
+                try:
+                    from auto_tuning_engine import AutoTuningEngine
+                    AutoTuningEngine().run_autotune()
+                except Exception as _at_err:
+                    logger.debug("AutoTuningEngine trigger skipped: {}", _at_err)
         except Exception as _rpt_err:
             logger.debug("DailyPerformanceReport trigger skipped: {}", _rpt_err)
 

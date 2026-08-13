@@ -24,7 +24,7 @@ KIS_ACNT_PRDT_CD = os.getenv("KIS_ACNT_PRDT_CD", "01")
 # Trading mode: VPS=Paper, PROD=Live
 TRADING_ENV = os.getenv("TRADING_ENV", "VPS")
 IS_PAPER_TRADING = TRADING_ENV.upper() != "PROD"
-INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "1005.00"))
+INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "766.49"))
 
 # Base URL for KIS API
 if IS_PAPER_TRADING:
@@ -59,7 +59,7 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.25"))  # 20~25% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))  # 5종목 집중/분산 투자
+MAX_POSITIONS = 5  # 대표님 요구사항 100% 반영: 5종목 분산/집중 매매 필수 고정
 
 # ==============================================
 # [ENABLED] UPGRADE 교체매매 활성화 — 최소 30점 차이날 때만 교체
