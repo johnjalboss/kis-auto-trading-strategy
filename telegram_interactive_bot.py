@@ -75,17 +75,7 @@ class TelegramInteractiveBot:
     def _send_one_click_menu(self):
         """전체 19개 원클릭 인터랙티브 제어판 메뉴 전송"""
         paused = "🔴 일시정지 중" if _is_bot_paused else "✅ 정상 가동"
-        
-        # Read dynamic tunnel URL if available, else default to static Oracle VPS IP
         dash_url = "http://141.148.172.12:8080"
-        try:
-            if os.path.exists("/home/ubuntu/kis-auto-trading/logs/tunnel_url.txt"):
-                with open("/home/ubuntu/kis-auto-trading/logs/tunnel_url.txt", "r") as _uf:
-                    _tu = _uf.read().strip()
-                    if _tu.startswith("http"):
-                        dash_url = _tu
-        except Exception:
-            pass
 
         menu_text = (
             f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"

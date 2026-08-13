@@ -31,7 +31,7 @@ class TelegramReceiptGenerator:
             f"🛡️ <b>안전 손절가</b>: <b>{sl_str}</b>\n"
             f"⏰ <b>체결시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌐 <b>실시간 대시보드</b>: https://dee-merger-endorsed-sas.trycloudflare.com"
+            f"🌐 <b>실시간 대시보드</b>: http://141.148.172.12:8080"
         )
         return receipt
 
@@ -59,6 +59,6 @@ class TelegramReceiptGenerator:
             f"⏱️ <b>보유기간</b>: <b>{hold_days} 일</b>\n"
             f"⏰ <b>청산시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌐 <b>실시간 대시보드</b>: https://dee-merger-endorsed-sas.trycloudflare.com"
+            f"🌐 <b>실시간 대시보드</b>: http://141.148.172.12:8080"
         )
         return receipt
