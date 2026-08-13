@@ -413,14 +413,12 @@ class TelegramNotifier:
             f"가격: ${price:.2f}\n"
         )
         if reason_ko:
-            safe = reason_ko.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            msg += f"사유: {safe}\n"
+            msg += f"사유:\n{reason_ko}\n"
         
         if score_breakdown:
             msg += "\n📊 <b>점수 산출 세부 내역 (Score Breakdown)</b>:\n"
             for item in score_breakdown:
-                safe_item = item.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                msg += f"{safe_item}\n"
+                msg += f"• {item}\n"
 
         msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
         self.send(msg)
@@ -439,8 +437,7 @@ class TelegramNotifier:
             f"{pnl_label}: {pnl_pct:+.1%}\n"
         )
         if reason_ko:
-            safe = reason_ko.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            msg += f"사유: {safe}\n"
+            msg += f"사유:\n{reason_ko}\n"
         msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
         self.send(msg)
     

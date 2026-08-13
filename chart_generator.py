@@ -139,7 +139,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         is_all_time = False
         if days is None or days <= 0:
             start_date = db_min_date
-            end_date = db_max_date
+            end_date = datetime.now().date()  # 오늘 날짜까지 항상 동적 실시간 최신화
             actual_days = (end_date - start_date).days + 1
             is_all_time = True
         else:
