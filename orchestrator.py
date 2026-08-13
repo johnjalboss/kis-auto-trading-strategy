@@ -1422,29 +1422,22 @@ class BotOrchestrator:
                 
                 # Get the live portfolio sizer with current total equity
                 sizer = get_position_sizer(portfolio=total_equity)
-                # Calculate optimal sizing using dynamic Kelly, Volatility Parity, and Regime Scaler
-                sizer_result = sizer.calculate(symbol, current_regime=self.state.current_regime)
-                
-                # Convert the optimal percentage into target share quantity
-                quant_target_qty = int(sizer_result.position_dollars / price) if price > 0 else 0
-                
-                # Enforce dynamic scaling by max_exposure_pct & slot constraints
-                max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0 # 2% slippage safety margin
-                
-                # Standardize quantity selection
+                # [v2026 FULL-SLOT INITIAL ENTRY]
+                # Allocate 100% of target slot capital (total_equity / MAX_POSITIONS) immediately on initial entry!
+                target_slot_capital = total_equity / config.MAX_POSITIONS
+                raw_full_qty = int(target_slot_capital / price) if price > 0 else 0
+                max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0
+
                 old_qty = qty
-                qty = min(quant_target_qty, max_allowed_qty)
-                
-                # Small Account Floor Override: Ensure we don't round down to 0 if the original logic approved at least 1 share
-                if qty == 0 and old_qty >= 1 and price <= (bp * 0.98) and price <= (total_equity * 0.40):
+                # Buy 100% of full slot shares up to available buying power immediately
+                qty = max(0, min(raw_full_qty, max_allowed_qty))
+
+                # If buying power allows at least 1 share and target capital covers it, guarantee full entry
+                if qty == 0 and max_allowed_qty >= 1 and price <= (bp * 0.98):
                     qty = 1
-                    logger.info("📐 Small Account Floor Override for {}: 1 share allowed (price: ${:.2f}, sizer target: ${:.2f})", 
-                                symbol, price, sizer_result.position_dollars)
-                
-                qty = max(0, qty)
-                
-                logger.info("📐 QUANT_SIZING_RESULT for {}: SizerPct={:.1%} | TargetQty={} (LegacyQty={}) | Score={} | Details={}", 
-                            symbol, sizer_result.optimal_pct, qty, old_qty, sizer_result.sizing_score, sizer_result.details)
+
+                logger.info("🚀 [FULL_SLOT_ENTRY] {}: Price=${:.2f} | TargetSlotCap=${:.2f} -> Buying {} full shares (Max BP Qty: {})", 
+                            symbol, price, target_slot_capital, qty, max_allowed_qty)
             except Exception as sizer_err:
                 logger.error("Failed to run advanced Quant Sizer for {}: {}. Falling back to default raw qty.", symbol, sizer_err)
             
