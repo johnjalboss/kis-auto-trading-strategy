@@ -566,17 +566,17 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 리스크 상태 조회 실패: {e}")
 
     def _handle_chart(self, days: int = 90):
-        """수익 차트 실시간 생성 및 발송 (notifier 사용 100% 최신화 보장)"""
+        """수익 차트 및 QQQ 벤치마크 실시간 생성 및 발송"""
         try:
             from chart_generator import generate_daily_pnl_chart
             from notifier import get_notifier
-            chart_path = generate_daily_pnl_chart(days=days)
+            res = generate_daily_pnl_chart(days=days)
+            if isinstance(res, tuple):
+                chart_path, caption = res
+            else:
+                chart_path, caption = res, "📊 <b>수익 차트 및 QQQ 벤치마크</b>"
+
             if chart_path and os.path.exists(chart_path):
-                period_str = "전체 기간 (All-Time)" if days <= 0 else f"{days}일"
-                caption = (
-                    f"📊 <b>수익 차트 및 QQQ 벤치마크 ({period_str})</b>\n"
-                    f"⏰ <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code> 기준 실시간 생성 완료"
-                )
                 notifier = get_notifier()
                 success = notifier.send_photo_sync(chart_path, caption)
                 if not success:
