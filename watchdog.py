@@ -24,12 +24,28 @@ def send_tg(msg):
         print("⚠️ [watchdog.py] Fallback triggered:", err)
 
 
+def is_main_running() -> bool:
+    """main.py가 이미 실행 중인지 확인 (중복 실행 방지)"""
+    try:
+        my_pid = os.getpid()
+        res = subprocess.run("pgrep -f 'main.py'", shell=True, capture_output=True, text=True)
+        pids = [int(p.strip()) for p in res.stdout.strip().split('\n') if p.strip().isdigit()]
+        pids = [p for p in pids if p != my_pid]
+        return len(pids) > 0
+    except Exception:
+        return False
+
+
 def run():
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
     restart_count = 0
 
-
     while True:
+        # 이미 main.py가 정상 작동 중인 경우 중복 구동하지 않고 모니터링만 수행
+        if is_main_running():
+            time.sleep(30)
+            continue
+
         start_time = datetime.now()
         try:
             print(f"[WATCHDOG] Starting main.py daemon (restart #{restart_count})")
@@ -48,9 +64,10 @@ def run():
 
         runtime = (datetime.now() - start_time).total_seconds()
 
-        # 프로세스가 어떤 이유로든 종료되었을 때 정확히 텔레그램 알림 발송 및 24시간 자동 재가동
+        # 정상 종료 시 (예: 배포/업데이트 시)
         if exit_code == 0:
-            send_tg(f"⚪ <b>트레이딩봇 사이클 완료 / 재시작</b>\n실행시간: {runtime/3600:.1f}h\n10초 후 자동 지속 재가동...")
+            if runtime > 60:
+                send_tg(f"⚪ <b>트레이딩봇 사이클 정상 마감</b>\n실행시간: {runtime/3600:.1f}h\n10초 후 지속 가동...")
             time.sleep(10)
             continue
 
