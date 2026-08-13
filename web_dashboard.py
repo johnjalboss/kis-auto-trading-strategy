@@ -429,7 +429,7 @@ def render_dashboard_html() -> str:
             cur = conn.cursor()
             cur.execute(
                 "SELECT created_at, symbol, side, quantity, price, pnl, pnl_pct, reason "
-                "FROM trades ORDER BY id DESC LIMIT 15"
+                "FROM trades WHERE date(created_at) >= '2026-08-14' ORDER BY id DESC LIMIT 15"
             )
             trades = cur.fetchall()
             if trades:
