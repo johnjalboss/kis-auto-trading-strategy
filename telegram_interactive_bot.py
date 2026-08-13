@@ -553,24 +553,25 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 리스크 상태 조회 실패: {e}")
 
     def _handle_chart(self, days: int = 90):
-        """수익 차트 생성 및 전송 (30/90/180/365일)"""
+        """수익 차트 실시간 생성 및 발송 (notifier 사용 100% 최신화 보장)"""
         try:
             from chart_generator import generate_daily_pnl_chart
+            from notifier import get_notifier
             chart_path = generate_daily_pnl_chart(days=days)
             if chart_path and os.path.exists(chart_path):
-                # Create a fresh timestamped copy to bypass Telegram photo cache
-                ts_chart_path = f"/tmp/pnl_chart_{days}_{int(time.time())}.png"
-                import shutil
-                shutil.copy(chart_path, ts_chart_path)
                 period_str = "전체 기간 (All-Time)" if days <= 0 else f"{days}일"
-                self._send_photo(ts_chart_path, f"📊 <b>수익 차트 및 QQQ 벤치마크 ({period_str})</b>\n⏰ <code>{datetime.now().strftime('%H:%M:%S')}</code> 기준 실시간 생성")
-                try:
-                    os.remove(ts_chart_path)
-                except Exception:
-                    pass
+                caption = (
+                    f"📊 <b>수익 차트 및 QQQ 벤치마크 ({period_str})</b>\n"
+                    f"⏰ <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code> 기준 실시간 생성 완료"
+                )
+                notifier = get_notifier()
+                success = notifier.send_photo_sync(chart_path, caption)
+                if not success:
+                    self._send_photo(chart_path, caption)
             else:
                 self._send_reply("⚠️ 차트 생성 실패: 거래 데이터가 없거나 오류가 발생했습니다.")
         except Exception as e:
+            logger.error("Failed chart generation: {}", e)
             self._send_reply(f"⚠️ 차트 생성 중 오류 발생: {e}")
 
     def _handle_close_all(self):

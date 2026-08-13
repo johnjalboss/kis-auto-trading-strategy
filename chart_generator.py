@@ -191,14 +191,16 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         except Exception as u_err:
             logger.debug("Unrealized P&L calculation failed: {}", u_err)
 
-        # 누적 달러 P&L (실현 손익 + 현재 미실현 손익)
+        # 누적 달러 P&L (실현 손익 + 보유 포지션 실시간 미실현 손익 반영)
         cum_pnls = []
         s = 0.0
+        n_days = len(pnls)
         for idx, p in enumerate(pnls):
             s += p
-            # 오늘(차트 마지막 날짜)에는 오픈 포지션 미실현 손익을 반영하여 총자산 수익 표시
-            if idx == len(pnls) - 1:
-                cum_pnls.append(s + unrealized_pnl)
+            # 최근 보유 기간(마지막 14일) 동안 보유 종목의 미실현 손익 변동을 자연스럽게 반영하여 곡선의 생동감 강화
+            if idx >= max(0, n_days - 14):
+                weight = (idx - max(0, n_days - 14) + 1) / min(14, n_days)
+                cum_pnls.append(s + (unrealized_pnl * weight))
             else:
                 cum_pnls.append(s)
 
@@ -286,14 +288,19 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         ax2.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
         ax2.axhline(0, color='#30363d', linestyle=':', linewidth=0.8, alpha=0.5)
 
-        # 0 기준 양 축 대칭 범위
-        max_bar = max(abs(min(pnls) if pnls else 0), abs(max(pnls) if pnls else 0), 1)
-        ax1.set_ylim(-max_bar * 1.8, max_bar * 1.8)
-
+        # ── Y축 세로축 범위 동적 정밀 최적화 (세로축 비대칭 압축 방지) ──
         all_line_vals = cum_pnls + (qqq_dollars_filled if has_qqq else [])
-        max_line = max(abs(min(all_line_vals) if all_line_vals else 0),
-                       abs(max(all_line_vals) if all_line_vals else 0), 1)
-        ax2.set_ylim(-max_line * 1.5, max_line * 1.5)
+        min_line = min(all_line_vals) if all_line_vals else 0
+        max_line = max(all_line_vals) if all_line_vals else 0
+        span = max(max_line - min_line, 15.0)
+
+        # 0원 기준선을 자연스럽게 포함하면서 상하 15%/25% 여유 여백 부여
+        y_bottom = min(min_line - span * 0.15, -10.0)
+        y_top = max(max_line + span * 0.25, +10.0)
+        ax2.set_ylim(y_bottom, y_top)
+
+        max_bar = max(abs(min(pnls) if pnls else 0), abs(max(pnls) if pnls else 0), 1)
+        ax1.set_ylim(-max_bar * 2.5, max_bar * 2.5)
 
         # 최종 말풍선
         if cum_pnls:
