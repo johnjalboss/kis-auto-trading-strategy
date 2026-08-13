@@ -1637,6 +1637,14 @@ class BotOrchestrator:
                             self.db.record_entry(symbol, qty, price, self.state.current_regime)
                         except Exception as db_err:
                             logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
+                            
+                        try:
+                            from trade_error_notebook import TradeErrorNotebook
+                            sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, {})
+                            score = getattr(self.strategy, '_last_scores', {}).get(symbol, 80)
+                            TradeErrorNotebook().record_entry_detail(symbol, qty, price, score, sb, self.state.current_regime, reason=reason)
+                        except Exception as nb_err:
+                            logger.debug("TradeErrorNotebook entry logging skipped: {}", nb_err)
                         
                         # [RiskManager Sync] Track new position in RiskManager
                         try:
@@ -1671,6 +1679,14 @@ class BotOrchestrator:
                             self.db.record_exit(symbol, qty, price, entry_price, reason)
                         except Exception as db_err:
                             logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
+                        
+                        try:
+                            from trade_error_notebook import TradeErrorNotebook
+                            _pnl = (price - entry_price) * qty
+                            _pnl_pct = (_pnl / (entry_price * qty)) if (entry_price * qty) > 0 else 0.0
+                            TradeErrorNotebook().record_exit_detail(symbol, qty, price, _pnl, _pnl_pct, reason)
+                        except Exception as nb_err:
+                            logger.debug("TradeErrorNotebook exit logging skipped: {}", nb_err)
                         
                         # [RiskManager Sync] Record realized trade results in RiskManager Daily & Weekly Stats
                         try:
