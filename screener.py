@@ -200,6 +200,23 @@ class DynamicScreener:
 
         # 제외 목록 적용 — 보유/최근 거래 종목 제거
         candidates = [c for c in candidates if c not in _exclude]
+
+        # [QUANT UPGRADE] 1. Cross-Sectional Factor Momentum Filter (Top 10% Leaders)
+        try:
+            from cross_sectional_momentum import CrossSectionalMomentum
+            cs_filter = CrossSectionalMomentum(top_percentile=0.90)
+            # Create DF map for candidates
+            cand_dfs = {}
+            for c in candidates[:60]:
+                df_c = self._fetch_ohlcv(c, period_days=120)
+                if df_c is not None and not df_c.empty:
+                    cand_dfs[c] = df_c
+            if cand_dfs:
+                top_cs_leaders = cs_filter.filter_universe(cand_dfs)
+                if top_cs_leaders:
+                    candidates = list(dict.fromkeys(top_cs_leaders + candidates))
+        except Exception as cs_err:
+            logger.debug("CrossSectionalMomentum filter skipped: {}", cs_err)
         if not candidates:
             # 제외 후 후보 없으면 전체 유니버스에서 제외 목록만 빼고 랜덤 선택
             import random

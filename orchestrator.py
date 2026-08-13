@@ -1417,6 +1417,29 @@ class BotOrchestrator:
             except Exception as rm_err:
                 logger.error("[QUANT_RISK] Failed to check RiskManager gate: {}", rm_err)
 
+        # [INSTITUTIONAL QUANT UPGRADE 2 & 4] Pre-Earnings Shield & VPIN Toxicity Filter
+        if action == "BUY" and not is_rebalance:
+            try:
+                from pead_earnings_radar import PEADEarningsRadar
+                shielded, s_reason = PEADEarningsRadar().check_pre_earnings_shield(symbol)
+                if shielded:
+                    logger.warning("🚨 [EARNINGS_SHIELD] Entry BLOCKED for {}: {}", symbol, s_reason)
+                    return
+            except Exception as e_err:
+                logger.debug("Pre-Earnings Shield check skipped: {}", e_err)
+
+            try:
+                from vpin_microstructure import VPINMicrostructureFilter
+                from kis_data import get_daily_ohlcv
+                df_vpin = get_daily_ohlcv(symbol, period_days=40)
+                if df_vpin is not None and not df_vpin.empty:
+                    is_toxic, vpin_val = VPINMicrostructureFilter().is_order_flow_toxic(df_vpin, symbol)
+                    if is_toxic:
+                        logger.warning("🚨 [VPIN_TOXICITY] Entry BLOCKED for {}: VPIN={:.2f}", symbol, vpin_val)
+                        return
+            except Exception as v_err:
+                logger.debug("VPIN check skipped: {}", v_err)
+
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
