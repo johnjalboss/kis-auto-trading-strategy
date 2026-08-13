@@ -174,8 +174,17 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     ax_main.set_ylabel('Cumulative P&L ($)', color='#f0f6fc', fontsize=10, fontweight='bold')
     ax_main.tick_params(axis='y', labelcolor='#8b949e', labelsize=9)
     
-    # X-axis label formatting: ZERO OVERLAP (Horizontal, Clean Spacing)
-    ax_main.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
+    # X-axis label formatting: Dynamic Sampling to Guarantee ZERO OVERLAP for any accumulated days
+    n_pts = len(dates_labels)
+    if n_pts > 10:
+        step = max(1, n_pts // 7)
+        tick_indices = list(range(0, n_pts, step))
+        if (n_pts - 1) not in tick_indices:
+            tick_indices.append(n_pts - 1)
+        ax_main.set_xticks(tick_indices)
+        ax_main.set_xticklabels([dates_labels[i] for i in tick_indices], rotation=25 if n_pts > 20 else 0, fontsize=9)
+    else:
+        ax_main.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
     ax_main.grid(True, color='#21262d', linestyle='--', linewidth=0.7, alpha=0.6)
     
     def _dollar_pct_fmt(x, _):
@@ -216,7 +225,11 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     ax_alpha.set_ylabel('Excess Return\n(Alpha $)', color='#c9d1d9', fontsize=9, fontweight='bold')
     ax_alpha.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
     ax_alpha.tick_params(axis='y', labelcolor='#c9d1d9', labelsize=8)
-    ax_alpha.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
+    if n_pts > 10:
+        ax_alpha.set_xticks(tick_indices)
+        ax_alpha.set_xticklabels([dates_labels[i] for i in tick_indices], rotation=25 if n_pts > 20 else 0, fontsize=9)
+    else:
+        ax_alpha.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
     ax_alpha.grid(True, color='#21262d', linestyle='--', linewidth=0.6, alpha=0.6)
     
     alpha_max = max(max(alpha_dollars), 10.0)
