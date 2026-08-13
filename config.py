@@ -24,6 +24,7 @@ KIS_ACNT_PRDT_CD = os.getenv("KIS_ACNT_PRDT_CD", "01")
 # Trading mode: VPS=Paper, PROD=Live
 TRADING_ENV = os.getenv("TRADING_ENV", "VPS")
 IS_PAPER_TRADING = TRADING_ENV.upper() != "PROD"
+INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "759.86"))
 
 # Base URL for KIS API
 if IS_PAPER_TRADING:

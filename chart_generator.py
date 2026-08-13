@@ -202,26 +202,12 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
             else:
                 cum_pnls.append(s)
 
-        # ── 기준 자본금: 실계좌 총자산에서 누적 P&L 차감 = 투자 원금 추정 ──
-        # 가장 정확한 방법: 현재 총자산 - 누적수익 = 초기자본
-        account_equity = _get_account_equity()
-        all_time_pnl_total = sum(pnl_map.values()) + unrealized_pnl  # DB 전체 + 미실현 P&L
-
-        if account_equity and account_equity > 0:
-            # 현재 계좌 총자산 - 전체 누적 실현/미실현 수익 = 투입 원금 추정
-            base_capital = max(account_equity - all_time_pnl_total, account_equity * 0.5)
-            logger.info("Chart base_capital estimated from API: ${:.2f} (equity=${:.2f}, total_pnl=${:.2f})",
-                        base_capital, account_equity, all_time_pnl_total)
-        else:
-            # 폴백: config 또는 환경변수
-            env_capital = os.getenv("INITIAL_CAPITAL", "")
-            if not env_capital:
-                try:
-                    import config
-                    env_capital = str(getattr(config, 'INITIAL_CAPITAL', '777'))
-                except Exception:
-                    env_capital = '777'
-            base_capital = float(env_capital) if env_capital else 777.0
+        # ── 기준 자본금: KIS 증권사 실계좌 실측 입금 원금 ($759.86) ──
+        try:
+            import config
+            base_capital = float(getattr(config, 'INITIAL_CAPITAL', 759.86))
+        except Exception:
+            base_capital = 759.86
 
         # ── QQQ 벤치마크 달러 환산 ──────────────────────────────────────────
         qqq_dollar_map = _fetch_qqq_dollar_returns(start_date, end_date, base_capital)
