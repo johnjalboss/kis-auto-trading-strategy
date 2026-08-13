@@ -126,12 +126,12 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        cur.execute("SELECT MIN(date(exit_time, '-14 hours')) as min_date, MAX(date(exit_time, '-14 hours')) as max_date FROM trades WHERE side = 'SELL'")
+        cur.execute("SELECT MIN(date(exit_time, '-14 hours')) as min_date, MAX(date(exit_time, '-14 hours')) as max_date FROM trades WHERE side = 'SELL' AND date(exit_time) >= '2026-08-14'")
         db_range = cur.fetchone()
 
         if not db_range or not db_range['min_date']:
             logger.info("No sell trades found in database yet. Generating Standby Equity Baseline chart.")
-            db_min_date = datetime.now().date() - timedelta(days=7)
+            db_min_date = datetime.now().date()
             db_max_date = datetime.now().date()
         else:
             db_min_date = datetime.strptime(db_range['min_date'], '%Y-%m-%d').date()
@@ -169,7 +169,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
                 date(exit_time, '-14 hours') as date,
                 SUM(pnl) as net_pnl
             FROM trades
-            WHERE side = 'SELL' AND date(exit_time, '-14 hours') IS NOT NULL
+            WHERE side = 'SELL' AND date(exit_time) >= '2026-08-14'
             GROUP BY date(exit_time, '-14 hours')
             ORDER BY date ASC
         ''')
@@ -182,8 +182,8 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
         except Exception:
             base_capital = 1005.00
 
-        # daily_stats 테이블에서 180일 일별 유기적 자산 잔고 조회
-        cur.execute("SELECT date, (ending_balance - ?) as cum_pnl FROM daily_stats ORDER BY date ASC", (base_capital,))
+        # daily_stats 테이블에서 오늘(2026-08-14) 이후 일별 자산 잔고 조회
+        cur.execute("SELECT date, (ending_balance - ?) as cum_pnl FROM daily_stats WHERE date >= '2026-08-14' ORDER BY date ASC", (base_capital,))
         ds_rows = cur.fetchall()
         conn.close()
 
