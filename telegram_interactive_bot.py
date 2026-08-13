@@ -557,8 +557,16 @@ class TelegramInteractiveBot:
             from chart_generator import generate_daily_pnl_chart
             chart_path = generate_daily_pnl_chart(days=days)
             if chart_path and os.path.exists(chart_path):
-                period_str = "전체 기간" if days <= 0 else f"{days}일"
-                self._send_photo(chart_path, f"📊 <b>수익 차트 ({period_str})</b>")
+                # Create a fresh timestamped copy to bypass Telegram photo cache
+                ts_chart_path = f"/tmp/pnl_chart_{days}_{int(time.time())}.png"
+                import shutil
+                shutil.copy(chart_path, ts_chart_path)
+                period_str = "전체 기간 (All-Time)" if days <= 0 else f"{days}일"
+                self._send_photo(ts_chart_path, f"📊 <b>수익 차트 및 QQQ 벤치마크 ({period_str})</b>\n⏰ <code>{datetime.now().strftime('%H:%M:%S')}</code> 기준 실시간 생성")
+                try:
+                    os.remove(ts_chart_path)
+                except Exception:
+                    pass
             else:
                 self._send_reply("⚠️ 차트 생성 실패: 거래 데이터가 없거나 오류가 발생했습니다.")
         except Exception as e:
