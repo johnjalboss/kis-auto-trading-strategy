@@ -75,17 +75,30 @@ class TelegramInteractiveBot:
     def _send_one_click_menu(self):
         """전체 19개 원클릭 인터랙티브 제어판 메뉴 전송"""
         paused = "🔴 일시정지 중" if _is_bot_paused else "✅ 정상 가동"
+        
+        # Read dynamic tunnel URL if available, else default to static Oracle VPS IP
+        dash_url = "http://141.148.172.12:8080"
+        try:
+            if os.path.exists("/home/ubuntu/kis-auto-trading/logs/tunnel_url.txt"):
+                with open("/home/ubuntu/kis-auto-trading/logs/tunnel_url.txt", "r") as _uf:
+                    _tu = _uf.read().strip()
+                    if _tu.startswith("http"):
+                        dash_url = _tu
+        except Exception:
+            pass
+
         menu_text = (
             f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             "원하시는 버튼을 터치하시면 실시간 상태, 성과, 차트, 추천주,\n"
             "리스크 제어가 즉시 실행됩니다.\n\n"
-            "🌐 <b>실시간 웹 대시보드 주소</b>:\nhttps://dee-merger-endorsed-sas.trycloudflare.com"
+            f"🌐 <b>실시간 웹 대시보드 주소</b>:\n{dash_url}\n"
+            "🔑 <b>접속 비밀번호</b>: <code>0201!</code>"
         )
         reply_markup = {
             "inline_keyboard": [
                 [
-                    {"text": "🌐 실시간 웹 대시보드 열기", "url": "https://dee-merger-endorsed-sas.trycloudflare.com"}
+                    {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
                 ],
                 [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
