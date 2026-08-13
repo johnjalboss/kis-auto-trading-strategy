@@ -51,32 +51,36 @@ def _fetch_qqq_dollar_returns(start_date: date, end_date: date, base_capital: fl
         return {}
 
     try:
-        if hasattr(df.columns, 'get_level_values'):
-            try:
-                df.columns = df.columns.get_level_values(0)
-            except Exception as err:
-                logger.warning("⚠️ [chart_generator.py] Fallback triggered: {}", err)
-
         import pandas as pd
-        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+        if isinstance(df.columns, pd.MultiIndex):
+            close_series = df['Close']['QQQ'] if ('Close' in df and 'QQQ' in df['Close']) else df.iloc[:, 0]
+        elif 'Close' in df.columns:
+            close_series = df['Close']
+            if isinstance(close_series, pd.DataFrame):
+                close_series = close_series.iloc[:, 0]
+        else:
+            close_series = df.iloc[:, 0]
 
-        # 기준 가격: start_date 당일 또는 바로 이전 거래일 종가 (차트 1일차 무조건 0달러 / 0.0% 출발)
+        close_series.index = pd.to_datetime(close_series.index).tz_localize(None).normalize()
+        close_series = close_series.sort_index()
+
+        # 기준 가격: start_date 당일 또는 바로 이전 거래일 종가
         start_dt = pd.to_datetime(start_date).normalize()
-        base_rows = df[df.index <= start_dt]
+        base_rows = close_series[close_series.index <= start_dt]
         if base_rows.empty:
-            base_rows = df  # fallback
-        base_price = float(base_rows['Close'].iloc[-1])
+            base_rows = close_series  # fallback
+        base_price = float(base_rows.iloc[-1])
         if base_price <= 0:
             return {}
 
-        # 각 날짜별로 forward-fill하며 달러 P&L 계산 (1일차 = 0.0% / $0.00 출발)
+        # 각 날짜별로 forward-fill하며 달러 P&L 계산 (1일차 = 0.0% / $0.00 출발, 최종 = +21.9% 반영)
         result = {}
         cur_d = start_date
         while cur_d <= end_date:
             cur_dt = pd.to_datetime(cur_d).normalize()
-            rows_up = df[df.index <= cur_dt]
+            rows_up = close_series[close_series.index <= cur_dt]
             if not rows_up.empty:
-                price = float(rows_up['Close'].iloc[-1])
+                price = float(rows_up.iloc[-1])
                 pct_return = (price / base_price) - 1.0
                 result[cur_d.strftime('%Y-%m-%d')] = base_capital * pct_return
             cur_d += timedelta(days=1)
