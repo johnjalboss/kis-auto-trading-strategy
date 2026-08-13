@@ -202,12 +202,12 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 90) -> str:
             else:
                 cum_pnls.append(s)
 
-        # ── 기준 자본금: KIS 증권사 6개월 전체 269건 누적 손익 반영 실측 원금 ($802.65) ──
+        # ── 기준 자본금: KIS 증권 앱 대표님 실제 입금 내역 ($932 달러 + 10만원 환전 = $1,005.00) ──
         try:
             import config
-            base_capital = float(getattr(config, 'INITIAL_CAPITAL', 802.65))
+            base_capital = float(getattr(config, 'INITIAL_CAPITAL', 1005.00))
         except Exception:
-            base_capital = 802.65
+            base_capital = 1005.00
 
         # ── QQQ 벤치마크 달러 환산 ──────────────────────────────────────────
         qqq_dollar_map = _fetch_qqq_dollar_returns(start_date, end_date, base_capital)
