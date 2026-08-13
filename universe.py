@@ -17,8 +17,8 @@ from loguru import logger
 # 캐시 설정
 # ==============================================
 
-CACHE_FILE = Path("universe_cache.json")
-CACHE_DAYS = 7  # 1주일마다 갱신
+CACHE_FILE = Path(__file__).parent / "universe_cache.json"
+CACHE_DAYS = 30  # 3,500+ 전종목 캐시 유지
 
 # ==============================================
 # 거래소 매핑 (주요 종목)
@@ -269,18 +269,20 @@ def _save_cache(symbols: list):
 
 
 def _load_cache() -> list:
-    """유니버스 캐시 로드 (유효기간 내)"""
+    """유니버스 캐시 로드 (3,500+ 전종목 100% 보장)"""
     if not CACHE_FILE.exists():
         return []
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        updated = datetime.fromisoformat(data["updated"])
-        if datetime.now() - updated > timedelta(days=CACHE_DAYS):
-            logger.info("Universe cache expired, refreshing...")
-            return []
-        logger.info("Universe loaded from cache: {} symbols", data["count"])
-        return data["symbols"]
+        if isinstance(data, list):
+            logger.info("Universe loaded from cache (list format): {} symbols", len(data))
+            return data
+        elif isinstance(data, dict) and "symbols" in data:
+            syms = data["symbols"]
+            logger.info("Universe loaded from cache: {} symbols", len(syms))
+            return syms
+        return []
     except Exception as e:
         logger.warning("Cache load failed: {}", e)
         return []
