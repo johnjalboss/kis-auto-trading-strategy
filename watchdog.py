@@ -29,10 +29,10 @@ def run():
     restart_count = 0
 
 
-    while restart_count < MAX_RESTARTS:
+    while True:
         start_time = datetime.now()
         try:
-            print(f"[WATCHDOG] Starting main.py (restart #{restart_count})")
+            print(f"[WATCHDOG] Starting main.py daemon (restart #{restart_count})")
             python_exe = sys.executable if sys.executable else "python3"
             proc = subprocess.run(
                 [python_exe, script],
@@ -45,34 +45,24 @@ def run():
             sys.exit(0)
         except Exception as e:
             exit_code = -1
-            error_msg = str(e)
 
         runtime = (datetime.now() - start_time).total_seconds()
-        restart_count += 1
 
+        # 정상 종료(exit_code == 0)시 텔레그램 스팸 알림 없이 10초 후 24시간 무한 자동 재가동
         if exit_code == 0:
-            send_tg(f"⚪ <b>트레이딩봇 정상 종료</b>\n실행시간: {runtime/3600:.1f}h")
-            break
+            print(f"[WATCHDOG] main.py completed cycle (runtime: {runtime:.1f}s). Restarting in 10s...")
+            time.sleep(10)
+            continue
 
+        restart_count += 1
         send_tg(
-            f"🔴 <b>트레이딩봇 크래시!</b>\n"
+            f"🔴 <b>트레이딩봇 재시작 경보</b>\n"
             f"Exit code: {exit_code}\n"
             f"실행시간: {runtime/3600:.1f}h\n"
-            f"재시작: #{restart_count}/{MAX_RESTARTS}\n"
-            f"시간: {datetime.now().strftime('%H:%M:%S')}\n"
-            f"{RESTART_DELAY}초 후 재시작..."
+            f"재시작: #{restart_count}\n"
+            f"10초 후 24시간 무한 자동 재가동..."
         )
-
-        if runtime < 10:
-            RESTART_DELAY_ACTUAL = min(RESTART_DELAY * restart_count, 300)
-            print(f"[WATCHDOG] Crashed too fast, waiting {RESTART_DELAY_ACTUAL}s")
-            time.sleep(RESTART_DELAY_ACTUAL)
-        else:
-            restart_count = max(0, restart_count - 1)
-            time.sleep(RESTART_DELAY)
-
-    if restart_count >= MAX_RESTARTS:
-        send_tg(f"🚨 <b>트레이딩봇 재시작 한도 초과!</b>\n{MAX_RESTARTS}회 재시작 실패. 수동 확인 필요.")
+        time.sleep(10)
 
 
 if __name__ == "__main__":

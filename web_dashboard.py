@@ -322,14 +322,16 @@ def render_dashboard_html() -> str:
     logs_html = "System initializing..."
     pos_count = 0
 
-    # 1. Fetch live balance using Trader
+    # 1. Fetch live balance and positions directly using Trader API
     trader_obj = None
+    live_positions = []
     try:
         from trader import Trader
         trader_obj = Trader()
         cash = trader_obj.get_buying_power()
+        live_positions = trader_obj.get_positions()
     except Exception as e:
-        logger.debug(f"Trader cash fetch error: {e}")
+        logger.debug(f"Trader live fetch error: {e}")
 
     try:
         from orchestrator import get_orchestrator
@@ -342,59 +344,89 @@ def render_dashboard_html() -> str:
     except Exception as e:
         logger.debug(f"Orchestrator state bypass: {e}")
 
-    if cash <= 0:
-        cash = 9650.12  # Fallback to current KIS cash
-
     pos_total_val = 0.0
 
-    # 2. Fetch positions and trades from SQLite DB
+    # 2. Render Open Positions (Prefer Live KIS Broker positions over DB)
+    if live_positions:
+        pos_count = len(live_positions)
+        for p in live_positions:
+            sym = p.symbol
+            qty = p.quantity
+            entry_p = p.avg_price
+            curr_p = p.current_price if p.current_price > 0 else entry_p
+
+            pnl_usd = (curr_p - entry_p) * qty
+            pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+            pos_total_val += (curr_p * qty)
+
+            cls_name = "positive" if pnl_pct >= 0 else "negative"
+            sign = "+" if pnl_pct >= 0 else ""
+
+            pos_rows += (
+                f"<tr>"
+                f"<td><b>{sym}</b></td>"
+                f"<td>{qty}주</td>"
+                f"<td>${entry_p:.2f}</td>"
+                f"<td>${curr_p:.2f}</td>"
+                f"<td class='{cls_name}'>${pnl_usd:+,.2f}</td>"
+                f"<td class='{cls_name}'>{sign}{pnl_pct:.2f}%</td>"
+                f"<td>🟢 KIS Live Holding</td>"
+                f"</tr>"
+            )
+    else:
+        # Fallback to trades.db positions table if API temporary offline
+        try:
+            db_path = "trades.db"
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                cur = conn.cursor()
+                cur.execute("SELECT symbol, quantity, avg_price FROM positions")
+                db_positions = cur.fetchall()
+                pos_count = len(db_positions)
+
+                if db_positions:
+                    for p in db_positions:
+                        sym, qty, entry_p = p[0], p[1], float(p[2])
+                        curr_p = entry_p
+                        if trader_obj:
+                            try:
+                                live_p = trader_obj.get_price(sym)
+                                if live_p > 0:
+                                    curr_p = live_p
+                            except Exception:
+                                pass
+
+                        pnl_usd = (curr_p - entry_p) * qty
+                        pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+                        pos_total_val += (curr_p * qty)
+
+                        cls_name = "positive" if pnl_pct >= 0 else "negative"
+                        sign = "+" if pnl_pct >= 0 else ""
+
+                        pos_rows += (
+                            f"<tr>"
+                            f"<td><b>{sym}</b></td>"
+                            f"<td>{qty}주</td>"
+                            f"<td>${entry_p:.2f}</td>"
+                            f"<td>${curr_p:.2f}</td>"
+                            f"<td class='{cls_name}'>${pnl_usd:+,.2f}</td>"
+                            f"<td class='{cls_name}'>{sign}{pnl_pct:.2f}%</td>"
+                            f"<td>🟢 DB Active Holding</td>"
+                            f"</tr>"
+                        )
+                else:
+                    pos_rows = "<tr><td colspan='7' style='text-align:center;color:#8b949e;'>📭 현재 보유 중인 포지션이 없습니다.</td></tr>"
+                conn.close()
+        except Exception as e:
+            logger.debug(f"Dashboard DB query error: {e}")
+            pos_rows = "<tr><td colspan='7' style='text-align:center;color:#8b949e;'>📭 현재 보유 중인 포지션이 없습니다.</td></tr>"
+
+    # Query trades table (Recent 15 closed/executed trades)
     try:
         db_path = "trades.db"
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
-
-            # Query positions table
-            cur.execute("SELECT symbol, quantity, avg_price FROM positions")
-            positions = cur.fetchall()
-            pos_count = len(positions)
-
-            if positions:
-                for p in positions:
-                    sym, qty, entry_p = p[0], p[1], float(p[2])
-                    curr_p = entry_p
-                    
-                    # Fetch real-time price from trader / KIS
-                    if trader_obj:
-                        try:
-                            live_p = trader_obj.get_price(sym)
-                            if live_p > 0:
-                                curr_p = live_p
-                        except Exception:
-                            pass
-
-                    pnl_usd = (curr_p - entry_p) * qty
-                    pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
-                    pos_total_val += (curr_p * qty)
-
-                    cls_name = "positive" if pnl_pct >= 0 else "negative"
-                    sign = "+" if pnl_pct >= 0 else ""
-
-                    pos_rows += (
-                        f"<tr>"
-                        f"<td><b>{sym}</b></td>"
-                        f"<td>{qty}주</td>"
-                        f"<td>${entry_p:.2f}</td>"
-                        f"<td>${curr_p:.2f}</td>"
-                        f"<td class='{cls_name}'>${pnl_usd:+,.2f}</td>"
-                        f"<td class='{cls_name}'>{sign}{pnl_pct:.2f}%</td>"
-                        f"<td>🟢 Active Holding</td>"
-                        f"</tr>"
-                    )
-            else:
-                pos_rows = "<tr><td colspan='7' style='text-align:center;color:#8b949e;'>📭 현재 보유 중인 포지션이 없습니다.</td></tr>"
-
-            # Query trades table (Recent 15 closed/executed trades)
             cur.execute(
                 "SELECT created_at, symbol, side, quantity, price, pnl, pnl_pct, reason "
                 "FROM trades ORDER BY id DESC LIMIT 15"
@@ -422,12 +454,12 @@ def render_dashboard_html() -> str:
                     )
             else:
                 trades_rows = "<tr><td colspan='8' style='text-align:center;color:#8b949e;'>📭 거래 기록이 없습니다.</td></tr>"
-
             conn.close()
     except Exception as e:
-        logger.debug(f"Dashboard DB query error: {e}")
+        logger.debug(f"Trades query error: {e}")
+        trades_rows = "<tr><td colspan='8' style='text-align:center;color:#8b949e;'>📭 거래 기록이 없습니다.</td></tr>"
 
-    # Total Equity = Available Cash + Open Positions Market Value
+    # Total Equity = Available Cash + Open Positions Market Value (No dummy fallbacks!)
     equity = cash + pos_total_val
     if equity <= 0 and cash <= 0:
         try:
