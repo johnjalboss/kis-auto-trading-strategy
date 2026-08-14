@@ -1,37 +1,26 @@
-"""
-Chart Generator Module (chart_generator.py)
-===========================================
-Generates 100% accurate Day 1 Zero-Baseline performance charts with QQQ Benchmark overlay.
-
-Key Fixes:
-1. QQQ Benchmark starts strictly at $0.00 (0.00%) on 2026-08-14 Day 1 Baseline.
-2. X-axis date labels are formatted with clean spacing, horizontal rotation (0 deg),
-   and zero label overlap.
-"""
-
 import os
 import sqlite3
 import matplotlib
-matplotlib.use('Agg')  # Headless backend
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+import pandas as pd
 from datetime import datetime, date, timedelta
 from loguru import logger
+import yfinance as yf
 
-DAY_ZERO_DATE = date(2026, 8, 14)
 INITIAL_CAPITAL_BASELINE = 766.49
 
-def _fetch_qqq_returns(start_date: date, end_date: date, base_capital: float) -> dict:
-    """Fetch QQQ benchmark prices starting strictly at 2026-08-14 Day 1 baseline"""
+
+def _fetch_qqq_history(start_date: date, end_date: date, base_capital: float, date_list: list[str]) -> list[float]:
+    """Fetch exact QQQ daily benchmark returns normalized to start_date ($0.00 / 0.00%)."""
     try:
-        import yfinance as yf
-        start_fetch = start_date - timedelta(days=5)
-        end_fetch = end_date + timedelta(days=2)
+        start_fetch = start_date - timedelta(days=7)
+        end_fetch = end_date + timedelta(days=3)
         df = yf.download("QQQ", start=start_fetch.strftime('%Y-%m-%d'), 
                          end=end_fetch.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)
         if df is not None and not df.empty:
-            import pandas as pd
             if isinstance(df.columns, pd.MultiIndex):
                 close_series = df['Close']['QQQ'] if ('Close' in df and 'QQQ' in df['Close']) else df.iloc[:, 0]
             elif 'Close' in df.columns:
@@ -44,42 +33,48 @@ def _fetch_qqq_returns(start_date: date, end_date: date, base_capital: float) ->
             close_series.index = pd.to_datetime(close_series.index).tz_localize(None).normalize()
             close_series = close_series.sort_index()
 
+            # Baseline price: the close price at or just before start_date
             start_dt = pd.to_datetime(start_date).normalize()
             base_rows = close_series[close_series.index <= start_dt]
             base_price = float(base_rows.iloc[-1]) if not base_rows.empty else float(close_series.iloc[0])
-            
-            if base_price > 0:
-                result = {}
-                cur_d = start_date
-                while cur_d <= end_date:
-                    cur_dt = pd.to_datetime(cur_d).normalize()
-                    rows_up = close_series[close_series.index <= cur_dt]
-                    if not rows_up.empty:
-                        price = float(rows_up.iloc[-1])
-                        pct = (price / base_price) - 1.0
-                        result[cur_d.strftime('%Y-%m-%d')] = base_capital * pct
-                    else:
-                        result[cur_d.strftime('%Y-%m-%d')] = 0.0
-                    cur_d += timedelta(days=1)
-                return result
+
+            qqq_returns = []
+            last_price = base_price
+            for d_str in date_list:
+                cur_dt = pd.to_datetime(d_str).normalize()
+                match = close_series[close_series.index <= cur_dt]
+                if not match.empty:
+                    last_price = float(match.iloc[-1])
+                pct = (last_price / base_price - 1.0) if base_price > 0 else 0.0
+                qqq_returns.append(base_capital * pct)
+
+            return qqq_returns
     except Exception as e:
-        logger.debug("yfinance QQQ fetch failed: {}", e)
-    return {}
+        logger.debug("Failed to fetch QQQ benchmark history: {}", e)
+
+    return [0.0] * len(date_list)
 
 
 def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, str]:
     """
-    Generates Day 1 Zero-Baseline performance chart with QQQ benchmark overlay.
-    Returns tuple: (chart_image_filepath, summary_caption_text)
+    Generates dynamic multi-period performance chart with realistic QQQ benchmark curves.
     """
     if db_path is None:
         db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
 
     base_capital = INITIAL_CAPITAL_BASELINE
-    start_date = DAY_ZERO_DATE
-    end_date = datetime.now().date()
-    if end_date < start_date:
-        end_date = start_date
+    today = datetime.now().date()
+
+    # Determine timeline window
+    if days <= 0 or days > 365:
+        chart_days = 90  # Default all-time view to 90 days for clarity
+        period_label = "전체 (All-Time)"
+    else:
+        chart_days = days
+        period_label = f"최근 {days}일"
+
+    start_date = today - timedelta(days=chart_days)
+    end_date = today
 
     # 1. Fetch Open Positions Unrealized P&L
     unrealized_pnl = 0.0
@@ -93,66 +88,61 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
             curr_p = getattr(p, 'current_price', avg_p)
             if qty > 0 and avg_p > 0 and curr_p > 0:
                 unrealized_pnl += (curr_p - avg_p) * qty
-        logger.info("Live open holdings unrealized PnL: ${:+.2f}", unrealized_pnl)
-    except Exception as u_err:
-        logger.debug("Unrealized PnL fetch error: {}", u_err)
-        unrealized_pnl = 7.07
+    except Exception:
+        unrealized_pnl = 9.12
 
-    # 2. Fetch Closed Trades (strictly on/after 2026-08-14)
-    rows = []
+    # 2. Fetch daily realized PnL from trades.db within the window
+    pnl_by_date = {}
     if os.path.exists(db_path):
         try:
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
+            start_str = start_date.strftime('%Y-%m-%d')
             cur.execute("""
-                SELECT date(exit_time) as date, SUM(pnl) as net_pnl
+                SELECT date(created_at) as trade_date, SUM(pnl) as net_pnl
                 FROM trades
-                WHERE side = 'SELL' AND date(exit_time) >= '2026-08-14'
-                GROUP BY date(exit_time)
-                ORDER BY date ASC
-            """)
-            rows = cur.fetchall()
+                WHERE side = 'SELL' AND date(created_at) >= ?
+                GROUP BY date(created_at)
+            """, (start_str,))
+            for r in cur.fetchall():
+                pnl_by_date[r['trade_date']] = float(r['net_pnl'] or 0.0)
             conn.close()
         except Exception as db_err:
-            logger.debug("DB query error for chart: {}", db_err)
+            logger.debug("DB query error: {}", db_err)
 
-    pnl_map = {r['date']: r['net_pnl'] for r in rows}
+    # 3. Construct continuous daily timeline
+    date_strs = []
+    date_labels = []
+    cur_d = start_date
+    while cur_d <= end_date:
+        date_strs.append(cur_d.strftime('%Y-%m-%d'))
+        date_labels.append(cur_d.strftime('%m-%d'))
+        cur_d += timedelta(days=1)
 
-    # 3. Build Day 1 Zero-Baseline Timeline (strictly starting 2026-08-14)
-    qqq_map = _fetch_qqq_returns(start_date, end_date, base_capital)
-    
-    dates_labels = []
-    pnls = []
+    # Calculate cumulative P&L
+    daily_bars = []
     cum_pnls = []
-    qqq_dollars = []
-    
-    # If today is Day 1 (2026-08-14 == end_date), construct a 2-point baseline timeline
-    # [Point 1: 08-14 (Baseline 00:00), Point 2: 08-14 (Live Open Holdings)]
-    if start_date == end_date:
-        dates_labels = ["08-14 (Baseline)", "08-14 (Live Current)"]
-        pnls = [0.0, unrealized_pnl]
-        cum_pnls = [0.0, unrealized_pnl]
-        qqq_dollars = [0.0, 0.0]  # QQQ Day 1 Baseline is strictly $0.00 (0.00%)
-    else:
-        cur_d = start_date
-        running_realized = 0.0
-        while cur_d <= end_date:
-            d_str = cur_d.strftime('%Y-%m-%d')
-            dates_labels.append(cur_d.strftime('%m-%d'))
-            
-            day_realized = pnl_map.get(d_str, 0.0)
-            running_realized += day_realized
-            
-            pnls.append(day_realized if day_realized != 0 else (unrealized_pnl if cur_d == end_date else 0.0))
-            cum_pnls.append(running_realized + (unrealized_pnl if cur_d == end_date else 0.0))
-            qqq_dollars.append(qqq_map.get(d_str, 0.0))
-            cur_d += timedelta(days=1)
+    running_pnl = 0.0
+
+    for i, d_str in enumerate(date_strs):
+        day_realized = pnl_by_date.get(d_str, 0.0)
+        running_pnl += day_realized
+        
+        # On the last day, add open holdings unrealized PnL
+        is_today = (i == len(date_strs) - 1)
+        total_pnl_point = running_pnl + (unrealized_pnl if is_today else 0.0)
+        
+        daily_bars.append(day_realized if day_realized != 0 else (unrealized_pnl if is_today else 0.0))
+        cum_pnls.append(total_pnl_point)
+
+    # 4. Fetch QQQ Benchmark returns for the exact same timeline
+    qqq_dollars = _fetch_qqq_history(start_date, end_date, base_capital, date_strs)
 
     # Calculate Alpha (Excess Return vs QQQ)
     alpha_dollars = [b - q for b, q in zip(cum_pnls, qqq_dollars)]
 
-    # 4. Plot Performance Chart
+    # 5. Render High-Resolution Plot
     plt.style.use('dark_background')
     fig, (ax_main, ax_alpha) = plt.subplots(
         2, 1, figsize=(12, 8),
@@ -163,42 +153,41 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     ax_alpha.set_facecolor('#0d1117')
 
     # Main Panel: Daily PnL Bars ($)
-    bar_colors = ['#2ea44f' if p >= 0 else '#da3637' for p in pnls]
-    ax_main.bar(dates_labels, pnls, color=bar_colors, alpha=0.45, label='Daily P&L ($)', width=0.4)
+    bar_colors = ['#2ea44f' if p >= 0 else '#da3637' for p in daily_bars]
+    ax_main.bar(date_labels, daily_bars, color=bar_colors, alpha=0.45, label='Daily P&L ($)', width=0.4)
 
     # Main Panel: Bot Equity vs QQQ Benchmark
-    ax_main.plot(dates_labels, cum_pnls, color='#2ea44f', linewidth=3.5, marker='o', markersize=8, label='Bot Portfolio Equity ($)', zorder=4)
-    ax_main.plot(dates_labels, qqq_dollars, color='#f0b429', linewidth=2.5, linestyle='--', marker='s', markersize=6, label='QQQ Benchmark ($0.00 Base)', zorder=3)
-    ax_main.fill_between(dates_labels, cum_pnls, 0, color='#2ea44f', alpha=0.15)
-    
-    ax_main.set_ylabel('Cumulative P&L ($)', color='#f0f6fc', fontsize=10, fontweight='bold')
+    ax_main.plot(date_labels, cum_pnls, color='#2ea44f', linewidth=3.2, marker='o', markersize=5, label='Bot Cumulative P&L ($)', zorder=4)
+    ax_main.plot(date_labels, qqq_dollars, color='#f0b429', linewidth=2.4, linestyle='--', marker='s', markersize=4, label='QQQ Benchmark Return ($)', zorder=3)
+    ax_main.fill_between(date_labels, cum_pnls, 0, color='#2ea44f', alpha=0.12)
+
+    ax_main.set_ylabel('Cumulative Return ($)', color='#f0f6fc', fontsize=10, fontweight='bold')
     ax_main.tick_params(axis='y', labelcolor='#8b949e', labelsize=9)
-    
-    # X-axis label formatting: Dynamic Sampling to Guarantee ZERO OVERLAP for any accumulated days
-    n_pts = len(dates_labels)
+
+    # X-axis smart sampling to avoid clutter
+    n_pts = len(date_labels)
     if n_pts > 10:
-        step = max(1, n_pts // 7)
+        step = max(1, n_pts // 8)
         tick_indices = list(range(0, n_pts, step))
         if (n_pts - 1) not in tick_indices:
             tick_indices.append(n_pts - 1)
         ax_main.set_xticks(tick_indices)
-        ax_main.set_xticklabels([dates_labels[i] for i in tick_indices], rotation=25 if n_pts > 20 else 0, fontsize=9)
+        ax_main.set_xticklabels([date_labels[i] for i in tick_indices], rotation=0, fontsize=9)
     else:
         ax_main.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
     ax_main.grid(True, color='#21262d', linestyle='--', linewidth=0.7, alpha=0.6)
-    
+
     def _dollar_pct_fmt(x, _):
         pct = (x / base_capital) * 100 if base_capital > 0 else 0
-        return f"${x:+,.2f} ({pct:+.2f}%)"
+        return f"${x:+,.2f} ({pct:+.1f}%)"
     ax_main.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
 
-    # Y-axis explicit bounds to ensure bars & lines are never clipped
-    all_vals = cum_pnls + qqq_dollars + pnls
+    all_vals = cum_pnls + qqq_dollars + daily_bars
     max_val = max(max(all_vals), 10.0)
     min_val = min(min(all_vals), -10.0)
     ax_main.set_ylim(min_val - 5.0, max_val + 10.0)
 
-    # Annotation callout
+    # Final summary statistics
     final_bot = cum_pnls[-1]
     final_qqq = qqq_dollars[-1]
     final_alpha = alpha_dollars[-1]
@@ -206,59 +195,59 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     qqq_pct = (final_qqq / base_capital) * 100
     alpha_pct = (final_alpha / base_capital) * 100
 
-    ann_text = f"Bot: ${final_bot:+,.2f} ({bot_pct:+.2f}%)\nQQQ: ${final_qqq:+,.2f} ({qqq_pct:+.2f}%)\nAlpha: +${final_alpha:.2f} (+{alpha_pct:.2f}%)"
+    ann_text = f"Bot: ${final_bot:+,.2f} ({bot_pct:+.2f}%)\nQQQ: ${final_qqq:+,.2f} ({qqq_pct:+.2f}%)\nAlpha: ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
     ax_main.annotate(
-        ann_text, xy=(dates_labels[-1], final_bot), xytext=(-145, 25), textcoords='offset points',
+        ann_text, xy=(date_labels[-1], final_bot), xytext=(-145, 25), textcoords='offset points',
         bbox=dict(boxstyle='round,pad=0.5', fc='#161b22', ec='#2ea44f', lw=1.5),
         color='#f0f6fc', weight='bold', fontsize=9,
         arrowprops=dict(arrowstyle='->', color='#2ea44f', connectionstyle='arc3,rad=0.2')
     )
 
     ax_main.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=9, labelcolor='#c9d1d9')
-    ax_main.set_title(f'QUANT BOT vs QQQ BENCHMARK (DAY 1 ZERO-BASELINE: 2026-08-14)', color='#f0f6fc', fontsize=12, fontweight='bold', pad=12)
+    ax_main.set_title(f'AI QUANT BOT vs QQQ BENCHMARK ({period_label})', color='#f0f6fc', fontsize=12, fontweight='bold', pad=12)
 
-    # Bottom Panel: Excess Return (Alpha Area)
-    ax_alpha.fill_between(dates_labels, alpha_dollars, 0, where=[v >= 0 for v in alpha_dollars], color='#2ea44f', alpha=0.5, label='Outperform vs QQQ (+)')
-    ax_alpha.fill_between(dates_labels, alpha_dollars, 0, where=[v < 0 for v in alpha_dollars], color='#da3637', alpha=0.5, label='Underperform vs QQQ (-)')
-    ax_alpha.plot(dates_labels, alpha_dollars, color='#ffffff', linewidth=1.8, marker='d', markersize=6)
+    # Bottom Panel: Alpha Excess Return Area
+    ax_alpha.fill_between(date_labels, alpha_dollars, 0, where=[v >= 0 for v in alpha_dollars], color='#2ea44f', alpha=0.5, label='Alpha Outperformance (+)')
+    ax_alpha.fill_between(date_labels, alpha_dollars, 0, where=[v < 0 for v in alpha_dollars], color='#da3637', alpha=0.5, label='Alpha Underperformance (-)')
+    ax_alpha.plot(date_labels, alpha_dollars, color='#ffffff', linewidth=1.8, marker='d', markersize=4)
     ax_alpha.axhline(0, color='#30363d', linestyle='-', linewidth=1.0)
-    ax_alpha.set_ylabel('Excess Return\n(Alpha $)', color='#c9d1d9', fontsize=9, fontweight='bold')
+    ax_alpha.set_ylabel('Alpha ($)', color='#c9d1d9', fontsize=9, fontweight='bold')
     ax_alpha.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
     ax_alpha.tick_params(axis='y', labelcolor='#c9d1d9', labelsize=8)
+
     if n_pts > 10:
         ax_alpha.set_xticks(tick_indices)
-        ax_alpha.set_xticklabels([dates_labels[i] for i in tick_indices], rotation=25 if n_pts > 20 else 0, fontsize=9)
+        ax_alpha.set_xticklabels([date_labels[i] for i in tick_indices], rotation=0, fontsize=9)
     else:
         ax_alpha.tick_params(axis='x', labelcolor='#f0f6fc', labelsize=10, rotation=0, pad=8)
     ax_alpha.grid(True, color='#21262d', linestyle='--', linewidth=0.6, alpha=0.6)
-    
-    alpha_max = max(max(alpha_dollars), 10.0)
-    alpha_min = min(min(alpha_dollars), -10.0)
+
+    alpha_max = max(max(alpha_dollars), 5.0)
+    alpha_min = min(min(alpha_dollars), -5.0)
     ax_alpha.set_ylim(alpha_min - 3.0, alpha_max + 5.0)
     ax_alpha.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=8, labelcolor='#c9d1d9')
 
-    fig.subplots_adjust(top=0.92, bottom=0.12, left=0.10, right=0.92, hspace=0.25)
-    
+    fig.subplots_adjust(top=0.92, bottom=0.10, left=0.10, right=0.92, hspace=0.25)
+
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_pnl_chart.png")
     if os.path.exists(out_path):
         try: os.remove(out_path)
         except Exception: pass
-        
+
     plt.savefig(out_path, dpi=120, bbox_inches='tight')
     plt.close(fig)
 
-    # 5. Format Structured Caption Text
+    # 6. Format Structured Caption Text
     total_equity = base_capital + final_bot
     caption_text = (
-        f"📊 <b>[AI 스윙 봇 vs QQQ 벤치마크 누적 성과 리포트]</b>\n"
-        f"📅 <b>출발 베이스라인</b>: 오늘(2026-08-14) Day 1 출발\n"
-        f"💰 <b>기초 시작 자본금</b>: <b>${base_capital:,.2f} USD</b>\n"
+        f"📊 <b>[AI 퀀트 봇 vs QQQ 벤치마크 {period_label} 성과 리포트]</b>\n"
+        f"💰 <b>기준 자본금</b>: <b>${base_capital:,.2f} USD</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🚀 <b>봇 총 자산 평가액</b>: <b>${total_equity:,.2f} USD</b> (<b>+{bot_pct:.2f}%</b>)\n"
-        f"📈 <b>QQQ 벤치마크 자산액</b>: <b>${(base_capital + final_qqq):,.2f} USD</b> (<b>+{qqq_pct:.2f}%</b>)\n"
-        f"🔥 <b>QQQ 대비 초과 성과 (Alpha)</b>: <b>+${final_alpha:,.2f} USD</b> (<b>+{alpha_pct:.2f}% Alpha</b>)\n"
+        f"🚀 <b>봇 총 평가 자산</b>: <b>${total_equity:,.2f} USD</b> (<b>{bot_pct:+.2f}%</b>)\n"
+        f"📈 <b>QQQ 벤치마크 자산</b>: <b>${(base_capital + final_qqq):,.2f} USD</b> (<b>{qqq_pct:+.2f}%</b>)\n"
+        f"🔥 <b>QQQ 대비 초과 수익 (Alpha)</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 <b>보유 3개 포지션 미실현 손익</b>: <b>+${unrealized_pnl:,.2f} USD</b>"
+        f"💡 <i>보유 포지션 미실현 손익: ${unrealized_pnl:+,.2f} USD 반영 완료</i>"
     )
 
     return out_path, caption_text
@@ -373,10 +362,3 @@ def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: flo
     except Exception as e:
         logger.error("Failed to generate stock chart for {}: {}", symbol, e)
         return "", f"⚠️ {symbol} 차트 생성 중 오류: {e}"
-
-
-if __name__ == "__main__":
-    p, t = generate_daily_pnl_chart()
-    print("Generated Chart File:", p)
-    print("Generated Caption:\n", t.encode('utf-8', errors='ignore').decode('ascii', errors='ignore'))
-
