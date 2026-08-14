@@ -246,7 +246,9 @@ class SmartOrderExecutor:
                 logger.info("[OBI_FILTER] High selling pressure detected. Reduced BUY limit offset from {:.3%} to {:.3%}", 
                             plan.limit_offset_pct, adjusted_offset)
             else:
-                limit = price * (1 + plan.limit_offset_pct)
+                # [SLIPPAGE SHIELD] Clamp standard limit offset to max +0.25% to prevent overpaying on wide spreads
+                safe_offset = min(0.0025, plan.limit_offset_pct)
+                limit = price * (1 + safe_offset)
         else:
             if obi > 0.3:
                 # Strong buy pressure — raise sell limit (less negative offset) for a better fill
@@ -255,9 +257,10 @@ class SmartOrderExecutor:
                 logger.info("[OBI_FILTER] Strong buying pressure detected. Raised SELL limit offset from {:.3%} to {:.3%}",
                             plan.limit_offset_pct, adjusted_offset)
             else:
-                limit = price * (1 + plan.limit_offset_pct)
+                safe_offset = max(-0.0025, plan.limit_offset_pct)
+                limit = price * (1 + safe_offset)
         
-        order.limit_price = limit
+        order.limit_price = round(limit, 2)
         
         # Simulate or execute
         # Simulate or execute

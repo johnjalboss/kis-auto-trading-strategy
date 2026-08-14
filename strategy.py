@@ -1014,6 +1014,19 @@ class StrategyEngine:
             logger.debug("Amihud pressure check skipped for {}: {}", symbol, _ami_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 5: PEAD EARNINGS DRIFT ACCELERATION] (+20 pts)
+        # ================================
+        try:
+            from pead_earnings_radar import PEADEarningsRadar
+            is_pead, surprise_p = PEADEarningsRadar().check_pead_breakout(symbol)
+            if is_pead:
+                score += 20
+                breakdown.append(f"🚀 [PEAD 실적 서프라이즈] EPS Surprise +{surprise_p:.1f}% (어닝 모멘텀 가속) (+20점)")
+                logger.info("🚀 [PEAD_SURPRISE_BOOST] +20 pts for {}: EPS Surprise +{:.1f}%", symbol, surprise_p)
+        except Exception as _pead_err:
+            logger.debug("PEAD surprise check skipped for {}: {}", symbol, _pead_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:
