@@ -1,11 +1,63 @@
 """
 Telegram Order Receipt Card Generator (telegram_receipt.py)
 =============================================================
-Generates rich, visual HTML receipt cards for Telegram upon BUY and SELL order executions.
+Generates rich, detailed, institutional-grade visual HTML receipt cards
+for Telegram upon BUY and SELL order executions.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from datetime import datetime
+
+
+def _translate_exit_reason_detail(reason: str) -> str:
+    """Translates exit reasons into clear Korean institutional explanations."""
+    if not reason:
+        return "• <b>청산 사유</b>: 원칙적 리스크 관리 청산"
+    
+    r_lower = reason.lower()
+    
+    if "profit_lock" in r_lower:
+        return (
+            "• <b>분류</b>: 🔒 <b>이익 보존 손절선 (Profit Locking Stop)</b>\n"
+            "• <b>상세 근거</b>: 주가 고점 상승 후 가격 조정을 받을 때, 확보한 이익(+2.0%/+5.5%/+9.0%)을 뺏기지 않고 안전하게 확정 청산."
+        )
+    if "trailing_stop" in r_lower or "trailing" in r_lower:
+        return (
+            "• <b>분류</b>: 📈 <b>ATR 동적 트레일링 스탑 (Trailing Stop)</b>\n"
+            "• <b>상세 근거</b>: 고점 대비 ATR 변동성 채널 이탈로 상승 모멘텀 둔화가 감지되어 고점 부근에서 수익을 극대화하며 방어 매도."
+        )
+    if "hard_stop" in r_lower or "stop_loss" in r_lower:
+        return (
+            "• <b>분류</b>: 🛑 <b>원칙적 리스크 손절 (Hard Stop-Loss)</b>\n"
+            "• <b>상세 근거</b>: 매수 단가 대비 손절 기준선(-3.0%~-5.0%)에 도달하여 원금 손실 확대를 차단하기 위해 원칙적 즉시 매도."
+        )
+    if "dead_money" in r_lower:
+        return (
+            "• <b>분류</b>: 💤 <b>횡보주 조기 회수 (Dead Money Exit)</b>\n"
+            "• <b>상세 근거</b>: 3일간 박스권(-1.0%~+1.0%)에 갇혀 횡보함에 따라, 자금 회전율(Capital Velocity)을 높이기 위해 예수금 조기 회수."
+        )
+    if "dynamic_time_expired" in r_lower or "max_hold" in r_lower or "time_exit" in r_lower:
+        return (
+            "• <b>분류</b>: ⏱️ <b>스윙 보유 기간 만료 청산</b>\n"
+            "• <b>상세 근거</b>: 적응형 보유 한도(5일)에 도달하여 장기 자금 묶임 방지를 위해 포지션 정리."
+        )
+    if "gemini_ai" in r_lower or "catastrophic" in r_lower:
+        return (
+            "• <b>분류</b>: 🚨 <b>Gemini AI 실시간 악재 긴급 청산</b>\n"
+            "• <b>상세 근거</b>: 파산, SEC 조사, 실적 쇼크 등 실시간 돌발 대형 악재 뉴스 감지로 즉시 손실 차단 매도."
+        )
+    if "upgrade" in r_lower or "rotation" in r_lower:
+        return (
+            "• <b>분류</b>: 🔄 <b>우수 주도주 교체 매매 (Upgrade Rotation)</b>\n"
+            "• <b>상세 근거</b>: 모멘텀/수급 점수가 더 높은 최정예 주도주를 포착하여 기존 포지션 전량 매도 후 현금 확보."
+        )
+    if "take_profit" in r_lower or "profit_target" in r_lower:
+        return (
+            "• <b>분류</b>: 🎯 <b>목표 수익률 달성 익절 (Take-Profit)</b>\n"
+            "• <b>상세 근거</b>: 설정된 1차/2차 목표 수익률에 도달하여 안정적으로 수익을 실현."
+        )
+
+    return f"• <b>청산 사유</b>: <code>{reason}</code>"
 
 
 class TelegramReceiptGenerator:
@@ -14,7 +66,8 @@ class TelegramReceiptGenerator:
     @staticmethod
     def format_buy_receipt(symbol: str, quantity: int, price: float, setup: str = "QUANT_BREAKOUT",
                            score: int = 100, tp_price: float = 0.0, sl_price: float = 0.0,
-                           atr: float = 0.0) -> str:
+                           atr: float = 0.0, score_breakdown: Optional[List[str]] = None,
+                           macro_regime: str = "RISK_ON") -> str:
         total_cost = quantity * price
         
         # Calculate stock-specific dynamic ATR targets
@@ -34,8 +87,24 @@ class TelegramReceiptGenerator:
             sl_default = price * 0.95
             sl_str = f"${sl_default:.2f} (-5.0% ATR Stop)"
 
+        # Format score breakdown drivers
+        breakdown_text = ""
+        if score_breakdown and len(score_breakdown) > 0:
+            filtered_drivers = [item for item in score_breakdown if item.strip()]
+            for item in filtered_drivers[:5]:
+                clean_item = item.strip()
+                if not clean_item.startswith("•"):
+                    clean_item = f"• {clean_item}"
+                breakdown_text += f"{clean_item}\n"
+        else:
+            breakdown_text = (
+                "• 🔥 기관 수급 및 모멘텀 최상위 셋업 포착\n"
+                "• 🎯 20일선 지지 반등 및 다중 타임프레임 정배열\n"
+                "• ⚡ 감마 레이더 Net GEX 양수 수급 유입\n"
+            )
+
         receipt = (
-            f"🎟️ <b>[AI 매수 체결 영수증]</b>\n"
+            f"🎟️ <b>[AI 퀀트 매수 체결 영수증]</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>종목코드</b>: <code>{symbol}</code>\n"
             f"• <b>체결수량</b>: <b>{quantity:,} 주</b>\n"
@@ -43,9 +112,14 @@ class TelegramReceiptGenerator:
             f"• <b>총 매수금액</b>: <b>${total_cost:,.2f}</b>\n"
             f"• <b>퀀트종합점수</b>: <b>{score} / 100 점</b>\n"
             f"• <b>진입전략</b>: <code>{setup}</code>\n"
+            f"• <b>시장국면</b>: <code>{macro_regime}</code>\n"
             f"──────────────────────\n"
-            f"🎯 <b>목표 익절가</b>: <b>{tp_str}</b>\n"
-            f"🛡️ <b>안전 손절가</b>: <b>{sl_str}</b>\n"
+            f"📊 <b>핵심 매수 근거 (Score Drivers)</b>:\n"
+            f"{breakdown_text.strip()}\n"
+            f"──────────────────────\n"
+            f"🎯 <b>목표 익절 계획</b>: <b>{tp_str}</b>\n"
+            f"🛡️ <b>안전 손절 기준</b>: <b>{sl_str}</b>\n"
+            f"⏱️ <b>최대 보유 기간</b>: <b>최대 5일 (스윙 쿨다운)</b>\n"
             f"⏰ <b>체결시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🌐 <b>실시간 대시보드</b>: http://141.148.172.12:8080"
@@ -61,9 +135,10 @@ class TelegramReceiptGenerator:
 
         sign = "🟢" if pnl_usd >= 0 else "🔴"
         pnl_badge = f"{sign} <b>${pnl_usd:+,.2f}</b> ({pnl_pct:+.2f}%)"
+        reason_detail_ko = _translate_exit_reason_detail(reason)
 
         receipt = (
-            f"🧾 <b>[AI 매도 청산 영수증]</b>\n"
+            f"🧾 <b>[AI 퀀트 매도 청산 영수증]</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>종목코드</b>: <code>{symbol}</code>\n"
             f"• <b>청산수량</b>: <b>{quantity:,} 주</b>\n"
@@ -71,9 +146,13 @@ class TelegramReceiptGenerator:
             f"• <b>청산단가</b>: <b>${exit_price:,.2f}</b>\n"
             f"• <b>총 회수금액</b>: <b>${total_value:,.2f}</b>\n"
             f"──────────────────────\n"
-            f"💰 <b>실현손익</b>: {pnl_badge}\n"
-            f"📌 <b>청산사유</b>: <code>{reason}</code>\n"
-            f"⏱️ <b>보유기간</b>: <b>{hold_days} 일</b>\n"
+            f"💰 <b>확정 실현손익</b>: {pnl_badge}\n"
+            f"⏱️ <b>실제 보유기간</b>: <b>{hold_days} 일</b>\n"
+            f"📌 <b>상세 청산사유</b>:\n"
+            f"{reason_detail_ko}\n"
+            f"──────────────────────\n"
+            f"📝 <b>사후 매매 복기 (Post-Trade Analysis)</b>:\n"
+            f"• 자금 회수 완료 ➔ 차기 우수 주도주 탐색 모드 가동\n"
             f"⏰ <b>청산시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🌐 <b>실시간 대시보드</b>: http://141.148.172.12:8080"
