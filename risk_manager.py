@@ -241,10 +241,19 @@ class RiskManager:
                        starting_balance, today)
     
     def update_balance(self, new_balance: float):
-        """Update current balance and check limits"""
+        """Update current balance and check limits with external deposit/withdrawal neutralization"""
         if self._daily_stats is None:
             return
         
+        # [QUANT UPGRADE] Automatic Deposit / Cash Flow Neutralization (Modified Dietz)
+        # If balance increases abruptly without realized trade profit, recognize external deposit
+        diff = new_balance - self._daily_stats.current_balance
+        if diff > 50.0 and self._daily_stats.current_balance > 0:
+            logger.info("💵 [CAPITAL_DEPOSIT_DETECTED] External capital injection of +${:.2f} detected! Scaling starting balance from ${:.2f} to ${:.2f}",
+                        diff, self._daily_stats.starting_balance, self._daily_stats.starting_balance + diff)
+            self._daily_stats.starting_balance += diff
+            self._daily_stats.intraday_peak += diff
+
         self._daily_stats.current_balance = new_balance
         
         # Track max drawdown using running intraday peak
