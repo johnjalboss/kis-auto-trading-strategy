@@ -303,16 +303,38 @@ class DynamicScreener:
         # Filter candidates above MIN_SCORE
         above_min = [s for s in scored if s.total_score >= self.MIN_SCORE]
         above_min.sort(key=lambda x: x.total_score, reverse=True)
+        scored.sort(key=lambda x: x.total_score, reverse=True)
+        target_list = above_min if len(above_min) >= self.MAX_RESULTS else scored
 
-        if len(above_min) < self.MAX_RESULTS:
-            # Fallback: if not enough candidates exceed MIN_SCORE, take the best fully-scored ones
-            scored.sort(key=lambda x: x.total_score, reverse=True)
-            top_picks = scored[:self.MAX_RESULTS]
-        else:
-            top_picks = above_min[:self.MAX_RESULTS]
+        # [QUANT UPGRADE] Theme Concentration Guard (Max 2 stocks per theme)
+        theme_map = {}
+        try:
+            from theme_radar_adapter import ThemeRadarAdapter
+            tra = ThemeRadarAdapter()
+            recs = tra.get_recommendations()
+            for t_sym, info in recs.items():
+                theme_map[t_sym] = info.get("theme_name")
+        except Exception:
+            pass
+
+        diversified_picks = []
+        theme_counts = {}
+        for item in target_list:
+            sym = item.symbol
+            t_name = theme_map.get(sym, "GENERAL")
+            if t_name != "GENERAL":
+                cnt = theme_counts.get(t_name, 0)
+                if cnt >= 2:
+                    continue  # Skip 3rd stock of same theme to protect portfolio diversification
+                theme_counts[t_name] = cnt + 1
+            diversified_picks.append(item)
+            if len(diversified_picks) >= self.MAX_RESULTS:
+                break
+
+        top_picks = diversified_picks if diversified_picks else target_list[:self.MAX_RESULTS]
         
         tickers = [s.symbol for s in top_picks]
-        logger.info("Screen returned {} stocks (mode: {})", len(tickers), mode.value)
+        logger.info("Screen returned {} stocks (mode: {}) with Theme Diversification Guard", len(tickers), mode.value)
         
         return ScreenResult(
             tickers=tickers,

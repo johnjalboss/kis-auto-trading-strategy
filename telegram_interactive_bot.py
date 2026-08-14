@@ -122,11 +122,12 @@ class TelegramInteractiveBot:
                     {"text": "👥 섀도우 모의매매 현황", "callback_data": "cmd_shadow_paper"}
                 ],
                 [
-                    {"text": "🎲 몬테카를로 파산 시뮬레이션", "callback_data": "cmd_monte_carlo"}
-                ],
-                [
                     {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"},
                     {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"}
+                ],
+                [
+                    {"text": "🔄 테마 순환매 레이더", "callback_data": "cmd_rotation"},
+                    {"text": "🔥 테마 1등주", "callback_data": "cmd_theme"}
                 ],
                 [
                     {"text": "🎯 스크리너 픽", "callback_data": "cmd_screener"},
@@ -301,6 +302,8 @@ class TelegramInteractiveBot:
                                     self._handle_smart_money()
                                 elif any(cmd.startswith(c) for c in ["/테마", "테마", "주도테마"]):
                                     self._handle_theme()
+                                elif any(cmd.startswith(c) for c in ["/순환매", "순환매", "/rotation", "rotation", "/자금이동", "자금이동"]):
+                                    self._handle_rotation()
                                 elif any(cmd.startswith(c) for c in ["/스크리너", "스크리너"]):
                                     self._handle_screener()
                                 elif any(cmd.startswith(c) for c in ["/레짐", "레짐", "시장레짐"]):
@@ -892,6 +895,24 @@ class TelegramInteractiveBot:
             logger.error("Failed smart money handler: {}", e)
             self._send_reply(f"⚠️ 스마트머니 조회 실패: {e}")
 
+    def _handle_rotation(self):
+        """월가 스마트머니 테마 순환매 자금 이동 레이더 조회"""
+        try:
+            import sys
+            theme_tracker_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "us-theme-tracker")
+            if not os.path.exists(theme_tracker_dir):
+                theme_tracker_dir = "/home/ubuntu/us-theme-tracker"
+            if theme_tracker_dir not in sys.path:
+                sys.path.insert(0, theme_tracker_dir)
+
+            from theme_rotation_flow import ThemeRotationFlow
+            rf = ThemeRotationFlow()
+            card = rf.format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed rotation handler: {}", e)
+            self._send_reply(f"⚠️ 테마 순환매 레이더 조회 실패: {e}")
+
     def _handle_monte_carlo(self):
         """10,000회 몬테카를로 파산 확률 및 스트레스 테스트 실행"""
         try:
@@ -905,6 +926,8 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed monte carlo handler: {}", e)
             self._send_reply(f"⚠️ 몬테카를로 시뮬레이션 실패: {e}")
+
+
 
 
 
