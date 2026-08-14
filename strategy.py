@@ -965,6 +965,8 @@ class StrategyEngine:
             sym_sector = GLOBAL_SECTOR_MAP.get(symbol, "")
             if sym_sector in leading_sectors:
                 score += 20
+                s_rank = next((r.rank for r in rankings if r.sector == sym_sector), 1)
+                breakdown.append(f"🚀 [섹터 모멘텀 순풍] {sym_sector} 섹터 중기 추세 {s_rank}위 (+20점)")
                 logger.info("🚀 [SECTOR_LEADER_TAILWIND] +20 pts: {} belongs to top leading sector ({})", symbol, sym_sector)
             
             # Relative Strength vs SPY check
