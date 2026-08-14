@@ -45,9 +45,16 @@ class VCPBreakoutEngine:
             w_vol = volume[-30:]
 
             # Divide 30-day window into 3 consecutive 10-day segments to measure wave depth
-            seg1_depth = ((np.max(w_high[:10]) - np.min(w_low[:10])) / np.max(w_high[:10])) * 100.0
-            seg2_depth = ((np.max(w_high[10:20]) - np.min(w_low[10:20])) / np.max(w_high[10:20])) * 100.0
-            seg3_depth = ((np.max(w_high[20:]) - np.min(w_low[20:])) / np.max(w_high[20:])) * 100.0
+            m1 = np.max(w_high[:10])
+            m2 = np.max(w_high[10:20])
+            m3 = np.max(w_high[20:])
+
+            if m1 <= 0 or m2 <= 0 or m3 <= 0:
+                return res
+
+            seg1_depth = ((m1 - np.min(w_low[:10])) / m1) * 100.0
+            seg2_depth = ((m2 - np.min(w_low[10:20])) / m2) * 100.0
+            seg3_depth = ((m3 - np.min(w_low[20:])) / m3) * 100.0
 
             res["final_contraction_depth_pct"] = round(seg3_depth, 2)
 

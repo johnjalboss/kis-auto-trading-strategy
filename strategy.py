@@ -255,6 +255,14 @@ class StrategyEngine:
             return EntrySignal("HOLD", 0, "Already in position", 0)
         
         # 1. Macro & Volatility Extreme Risk-Off Guards
+        if isinstance(macro_score, (pd.DataFrame, pd.Series)):
+            macro_score = 0.0
+        else:
+            try:
+                macro_score = float(macro_score or 0.0)
+            except Exception:
+                macro_score = 0.0
+
         if macro_score < -20:
             return EntrySignal("HOLD", 0, f"Macro too risky: {macro_score:.0f}", 0)
         
@@ -832,33 +840,39 @@ class StrategyEngine:
         # ================================
         is_golden_setup = False
         try:
-            close_curr = float(df['Close'].iloc[-1])
-            sma20_curr = float(df['Close'].rolling(20).mean().iloc[-1])
-            
-            # Zone A: 20-day SMA Support Rebound (within 1.5% of SMA20)
-            if 0.985 <= (close_curr / sma20_curr) <= 1.015:
-                score += 25
-                is_golden_setup = True
-                logger.info("🎯 [GOLDEN_ZONE_A] +25 pts: 20-Day SMA Support Rebound for {}", symbol)
-                
-            # Zone B: StochRSI Oversold Golden Cross (< 25)
-            if hasattr(ind, 'stoch_rsi') and getattr(ind.stoch_rsi, 'k', 50) < 25:
-                score += 25
-                is_golden_setup = True
-                logger.info("🎯 [GOLDEN_ZONE_B] +25 pts: StochRSI Oversold Golden Cross for {}", symbol)
-                
-            # Zone C: Bollinger Band Low-to-Mid Rebound (%B 0.15~0.40)
-            if 0.15 <= ind.bollinger.percent_b <= 0.40:
-                score += 20
-                is_golden_setup = True
-                logger.info("🎯 [GOLDEN_ZONE_C] +20 pts: Bollinger Band Sweet-Spot Rebound for {}", symbol)
-                
-            # Penalty for Extended Floating Zone (어정쩡하게 이미 붕 뜬 어중간한 자리 매수 금지)
-            if not is_golden_setup and (close_curr / sma20_curr > 1.045):
-                score -= 30
-                logger.info("🚫 [FLOATING_ZONE_PENALTY] -30 pts: Stock is extended ({:.1f}% above 20d SMA), skipping late entry on {}", (close_curr/sma20_curr-1)*100, symbol)
+            if len(df) >= 20 and 'Close' in df.columns:
+                close_curr = float(df['Close'].iloc[-1])
+                sma20_series = df['Close'].rolling(20).mean()
+                if not sma20_series.empty and not pd.isna(sma20_series.iloc[-1]):
+                    sma20_curr = float(sma20_series.iloc[-1])
+                    if sma20_curr > 0 and close_curr > 0:
+                        # Zone A: 20-day SMA Support Rebound (within 1.5% of SMA20)
+                        if 0.985 <= (close_curr / sma20_curr) <= 1.015:
+                            score += 25
+                            is_golden_setup = True
+                            logger.info("🎯 [GOLDEN_ZONE_A] +25 pts: 20-Day SMA Support Rebound for {}", symbol)
+                            
+                        # Zone B: StochRSI Oversold Golden Cross (< 25 or < 0.25)
+                        stoch_val = getattr(ind, 'stoch_rsi', None)
+                        if stoch_val is not None:
+                            stoch_num = stoch_val.k if hasattr(stoch_val, 'k') else (float(stoch_val) * 100.0 if float(stoch_val) <= 1.0 else float(stoch_val))
+                            if stoch_num < 25.0:
+                                score += 25
+                                is_golden_setup = True
+                                logger.info("🎯 [GOLDEN_ZONE_B] +25 pts: StochRSI Oversold ({:.1f} < 25) Golden Cross for {}", stoch_num, symbol)
+                            
+                        # Zone C: Bollinger Band Low-to-Mid Rebound (%B 0.15~0.40)
+                        if 0.15 <= ind.bollinger.percent_b <= 0.40:
+                            score += 20
+                            is_golden_setup = True
+                            logger.info("🎯 [GOLDEN_ZONE_C] +20 pts: Bollinger Band Sweet-Spot Rebound for {}", symbol)
+                            
+                        # Penalty for Extended Floating Zone (어정쩡하게 이미 붕 뜬 어중간한 자리 매수 금지)
+                        if not is_golden_setup and (close_curr / sma20_curr > 1.045):
+                            score -= 30
+                            logger.info("🚫 [FLOATING_ZONE_PENALTY] -30 pts: Stock is extended ({:.1f}% above 20d SMA), skipping late entry on {}", (close_curr/sma20_curr-1)*100, symbol)
         except Exception as _e_zone:
-            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", _e_zone)
+            logger.debug("Zone check skipped for {}: {}", symbol, _e_zone)
         
         # ================================
         # OBV    (+5)

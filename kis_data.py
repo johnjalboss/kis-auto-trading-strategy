@@ -268,46 +268,38 @@ def get_current_price(symbol: str, exchange: str = None) -> Optional[Dict]:
 
 
 def _cleanse_ohlcv_data(df: pd.DataFrame) -> pd.DataFrame:
-    """[QUANT DATA INTEGRITY] 데이터 무결성 검증 및 이상치 클렌징 엔진
+    """[QUANT DATA INTEGRITY] 데이터 무결성 검증 및 정밀 클렌징 엔진
     
-    1. NaN 및 0 이하 가격 처리 (전진/후진 채우기)
-    2. 이상치 불량 틱 (Bad-Tick: 3-Sigma 초과 스파이크) 보정
-    3. 거래량 0 무효 데이터 보정
+    1. inf, -inf, NaN 및 0 이하 비정상 가격 보정 (전진/후진 채우기)
+    2. High >= max(Open, Close) 및 Low <= min(Open, Close) 캔들 기하학적 정합성 보장
+    3. 음수/NaN 거래량 0 보정
     """
     if df is None or df.empty:
         return df
     
     df = df.copy()
     
-    # 1. NaN 및 비정상 가격 보정
+    # 1. NaN, inf 및 0 이하 가격 보정
     cols = ['Open', 'High', 'Low', 'Close']
     for c in cols:
         if c in df.columns:
-            df[c] = df[c].replace(0, np.nan)
+            df[c] = df[c].replace([np.inf, -np.inf, 0], np.nan)
             df[c] = df[c].ffill().bfill()
             
     if 'Volume' in df.columns:
-        df['Volume'] = df['Volume'].fillna(0).apply(lambda x: max(0, x))
+        df['Volume'] = df['Volume'].replace([np.inf, -np.inf], 0).fillna(0).clip(lower=0)
+
+    # 2. 캔들 기하학적 정합성 (High는 항상 최고가, Low는 항상 최저가)
+    if 'High' in df.columns and 'Close' in df.columns:
+        df['High'] = np.maximum(df['High'], df['Close'])
+        if 'Open' in df.columns:
+            df['High'] = np.maximum(df['High'], df['Open'])
+
+    if 'Low' in df.columns and 'Close' in df.columns:
+        df['Low'] = np.minimum(df['Low'], df['Close'])
+        if 'Open' in df.columns:
+            df['Low'] = np.minimum(df['Low'], df['Open'])
         
-    # 2. 불량 틱 (Spurious Bad-Tick) 3-Sigma 이상치 보정
-    if len(df) >= 20 and 'Close' in df.columns:
-        returns = df['Close'].pct_change()
-        mean_ret = returns.mean()
-        std_ret = returns.std()
-        
-        if std_ret > 0:
-            # 3.5 표준편차 초과 일시적 스파이크 감지 및 억제
-            outliers = (returns - mean_ret).abs() > (3.5 * std_ret)
-            for idx in df.index[outliers]:
-                # 연속 데이터인 경우 이전 종가 기준으로 스파이크 캡 적용
-                prev_idx = df.index.get_loc(idx) - 1
-                if prev_idx >= 0:
-                    prev_close = df['Close'].iloc[prev_idx]
-                    capped_close = prev_close * (1 + np.clip(returns.loc[idx], -0.20, 0.20))
-                    df.loc[idx, 'Close'] = capped_close
-                    if 'High' in df.columns: df.loc[idx, 'High'] = max(df.loc[idx, 'High'], capped_close)
-                    if 'Low' in df.columns: df.loc[idx, 'Low'] = min(df.loc[idx, 'Low'], capped_close)
-                    
     return df
 
 
@@ -1069,10 +1061,18 @@ def download(tickers: Union[str, List[str]],
             # Special handling for index symbols
             symbol = ticker_list[0]
             
-            # 지수 심볼은 KIS에서 직접 지원 안 됨 → 빈 DataFrame 반환
+            # 지수 심볼 (^VIX, ^TNX 등)은 yfinance로 안전하게 폴백
             if symbol.startswith("^"):
-                logger.debug("Index symbol {} not supported by KIS API, returning empty", symbol)
-                return pd.DataFrame()
+                try:
+                    import yfinance as _orig_yf
+                    if hasattr(_orig_yf, "_original_yf_download"):
+                        df_idx = _orig_yf._original_yf_download(symbol, period=period, interval=interval, **kwargs)
+                    else:
+                        df_idx = _orig_yf.download(symbol, period=period, interval=interval, progress=False, **kwargs)
+                    return df_idx if df_idx is not None else pd.DataFrame()
+                except Exception as _e_idx:
+                    logger.debug("Index symbol {} yf download error: {}", symbol, _e_idx)
+                    return pd.DataFrame()
             
             # Check interval
             if interval.endswith("m") or interval.endswith("h"):
@@ -1103,7 +1103,14 @@ def download(tickers: Union[str, List[str]],
         all_data = {}
         for symbol in ticker_list:
             if symbol.startswith("^"):
-                continue  # 지수 skip
+                try:
+                    import yfinance as _orig_yf
+                    df_idx = _orig_yf.download(symbol, period=period, interval=interval, progress=False)
+                    if df_idx is not None and not df_idx.empty:
+                        all_data[symbol] = df_idx
+                except Exception:
+                    pass
+                continue
                 
             if interval.endswith("m") or interval.endswith("h"):
                 int_map = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "60m": "60", "1h": "60"}
