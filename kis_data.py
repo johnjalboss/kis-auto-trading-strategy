@@ -46,9 +46,30 @@ US_EXCHANGES = {
     "AMS": "아멕스",
 }
 
-# Session-level cache of symbols that failed all KIS exchanges
-# These will skip API calls and go straight to yfinance (or None)
+# Persistent cache of symbols that failed all KIS exchanges (e.g. unlisted OTCs)
+# These will skip API calls immediately to prevent 5-minute timeout lags
+_BLACKLIST_PATH = Path("kis_symbol_blacklist.json")
 _KIS_UNSUPPORTED: set = set()
+
+def _load_blacklist():
+    global _KIS_UNSUPPORTED
+    if _BLACKLIST_PATH.exists():
+        try:
+            data = json.loads(_BLACKLIST_PATH.read_text(encoding="utf-8"))
+            _KIS_UNSUPPORTED = set(s.upper() for s in data.get("symbols", []))
+        except Exception:
+            pass
+
+def _save_blacklist_symbol(sym: str):
+    global _KIS_UNSUPPORTED
+    _KIS_UNSUPPORTED.add(sym.upper())
+    try:
+        data = {"symbols": sorted(list(_KIS_UNSUPPORTED))}
+        _BLACKLIST_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+_load_blacklist()
 
 # Rate limiter — KIS API는 초당 ~2건
 _last_call_time = 0.0
@@ -383,15 +404,15 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
                 logger.debug("OHLCV fetch error for {}@{}: {}", symbol, excd, e)
                 continue
         
-        # All KIS exchanges failed — cache this symbol to skip next time
-        _KIS_UNSUPPORTED.add(symbol.upper())
+        # All KIS exchanges failed — cache and persist this symbol to skip next time
+        _save_blacklist_symbol(symbol.upper())
     
-    logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
     import os
     macro_whitelist = {"^VIX", "^GSPC", "^DJI", "^IXIC", "^TNX", "^IRX", "BTC-USD", "CL=F", "UUP", "GLD", "TLT", "SPY", "QQQ", "DIA", "IWM", "BRK-B", "BRKB"}
     if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true" and symbol.upper() not in macro_whitelist:
-        logger.warning("yfinance daily OHLCV fallback bypassed for {} because DISABLE_YFINANCE_FALLBACK=true", symbol)
         return None
+
+    logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
 
     # KIS 심볼 → yfinance 심볼 변환 (e.g. BRKB → BRK-B)
     YF_SYMBOL_MAP = {"BRKB": "BRK-B", "BRKB": "BRK-B"}
