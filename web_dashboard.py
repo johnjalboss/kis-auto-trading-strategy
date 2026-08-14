@@ -230,7 +230,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <tbody>{POSITIONS_ROWS}</tbody>
     </table>
 
-    <div style="font-size:16px;font-weight:bold;margin-bottom:10px;color:#58a6ff;">📊 Interactive Real-Time Candlestick Chart (TradingView Engine)</div>
+    <div style="font-size:16px;font-weight:bold;margin-top:20px;margin-bottom:10px;color:#58a6ff;">📡 Real-Time US Theme Radar & 1-Pick Leader Alpha Table</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Theme</th>
+                <th>Signal</th>
+                <th>Quality Score</th>
+                <th>Inst RVOL</th>
+                <th>5D Return</th>
+                <th>Breadth 1D</th>
+                <th>#1 Leader Pick</th>
+                <th>Dynamic Target / Stop Loss</th>
+            </tr>
+        </thead>
+        <tbody>{THEME_ROWS}</tbody>
+    </table>
+
+    <div style="font-size:16px;font-weight:bold;margin-top:20px;margin-bottom:10px;color:#58a6ff;">📊 Interactive Real-Time Candlestick Chart (TradingView Engine)</div>
     <div class="chart-box">
         <div style="margin-bottom: 10px; display: flex; gap: 8px;" id="chart-buttons">
             <button onclick="renderTVChart('VTOL')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">VTOL</button>
@@ -575,15 +592,50 @@ def render_dashboard_html() -> str:
             except Exception:
                 pass
 
-    shadow_eq_str = "1,000.00"
-    shadow_ret_str = "+0.00"
+    # 4. Read Live Theme Radar signals & recommendations
+    theme_rows = ""
     try:
-        from shadow_paper_engine import ShadowPaperEngine
-        sh_sum = ShadowPaperEngine().get_summary(real_equity=equity)
-        shadow_eq_str = f"{sh_sum['total_shadow_equity']:,.2f}"
-        shadow_ret_str = f"{'+' if sh_sum['shadow_return_pct'] >= 0 else ''}{sh_sum['shadow_return_pct']:.2f}"
-    except Exception:
-        pass
+        from theme_radar_adapter import ThemeRadarAdapter
+        tra = ThemeRadarAdapter()
+        true_sigs = tra.get_true_signals()[:10]
+        recs = tra.get_recommendations()
+
+        if true_sigs:
+            for s in true_sigs:
+                tid = s["theme_id"]
+                name = s["name_ko"]
+                qual = s["quality"]
+                rvol = s["med_rvol"]
+                ret_5d = s["ret_5d"]
+
+                # Find leader for this theme
+                leader_str = "<i>선별 중</i>"
+                target_str = "-"
+                for sym, r_info in recs.items():
+                    if r_info.get("theme_id") == tid and r_info.get("pick_type") == "LEADER":
+                        leader_str = f"<b>{sym}</b> (${r_info['price']:.2f})"
+                        target_str = f"🎯 ${r_info['target_price']:.2f} (+{r_info['target_pct']}%) | 🛡️ ${r_info['stop_loss']:.2f} (-{r_info['stop_pct']}%)"
+                        break
+
+                sign_5d = "+" if ret_5d >= 0 else ""
+                cls_5d = "positive" if ret_5d >= 0 else "negative"
+
+                theme_rows += (
+                    f"<tr>"
+                    f"<td><b>{name}</b></td>"
+                    f"<td><span style='color:#3fb950;font-weight:bold;'>🟢 TRUE_SIGNAL</span></td>"
+                    f"<td><b>{qual}점</b></td>"
+                    f"<td>{rvol:.2f}x</td>"
+                    f"<td class='{cls_5d}'>{sign_5d}{ret_5d:.2f}%</td>"
+                    f"<td>50.0%+</td>"
+                    f"<td>{leader_str}</td>"
+                    f"<td>{target_str}</td>"
+                    f"</tr>"
+                )
+        else:
+            theme_rows = "<tr><td colspan='8' style='text-align:center;color:#8b949e;'>📡 테마 레이더 실시간 연산 중...</td></tr>"
+    except Exception as e:
+        theme_rows = f"<tr><td colspan='8' style='text-align:center;color:#8b949e;'>테마 데이터 조회 중: {e}</td></tr>"
 
     html = HTML_TEMPLATE.replace("{EQUITY}", f"{equity:,.2f}")
     html = html.replace("{CASH}", f"{cash:,.2f}")
@@ -597,6 +649,7 @@ def render_dashboard_html() -> str:
     html = html.replace("{RISK_LEVEL}", str(risk_level))
     html = html.replace("{REGIME}", str(regime))
     html = html.replace("{POSITIONS_ROWS}", pos_rows)
+    html = html.replace("{THEME_ROWS}", theme_rows)
     html = html.replace("{TRADES_ROWS}", trades_rows)
     html = html.replace("{LOGS_HTML}", logs_html)
     return html
