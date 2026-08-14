@@ -53,7 +53,7 @@ class AITradePostMortem:
                     f"2) 헤지펀드 매니저 어조로, 승리 시에는 팩터 유효성을 칭찬하고 손실 시에는 리스크 방어 성과를 객관적으로 분석할 것\n"
                     f"3) 총 150자 내외로 매우 간결하게 작성"
                 )
-                for m_name in ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.5-flash-latest"]:
+                for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
                     try:
                         m = genai.GenerativeModel(m_name)
                         resp = m.generate_content(prompt)

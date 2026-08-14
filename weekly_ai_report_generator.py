@@ -147,7 +147,7 @@ class WeeklyAIReportGenerator:
                     f"- 활용 퀀트 팩터: 마크 미네르비니 VCP 돌파, 잔차 모멘텀, 다크풀 블록, 1D 칼만 필터, 볼륨 프로파일 POC\n\n"
                     f"요구사항: 1) 전문적이고 신뢰감 있는 헤지펀드 어조로, 2) 이번 주 시장 평가와 봇의 리스크 방어 성과를 3~4문장으로 명쾌하게 총평해줘."
                 )
-                for m_name in ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.5-flash-latest"]:
+                for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
                     try:
                         m = genai.GenerativeModel(m_name)
                         resp = m.generate_content(prompt)
