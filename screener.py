@@ -460,13 +460,33 @@ class DynamicScreener:
                     if vol_ratio < 0.5:
                         return
                 
-                # [v3.3.0 100% DYNAMIC RS RANKING FORMULA]
-                # Combine 1M (40%), 3M (35%), 6M (25%) Relative Strength vs SPY + RVOL volume surge bonus!
+                # [v4.5.0 SOTA QUANT RS RANKING WITH HURST & AMIHUD]
+                # Combine 1M (40%), 3M (35%), 6M (25%) Relative Strength vs SPY + RVOL volume surge!
                 rs_score = ((ret_1m - spy_ret_3m*0.33) * 0.40 + 
                             (ret_3m - spy_ret_3m) * 0.35 + 
                             (ret_6m - spy_ret_6m) * 0.25 + 
                             (vol_ratio - 1.0) * 2.0)
                 
+                # [Hurst Fractal Bonus]
+                try:
+                    from hurst_fractal_regime import HurstFractalRegimeFilter
+                    h_val = HurstFractalRegimeFilter.calculate_hurst(df['Close'])
+                    if h_val >= 0.58:
+                        rs_score += 3.0  # True persistent momentum bonus
+                    elif h_val < 0.45:
+                        rs_score -= 3.0  # Mean-reverting chop penalty
+                except Exception:
+                    pass
+
+                # [Amihud Price Impact Bonus]
+                try:
+                    from amihud_liquidity_pressure import AmihudLiquidityPressureEngine
+                    ami_res = AmihudLiquidityPressureEngine().analyze(df, sym)
+                    if ami_res.get('is_institutional_accumulation'):
+                        rs_score += 3.0  # Institutional accumulation surge bonus
+                except Exception:
+                    pass
+
                 # [보너스] 52주 고점 대비 5% 이내 신고가 돌파 종목에 +5.0 RS 모멘텀 보너스
                 if dist_from_high <= 5.0:
                     rs_score += 5.0
