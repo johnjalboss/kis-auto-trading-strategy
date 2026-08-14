@@ -1266,6 +1266,29 @@ class BotOrchestrator:
             if not positions:
                 logger.info("No held positions to rebalance.")
                 return
+
+            # [NEW SOTA QUANT MODULE 14: LEADER PYRAMIDING SCALE-IN ENGINE]
+            try:
+                from leader_pyramiding_engine import LeaderPyramidingEngine
+                if not hasattr(self, '_pyramid_engine'):
+                    self._pyramid_engine = LeaderPyramidingEngine(min_gain_pct=4.0)
+                bp_pyr = self.trader.get_buying_power()
+                if bp_pyr >= 50.0:
+                    for p_sym, p_pos in positions.items():
+                        live_p = self.trader.get_price(p_sym)
+                        if live_p > 0 and p_pos.quantity > 0:
+                            pyr_res = self._pyramid_engine.check_pyramiding_candidate(
+                                p_sym, p_pos.entry_price, live_p, p_pos.quantity, bp_pyr
+                            )
+                            if pyr_res.get('can_scale_in') and pyr_res.get('scale_in_qty', 0) > 0:
+                                scale_q = pyr_res['scale_in_qty']
+                                logger.success("🔥 [LEADER_PYRAMID_TRIGGER] Executing 30% Scale-In on {}: {} shares @ ${:.2f}",
+                                               p_sym, scale_q, live_p)
+                                self.phase_5_execute_trade(p_sym, "BUY", scale_q, live_p, pyr_res['reason'])
+                                self._pyramid_engine.mark_pyramided(p_sym)
+                                break
+            except Exception as _pyr_err:
+                logger.debug("Leader pyramiding check skipped: {}", _pyr_err)
                 
             from composite_signal import get_composite_engine, ActionType
             engine = get_composite_engine()

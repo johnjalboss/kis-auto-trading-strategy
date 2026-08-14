@@ -1066,6 +1066,32 @@ class StrategyEngine:
             logger.debug("Volume profile POC check skipped for {}: {}", symbol, _vp_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 12: OPENING RANGE BREAKOUT (ORB) & GAP-FADE GUARD] (+20 / -25 pts)
+        # ================================
+        try:
+            from opening_range_breakout import OpeningRangeBreakoutFilter
+            _orb_res = OpeningRangeBreakoutFilter().analyze(df, symbol)
+            score += _orb_res.get('score_bonus', 0)
+            if _orb_res.get('is_orb_breakout'):
+                breakdown.append(f"🌅 [오프닝 레인지 ORB 돌파] 장초반 30분 고점 돌파 확인 (+{_orb_res.get('score_bonus')}점)")
+            elif _orb_res.get('is_gap_fade_trap'):
+                breakdown.append(f"🚫 [갭상승 페이드 트랩 방어] 시가 대비 밀림 확인 ({_orb_res.get('score_bonus')}점)")
+        except Exception as _orb_err:
+            logger.debug("ORB filter check skipped for {}: {}", symbol, _orb_err)
+
+        # ================================
+        # [NEW SOTA QUANT MODULE 13: 1D KALMAN FILTER ZERO-LAG VELOCITY] (+20 / -15 pts)
+        # ================================
+        try:
+            from kalman_trend_filter import KalmanTrendFilter
+            _kalman_res = KalmanTrendFilter().analyze(df, symbol)
+            score += _kalman_res.get('score_bonus', 0)
+            if _kalman_res.get('is_accelerating_trend'):
+                breakdown.append(f"🚀 [칼만 필터 가격 가속도] 노이즈 제거 순수 속도 +{_kalman_res.get('kalman_velocity'):.2f}%/일 (+{_kalman_res.get('score_bonus')}점)")
+        except Exception as _k_err:
+            logger.debug("Kalman trend filter check skipped for {}: {}", symbol, _k_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:

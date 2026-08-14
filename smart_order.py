@@ -293,34 +293,49 @@ class SmartOrderExecutor:
                         exchange_to_use = getattr(result, 'exchange', None) or self.trader._exchange_mapper.get_exchange(order.symbol)
                         
                         if order.side == "BUY":
-                            logger.warning("Cancelling unfilled BUY order, initiating aggressive buy chase to secure entry.")
+                            logger.info("Cancelling unfilled BUY order, checking live price for smart pegged chase (+0.8% max).")
                             if self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "BUY"):
-                                time.sleep(2)
+                                time.sleep(1)
                                 
-                                # Resubmit at +5.0% (pseudo-market price to lock in entry)
-                                chase_price = round(price * 1.05, 2)
-                                logger.warning("Aggressive chase BUY for {} at pseudo-market price: ${:.2f}", order.symbol, chase_price)
-                                chase_result = self.trader.buy(order.symbol, order.total_quantity, limit_price=chase_price, ensure_fill=False)
-                                chase_order_id = getattr(chase_result, 'order_id', None) or getattr(chase_result, 'odno', None)
-                                
-                                if chase_order_id:
-                                    is_chase_filled = self.trader.wait_for_fill(chase_order_id, order.symbol, max_wait=15)
-                                    if is_chase_filled:
-                                        order.status = OrderStatus.FILLED
-                                        order.filled_quantity = order.total_quantity
-                                        order.avg_fill_price = chase_price
-                                        logger.success("✅ Aggressive chase BUY filled for {} at ${:.2f}", order.symbol, chase_price)
-                                    else:
-                                        logger.error("🚨 CRITICAL: Aggressive chase BUY order {} also unfilled!", chase_order_id)
-                                        order.status = OrderStatus.FAILED
-                                        order.reason = "Chase BUY unfilled (requires manual intervention)"
+                                live_curr_p = price
+                                try:
+                                    live_check = self.trader.get_price(order.symbol)
+                                    if live_check > 0:
+                                        live_curr_p = live_check
+                                except Exception:
+                                    pass
+
+                                # If stock already drifted >1.5% above original price, abort chase to prevent buying top
+                                if live_curr_p > price * 1.015:
+                                    logger.warning("🛡️ [SLIPPAGE_PROTECT] {} ran away +{:.2f}% (Live ${:.2f} > Base ${:.2f}). Aborting chase to protect capital.",
+                                                   order.symbol, ((live_curr_p - price)/price)*100, live_curr_p, price)
+                                    order.status = OrderStatus.CANCELLED
+                                    order.reason = "Price ran away >1.5%, aborted chase to protect capital"
                                 else:
-                                    logger.error("🚨 CRITICAL: Aggressive chase BUY order failed to place!")
-                                    order.status = OrderStatus.FAILED
-                                    order.reason = "Chase BUY placement failed"
+                                    # Resubmit at maximum +0.8% pegged limit price
+                                    chase_price = round(live_curr_p * 1.008, 2)
+                                    logger.info("🎯 Smart Pegged Chase BUY for {} at +0.8% limit: ${:.2f}", order.symbol, chase_price)
+                                    chase_result = self.trader.buy(order.symbol, order.total_quantity, limit_price=chase_price, ensure_fill=False)
+                                    chase_order_id = getattr(chase_result, 'order_id', None) or getattr(chase_result, 'odno', None)
+                                    
+                                    if chase_order_id:
+                                        is_chase_filled = self.trader.wait_for_fill(chase_order_id, order.symbol, max_wait=15)
+                                        if is_chase_filled:
+                                            order.status = OrderStatus.FILLED
+                                            order.filled_quantity = order.total_quantity
+                                            order.avg_fill_price = chase_price
+                                            logger.success("✅ Smart Pegged Chase BUY filled for {} at ${:.2f}", order.symbol, chase_price)
+                                        else:
+                                            logger.warning("Smart Pegged Chase BUY order {} unfilled. Cancelling safely.", chase_order_id)
+                                            self.trader.cancel_order(chase_order_id, order.symbol, order.total_quantity, exchange_to_use, "BUY")
+                                            order.status = OrderStatus.CANCELLED
+                                            order.reason = "Smart Pegged Chase unfilled, order cancelled safely"
+                                    else:
+                                        order.status = OrderStatus.FAILED
+                                        order.reason = "Smart Pegged Chase BUY placement failed"
                             else:
-                                logger.error("Cancel failed for BUY order {} ({}). Keeping original order active, skipping chase.", order_id_from_kis, order.symbol)
-                                is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=15)
+                                logger.error("Cancel failed for BUY order {} ({}). Keeping original order active.", order_id_from_kis, order.symbol)
+                                is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=10)
                                 if is_filled:
                                     order.status = OrderStatus.FILLED
                                     order.filled_quantity = order.total_quantity
@@ -329,12 +344,12 @@ class SmartOrderExecutor:
                                     order.status = OrderStatus.FAILED
                                     order.reason = "Cancel failed, original order still unfilled"
                         else:
-                            logger.warning("Cancelling unfilled SELL order, initiating aggressive market chase.")
+                            logger.info("Cancelling unfilled SELL order, initiating pegged chase sell (-0.8% max).")
                             if self.trader.cancel_order(order_id_from_kis, order.symbol, order.total_quantity, exchange_to_use, "SELL"):
-                                time.sleep(2)
+                                time.sleep(1)
                                 
-                                chase_price = round(price * 0.95, 2)
-                                logger.warning("Aggressive chase SELL for {} at pseudo-market price: ${:.2f}", order.symbol, chase_price)
+                                chase_price = round(price * 0.992, 2)
+                                logger.info("Smart Pegged Chase SELL for {} at ${:.2f}", order.symbol, chase_price)
                                 chase_result = self.trader.sell(order.symbol, order.total_quantity, limit_price=chase_price, ensure_fill=False)
                                 chase_order_id = getattr(chase_result, 'order_id', None) or getattr(chase_result, 'odno', None)
                                 
