@@ -1584,11 +1584,17 @@ class BotOrchestrator:
                                 notifier.trade_entry(symbol, order.filled_quantity, order.avg_fill_price or price, reason, score_breakdown=sb)
                                 try:
                                     from telegram_receipt import TelegramReceiptGenerator
+                                    q_score = getattr(self.strategy, '_last_scores', {}).get(symbol, 100)
+                                    atr_val = self.strategy.get_current_atr(symbol) if hasattr(self.strategy, 'get_current_atr') else 0.0
+                                    sl_calc = (order.avg_fill_price or price) - (atr_val * 1.5) if atr_val > 0 else (order.avg_fill_price or price) * 0.95
                                     receipt_msg = TelegramReceiptGenerator.format_buy_receipt(
                                         symbol=symbol,
                                         quantity=order.filled_quantity,
                                         price=order.avg_fill_price or price,
-                                        setup=reason
+                                        setup=reason,
+                                        score=q_score,
+                                        sl_price=sl_calc,
+                                        atr=atr_val
                                     )
                                     notifier.send(receipt_msg)
                                 except Exception as _tr_err:

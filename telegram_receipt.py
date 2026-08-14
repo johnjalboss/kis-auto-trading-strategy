@@ -13,10 +13,26 @@ class TelegramReceiptGenerator:
 
     @staticmethod
     def format_buy_receipt(symbol: str, quantity: int, price: float, setup: str = "QUANT_BREAKOUT",
-                           tp_price: float = 0.0, sl_price: float = 0.0) -> str:
+                           score: int = 100, tp_price: float = 0.0, sl_price: float = 0.0,
+                           atr: float = 0.0) -> str:
         total_cost = quantity * price
-        tp_str = f"${tp_price:.2f} (+15.0%)" if tp_price > 0 else f"${price * 1.15:.2f} (+15.0%)"
-        sl_str = f"${sl_price:.2f} (-4.5%)" if sl_price > 0 else f"${price * 0.955:.2f} (-4.5%)"
+        
+        # Calculate stock-specific dynamic ATR targets
+        if tp_price > 0:
+            tp_pct = (tp_price - price) / price * 100.0 if price > 0 else 0.0
+            tp_str = f"${tp_price:.2f} ({tp_pct:+.1f}%)"
+        else:
+            # Dynamic Tiered targets (+2.0% 1차 분할, +5.5% 2차, +9.0% 3차)
+            tp_1 = price * 1.020
+            tp_2 = price * 1.055
+            tp_str = f"1차 ${tp_1:.2f} (+2.0%) / 2차 ${tp_2:.2f} (+5.5%) / ATR 트레일링"
+
+        if sl_price > 0:
+            sl_pct = (sl_price - price) / price * 100.0 if price > 0 else -3.0
+            sl_str = f"${sl_price:.2f} ({sl_pct:.1f}%)"
+        else:
+            sl_default = price * 0.95
+            sl_str = f"${sl_default:.2f} (-5.0% ATR Stop)"
 
         receipt = (
             f"🎟️ <b>[AI 매수 체결 영수증]</b>\n"
@@ -25,6 +41,7 @@ class TelegramReceiptGenerator:
             f"• <b>체결수량</b>: <b>{quantity:,} 주</b>\n"
             f"• <b>체결단가</b>: <b>${price:,.2f}</b>\n"
             f"• <b>총 매수금액</b>: <b>${total_cost:,.2f}</b>\n"
+            f"• <b>퀀트종합점수</b>: <b>{score} / 100 점</b>\n"
             f"• <b>진입전략</b>: <code>{setup}</code>\n"
             f"──────────────────────\n"
             f"🎯 <b>목표 익절가</b>: <b>{tp_str}</b>\n"

@@ -37,6 +37,7 @@ from signal_aggregator import get_signal_aggregator
 from composite_signal import get_composite_engine
 from universe import FALLBACK_SYMBOLS
 from options_flow import get_options_score, get_vix_snapshot, is_near_max_pain, get_sigma_range
+from database import get_database
 
 
 # Sector Mapping Dictionary for System-wide Sector Rotation & Guards
