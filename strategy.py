@@ -626,8 +626,15 @@ class StrategyEngine:
             from earnings_analyzer import get_earnings_analyzer
             _ea = get_earnings_analyzer()
             _earn_result = _ea.analyze(symbol)
-            _beat = (_earn_result.get('beat_surprise', 0) or _earn_result.get('eps_surprise_pct', 0)) if isinstance(_earn_result, dict) else 0
-            _days = _earn_result.get('days_since_earnings', 99) if isinstance(_earn_result, dict) else 99
+            
+            # 1. Pre-Earnings Landmine Blackout Guard (48h before earnings = no coin-flip trades)
+            _days_to = getattr(_earn_result, 'days_to_earnings', 99) if hasattr(_earn_result, 'days_to_earnings') else (_earn_result.get('days_to_earnings', 99) if isinstance(_earn_result, dict) else 99)
+            if 0 <= _days_to <= 2:
+                return EntrySignal("HOLD", 0, f"PRE_EARNINGS_BLACKOUT_GUARD: Earnings in {_days_to} days (avoid coin-flip)", current_price)
+
+            # 2. PEAD Post-Earnings Momentum Bonus
+            _beat = getattr(_earn_result, 'last_eps_surprise', 0) if hasattr(_earn_result, 'last_eps_surprise') else ((_earn_result.get('beat_surprise', 0) or _earn_result.get('eps_surprise_pct', 0)) if isinstance(_earn_result, dict) else 0)
+            _days = getattr(_earn_result, 'beat_streak', 0) if hasattr(_earn_result, 'beat_streak') else (_earn_result.get('days_since_earnings', 99) if isinstance(_earn_result, dict) else 99)
             if _beat > 5 and _days <= 30:
                 confidence += 10
                 setup_reason += f" | PEAD (+{_beat:.0f}%)"
