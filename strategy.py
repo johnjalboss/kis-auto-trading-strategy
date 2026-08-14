@@ -1092,6 +1092,20 @@ class StrategyEngine:
             logger.debug("Kalman trend filter check skipped for {}: {}", symbol, _k_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 15: MINERVINI VCP PIVOT BREAKOUT] (+20 pts)
+        # ================================
+        try:
+            from vcp_breakout_engine import VCPBreakoutEngine
+            _vcp_res = VCPBreakoutEngine().analyze(df, symbol)
+            score += _vcp_res.get('score_bonus', 0)
+            if _vcp_res.get('is_pivot_breakout'):
+                breakdown.append(f"📈 [미네르비니 VCP 피봇 돌파] 변동성 수축 3파 후 전고점 돌파 확인 (+{_vcp_res.get('score_bonus')}점)")
+                logger.info("📈 [VCP_PIVOT_BREAKOUT] +{:d} pts for {}: Pivot=${:.2f}, Depth={:.1f}%",
+                            _vcp_res.get('score_bonus', 0), symbol, _vcp_res.get('pivot_resistance', 0.0), _vcp_res.get('final_contraction_depth_pct', 0.0))
+        except Exception as _vcp_err:
+            logger.debug("VCP filter check skipped for {}: {}", symbol, _vcp_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:

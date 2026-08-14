@@ -1507,10 +1507,19 @@ class BotOrchestrator:
                 exp_res = DynamicExpectancySizer().get_sizing_multiplier()
                 exp_mult = exp_res.get('multiplier', 1.0)
 
+                # [NEW SOTA QUANT MODULE 16: ACCOUNT HIGH-WATER MARK PROFIT SENTINEL]
+                hwm_mult = 1.0
+                try:
+                    from account_high_water_mark_sentinel import AccountHighWaterMarkSentinel
+                    hwm_eval = AccountHighWaterMarkSentinel().evaluate_equity(total_equity)
+                    hwm_mult = hwm_eval.get('sizing_multiplier', 1.0)
+                except Exception as _hwm_err:
+                    logger.debug("HWM sentinel check skipped: {}", _hwm_err)
+
                 # Get the live portfolio sizer with current total equity
                 sizer = get_position_sizer(portfolio=total_equity)
-                # Allocate dynamic target slot capital adjusted by Expectancy Multiplier
-                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult
+                # Allocate dynamic target slot capital adjusted by Expectancy Multiplier and HWM Sentinel
+                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult * hwm_mult
                 raw_full_qty = int(target_slot_capital / price) if price > 0 else 0
                 max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0
 
@@ -1872,14 +1881,32 @@ class BotOrchestrator:
                         stats, len(recent) if recent else 0)
         self._safe_import("trade_journal", _journal)
             
-        # 9. Reporter / Notification
+        # 9. Reporter / Notification & Daily Settlement Card
         def _report():
             from reporter import get_reporter
             rpt = get_reporter()
             rpt.send_daily_summary()
             logger.info("  -> reporter.py pushed daily summary")
-            #      (  )
             rpt.send_weekly_report()
+
+            # [NEW SOTA QUANT MODULE 17: DAILY SETTLEMENT TELEGRAM CARD & TAX CSV]
+            try:
+                from daily_settlement_reporter import DailySettlementReporter
+                from notification import get_notifier
+                ds_rep = DailySettlementReporter()
+                rep_data = ds_rep.generate_daily_report()
+                if rep_data.get('telegram_msg'):
+                    get_notifier().send_message(rep_data['telegram_msg'])
+                ds_rep.export_tax_csv()
+            except Exception as _ds_err:
+                logger.debug("Daily settlement reporter error: {}", _ds_err)
+
+            # [NEW SOTA QUANT MODULE 18: DB INTEGRITY & 7-DAY ROTATING BACKUP]
+            try:
+                from db_maintenance_guard import DBMaintenanceGuard
+                DBMaintenanceGuard().run_daily_maintenance()
+            except Exception as _dbm_err:
+                logger.debug("DB maintenance guard error: {}", _dbm_err)
         self._safe_import("reporter", _report)
         
         # 10. ML Predictor (background training)
