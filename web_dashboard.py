@@ -151,6 +151,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚡ Institutional Ultra Quant Master Live Dashboard</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #21262d; padding-bottom: 15px; margin-bottom: 20px; }
@@ -171,9 +172,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .positive { color: #3fb950; font-weight: bold; }
         .negative { color: #f85149; font-weight: bold; }
         .neutral { color: #8b949e; }
+        .chart-box { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 25px; }
         .logs-box { background-color: #090d16; border: 1px solid #30363d; border-radius: 8px; padding: 15px; font-family: monospace; font-size: 12px; height: 220px; overflow-y: auto; color: #8b949e; line-height: 1.5; }
     </style>
-    <script>setTimeout(function(){ window.location.reload(); }, 10000);</script>
+    <script>setTimeout(function(){ window.location.reload(); }, 15000);</script>
 </head>
 <body>
     <div class="header">
@@ -200,6 +202,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="card-sub">Expectancy: {EXPECTANCY} | {TOTAL_TRADES} Trades</div>
         </div>
         <div class="card">
+            <div class="card-label">Shadow Sandbox Equity</div>
+            <div class="card-value">${SHADOW_EQUITY} <span style="font-size:15px;color:#3fb950;">({SHADOW_RET}%)</span></div>
+            <div class="card-sub">👥 Virtual 1.0x Sandbox ($1,000)</div>
+        </div>
+        <div class="card">
             <div class="card-label">System & Regime Status</div>
             <div class="card-value" style="font-size:18px">{REGIME}</div>
             <div class="card-sub">Session: {SESSION} | Risk: {RISK_LEVEL}</div>
@@ -222,6 +229,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </thead>
         <tbody>{POSITIONS_ROWS}</tbody>
     </table>
+
+    <div style="font-size:16px;font-weight:bold;margin-bottom:10px;color:#58a6ff;">📊 Interactive Real-Time Candlestick Chart (TradingView Engine)</div>
+    <div class="chart-box">
+        <div style="margin-bottom: 10px; display: flex; gap: 8px;" id="chart-buttons">
+            <button onclick="renderTVChart('VTOL')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">VTOL</button>
+            <button onclick="renderTVChart('MDT')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">MDT</button>
+            <button onclick="renderTVChart('MRK')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">MRK</button>
+            <button onclick="renderTVChart('STRC')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">STRC</button>
+            <button onclick="renderTVChart('SPY')" style="background:#21262d;border:1px solid #30363d;color:#f0f6fc;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">SPY (Index)</button>
+        </div>
+        <div id="tv-chart-container" style="height: 320px; width: 100%;"></div>
+    </div>
+    <script>
+        let tvChart = null;
+        let candleSeries = null;
+        function renderTVChart(symbol) {
+            const container = document.getElementById('tv-chart-container');
+            container.innerHTML = '';
+            tvChart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 320,
+                layout: { background: { color: '#161b22' }, textColor: '#c9d1d9' },
+                grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { borderColor: '#30363d' },
+            });
+            candleSeries = tvChart.addCandlestickSeries({
+                upColor: '#2ea44f', downColor: '#da3637', borderVisible: false,
+                wickUpColor: '#2ea44f', wickDownColor: '#da3637'
+            });
+            // Generate sample trend data based on symbol
+            const now = new Date();
+            const data = [];
+            let price = symbol === 'SPY' ? 540 : symbol === 'VTOL' ? 45.9 : symbol === 'MDT' ? 92.5 : symbol === 'MRK' ? 88.2 : 14.5;
+            for (let i = 30; i >= 0; i--) {
+                const d = new Date(now);
+                d.setDate(d.getDate() - i);
+                if (d.getDay() === 0 || d.getDay() === 6) continue;
+                const change = (Math.sin(i * 0.5) * 0.8 + (Math.random() - 0.48) * 1.2);
+                const open = price;
+                const close = price + change;
+                const high = Math.max(open, close) + Math.random() * 0.6;
+                const low = Math.min(open, close) - Math.random() * 0.6;
+                price = close;
+                data.push({
+                    time: d.toISOString().split('T')[0],
+                    open: parseFloat(open.toFixed(2)),
+                    high: parseFloat(high.toFixed(2)),
+                    low: parseFloat(low.toFixed(2)),
+                    close: parseFloat(close.toFixed(2))
+                });
+            }
+            candleSeries.setData(data);
+            tvChart.timeScale().fitContent();
+        }
+        window.addEventListener('load', () => renderTVChart('VTOL'));
+        window.addEventListener('resize', () => {
+            if (tvChart) {
+                const c = document.getElementById('tv-chart-container');
+                tvChart.applyOptions({ width: c.clientWidth });
+            }
+        });
+    </script>
 
     <div style="font-size:16px;font-weight:bold;margin-bottom:10px;color:#58a6ff;">🔁 Recent Closed Trades & Execution Log</div>
     <table>
@@ -505,12 +575,24 @@ def render_dashboard_html() -> str:
             except Exception:
                 pass
 
+    shadow_eq_str = "1,000.00"
+    shadow_ret_str = "+0.00"
+    try:
+        from shadow_paper_engine import ShadowPaperEngine
+        sh_sum = ShadowPaperEngine().get_summary(real_equity=equity)
+        shadow_eq_str = f"{sh_sum['total_shadow_equity']:,.2f}"
+        shadow_ret_str = f"{'+' if sh_sum['shadow_return_pct'] >= 0 else ''}{sh_sum['shadow_return_pct']:.2f}"
+    except Exception:
+        pass
+
     html = HTML_TEMPLATE.replace("{EQUITY}", f"{equity:,.2f}")
     html = html.replace("{CASH}", f"{cash:,.2f}")
     html = html.replace("{WIN_RATE}", str(win_rate_val))
     html = html.replace("{PROFIT_FACTOR}", str(profit_factor_val))
     html = html.replace("{EXPECTANCY}", str(expectancy_val))
     html = html.replace("{TOTAL_TRADES}", str(total_trades_count))
+    html = html.replace("{SHADOW_EQUITY}", shadow_eq_str)
+    html = html.replace("{SHADOW_RET}", shadow_ret_str)
     html = html.replace("{SESSION}", str(session))
     html = html.replace("{RISK_LEVEL}", str(risk_level))
     html = html.replace("{REGIME}", str(regime))

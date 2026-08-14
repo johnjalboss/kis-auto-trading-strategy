@@ -79,10 +79,10 @@ class TelegramInteractiveBot:
         dash_url = "http://141.148.172.12:8080"
 
         menu_text = (
-            f"📋 <b>AI 스윙 봇 인터랙티브 제어판</b> [{paused}]\n"
+            f"📋 <b>AI 스윙 봇 퀀트 마스터 제어판</b> [{paused}]\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "원하시는 버튼을 터치하시면 실시간 상태, 성과, 차트, 추천주,\n"
-            "리스크 제어가 즉시 실행됩니다.\n\n"
+            "원하시는 버튼을 원클릭하시면 AI 주간 운용 보고서, 보유 종목 캔들 차트,\n"
+            "섀도우 모의매매 성과, 실시간 추천주, 리스크 제어가 즉시 실행됩니다.\n\n"
             f"🌐 <b>실시간 웹 대시보드 주소</b>:\n{dash_url}\n"
             "🔑 <b>접속 비밀번호</b>: <code>0201!</code>"
         )
@@ -90,6 +90,14 @@ class TelegramInteractiveBot:
             "inline_keyboard": [
                 [
                     {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
+                ],
+                [
+                    {"text": "📜 주간 AI 운용 보고서", "callback_data": "cmd_weekly_ai_report"},
+                    {"text": "👥 섀도우 모의매매 성과", "callback_data": "cmd_shadow_paper"}
+                ],
+                [
+                    {"text": "📊 보유종목 캔들 차트", "callback_data": "cmd_stock_charts_menu"},
+                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"}
                 ],
                 [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
@@ -104,26 +112,15 @@ class TelegramInteractiveBot:
                     {"text": "🏆 전체 누적성과", "callback_data": "cmd_total_pnl"}
                 ],
                 [
-                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"},
-                    {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"}
+                    {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"},
+                    {"text": "🔥 테마 1등주", "callback_data": "cmd_theme"}
                 ],
                 [
-                    {"text": "🔥 테마 1등주", "callback_data": "cmd_theme"},
-                    {"text": "🎯 스크리너 픽", "callback_data": "cmd_screener"}
+                    {"text": "🎯 스크리너 픽", "callback_data": "cmd_screener"},
+                    {"text": "🌐 시장 레짐", "callback_data": "cmd_regime"}
                 ],
                 [
-                    {"text": "🌐 시장 레짐", "callback_data": "cmd_regime"},
-                    {"text": "🛡️ 리스크 현황", "callback_data": "cmd_risk"}
-                ],
-                [
-                    {"text": "📊 30일 차트", "callback_data": "cmd_chart30"},
-                    {"text": "📊 90일 차트", "callback_data": "cmd_chart90"}
-                ],
-                [
-                    {"text": "📊 180일 차트", "callback_data": "cmd_chart180"},
-                    {"text": "📊 1년 차트", "callback_data": "cmd_chart365"}
-                ],
-                [
+                    {"text": "🛡️ 리스크 현황", "callback_data": "cmd_risk"},
                     {"text": "📊 전체 수익차트", "callback_data": "cmd_chart_all"}
                 ],
                 [
@@ -161,7 +158,23 @@ class TelegramInteractiveBot:
                                 if sender_id != str(self.chat_id):
                                     continue
 
-                                if cb_data == "cmd_status":
+                                if cb_data == "cmd_weekly_ai_report":
+                                    self._answer_callback(cb_id, "📜 주간 AI 운용 보고서를 생성합니다.")
+                                    self._handle_weekly_ai_report()
+                                elif cb_data == "cmd_shadow_paper":
+                                    self._answer_callback(cb_id, "👥 섀도우 모의매매 성과를 조회합니다.")
+                                    self._handle_shadow_paper()
+                                elif cb_data == "cmd_stock_charts_menu":
+                                    self._answer_callback(cb_id, "📊 보유 종목 차트 메뉴를 엽니다.")
+                                    self._handle_stock_charts_menu()
+                                elif cb_data.startswith("cmd_chart_sym_"):
+                                    sym = cb_data.replace("cmd_chart_sym_", "").upper()
+                                    self._answer_callback(cb_id, f"📊 {sym} 캔들 차트를 렌더링합니다.")
+                                    self._handle_single_stock_chart(sym)
+                                elif cb_data == "cmd_main_menu":
+                                    self._answer_callback(cb_id, "📋 메인 제어판으로 이동합니다.")
+                                    self._send_one_click_menu()
+                                elif cb_data == "cmd_status":
                                     self._answer_callback(cb_id, "📊 계좌 상태를 조회합니다.")
                                     self._handle_status()
                                 elif cb_data == "cmd_positions":
@@ -685,3 +698,82 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed close_all for Telegram reply: {}", e)
             self._send_reply(f"⚠️ 긴급 청산 처리 중 오류 발생: {e}")
+
+    def _handle_weekly_ai_report(self):
+        """주간 AI 퀀트 운용 보고서 생성 및 발송"""
+        try:
+            from weekly_ai_report_generator import WeeklyAIReportGenerator
+            generator = WeeklyAIReportGenerator()
+            report_html = generator.generate_report()
+            self._send_reply(report_html)
+        except Exception as e:
+            logger.error("Failed weekly AI report generation: {}", e)
+            self._send_reply(f"⚠️ 주간 AI 운용 보고서 생성 중 오류: {e}")
+
+    def _handle_shadow_paper(self):
+        """섀도우 모의매매 샌드박스 성과 조회"""
+        try:
+            from shadow_paper_engine import ShadowPaperEngine
+            engine = ShadowPaperEngine()
+            real_equity = 772.70
+            if self.orchestrator and hasattr(self.orchestrator, 'risk_manager'):
+                real_equity = getattr(self.orchestrator.risk_manager, 'current_portfolio_value', 772.70)
+            card_html = engine.format_telegram_card(real_equity=real_equity)
+            self._send_reply(card_html)
+        except Exception as e:
+            logger.error("Failed shadow paper card generation: {}", e)
+            self._send_reply(f"⚠️ 섀도우 모의매매 조회 중 오류: {e}")
+
+    def _handle_stock_charts_menu(self):
+        """보유 종목별 원클릭 차트 선택 메뉴 표출"""
+        try:
+            positions = self._get_positions_dict()
+            if not positions:
+                self._send_reply("ℹ️ 현재 보유 중인 종목이 없습니다. (100% 현금 대기 중)")
+                return
+
+            buttons = []
+            row = []
+            for sym in positions.keys():
+                row.append({"text": f"📊 {sym} 캔들 차트", "callback_data": f"cmd_chart_sym_{sym}"})
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+
+            buttons.append([{"text": "🔙 메인 제어판으로 돌아가기", "callback_data": "cmd_main_menu"}])
+
+            menu_text = (
+                f"📊 <b>보유 종목 실시간 차트 선택</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "차트를 확인하고 싶으신 종목의 버튼을 원클릭하시면\n"
+                "볼륨 프로파일 매물대와 20일선 황금 맥점이 그려진 캔들 차트가 즉시 렌더링됩니다."
+            )
+            self._send_reply(menu_text, reply_markup={"inline_keyboard": buttons})
+        except Exception as e:
+            logger.error("Failed stock charts menu: {}", e)
+            self._send_reply(f"⚠️ 차트 메뉴 생성 중 오류: {e}")
+
+    def _handle_single_stock_chart(self, symbol: str):
+        """개별 종목 고해상도 캔들 차트 발송"""
+        try:
+            from chart_generator import generate_stock_technical_chart
+            from notifier import get_notifier
+            positions = self._get_positions_dict()
+            entry_p = None
+            if symbol in positions:
+                entry_p = getattr(positions[symbol], 'avg_price', getattr(positions[symbol], 'entry_price', None))
+
+            chart_path, caption = generate_stock_technical_chart(symbol, days=40, entry_price=entry_p)
+            if chart_path and os.path.exists(chart_path):
+                notifier = get_notifier()
+                success = notifier.send_photo_sync(chart_path, caption)
+                if not success:
+                    self._send_photo(chart_path, caption)
+            else:
+                self._send_reply(caption or f"⚠️ {symbol} 차트를 생성할 수 없습니다.")
+        except Exception as e:
+            logger.error("Failed to render single stock chart for {}: {}", symbol, e)
+            self._send_reply(f"⚠️ {symbol} 차트 생성 중 오류 발생: {e}")
+

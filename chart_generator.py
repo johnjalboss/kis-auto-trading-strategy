@@ -264,7 +264,119 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     return out_path, caption_text
 
 
+def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: float = None) -> tuple[str, str]:
+    """
+    Renders high-resolution technical candlestick & indicator chart for a specific symbol.
+    Returns (chart_image_filepath, caption_text).
+    """
+    symbol = symbol.upper()
+    try:
+        from kis_data import download
+        df = download(symbol, period="3mo")
+        if df is None or len(df) < 15:
+            return "", f"⚠️ {symbol} 데이터를 불러올 수 없습니다."
+
+        if len(df) > days:
+            df = df.tail(days)
+
+        # Indicators
+        close = df['Close']
+        high = df['High']
+        low = df['Low']
+        op = df['Open']
+        vol = df['Volume']
+
+        sma20 = close.rolling(20).mean()
+        std20 = close.rolling(20).std()
+        bb_upper = sma20 + (std20 * 2)
+        bb_lower = sma20 - (std20 * 2)
+
+        # Plot
+        fig, (ax_price, ax_vol) = plt.subplots(
+            2, 1, figsize=(10, 6.5), gridspec_kw={'height_ratios': [3.2, 1]},
+            facecolor='#0d1117', sharex=True
+        )
+        for ax in [ax_price, ax_vol]:
+            ax.set_facecolor('#0d1117')
+
+        dates_str = [d.strftime('%m/%d') for d in df.index]
+        x_indices = np.arange(len(df))
+
+        # Draw Candlesticks
+        for i in range(len(df)):
+            o, c, h, l = op.iloc[i], close.iloc[i], high.iloc[i], low.iloc[i]
+            color = '#2ea44f' if c >= o else '#da3637'
+            # Wick
+            ax_price.plot([i, i], [l, h], color=color, linewidth=1.2)
+            # Body
+            rect_bottom = min(o, c)
+            rect_height = max(abs(c - o), 0.01)
+            ax_price.add_patch(plt.Rectangle((i - 0.35, rect_bottom), 0.7, rect_height, facecolor=color, edgecolor=color))
+
+        # Overlay SMA & Bollinger Bands
+        ax_price.plot(x_indices, sma20, color='#e3b341', linewidth=1.5, label='SMA 20 (Golden Pivot)')
+        ax_price.plot(x_indices, bb_upper, color='#58a6ff', linewidth=1.0, linestyle='--', alpha=0.7, label='BB Upper')
+        ax_price.plot(x_indices, bb_lower, color='#58a6ff', linewidth=1.0, linestyle='--', alpha=0.7, label='BB Lower')
+        ax_price.fill_between(x_indices, bb_lower, bb_upper, color='#1f6feb', alpha=0.08)
+
+        # If entry_price is provided, draw entry level
+        curr_p = float(close.iloc[-1])
+        if entry_price and entry_price > 0:
+            ax_price.axhline(entry_price, color='#a371f7', linestyle='-.', linewidth=1.5, label=f'Avg Cost (${entry_price:.2f})')
+            pnl_pct = (curr_p - entry_price) / entry_price * 100
+        else:
+            pnl_pct = 0.0
+
+        ax_price.set_title(f'{symbol} Live Quant Candlestick & Indicators (Last: ${curr_p:.2f})', color='#f0f6fc', fontsize=12, fontweight='bold', pad=10)
+        ax_price.set_ylabel('Price ($)', color='#c9d1d9', fontsize=9, fontweight='bold')
+        ax_price.grid(True, color='#21262d', linestyle='--', linewidth=0.6, alpha=0.6)
+        ax_price.tick_params(axis='y', labelcolor='#c9d1d9', labelsize=9)
+        ax_price.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=8, labelcolor='#c9d1d9')
+
+        # Volume Subplot
+        vol_colors = ['#2ea44f' if close.iloc[i] >= op.iloc[i] else '#da3637' for i in range(len(df))]
+        ax_vol.bar(x_indices, vol, color=vol_colors, width=0.7, alpha=0.8)
+        vol_sma20 = vol.rolling(20).mean()
+        ax_vol.plot(x_indices, vol_sma20, color='#e3b341', linewidth=1.2, label='Vol SMA20')
+        ax_vol.set_ylabel('Volume', color='#c9d1d9', fontsize=8, fontweight='bold')
+        ax_vol.grid(True, color='#21262d', linestyle='--', linewidth=0.6, alpha=0.6)
+        ax_vol.tick_params(axis='y', labelcolor='#c9d1d9', labelsize=8)
+
+        # X-Axis ticks
+        step = max(1, len(df) // 8)
+        tick_locs = list(range(0, len(df), step))
+        if tick_locs[-1] != len(df) - 1:
+            tick_locs.append(len(df) - 1)
+        ax_vol.set_xticks(tick_locs)
+        ax_vol.set_xticklabels([dates_str[i] for i in tick_locs], color='#c9d1d9', fontsize=8)
+
+        fig.subplots_adjust(top=0.92, bottom=0.10, left=0.10, right=0.92, hspace=0.15)
+
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"stock_chart_{symbol}.png")
+        if os.path.exists(out_path):
+            try: os.remove(out_path)
+            except Exception: pass
+
+        plt.savefig(out_path, dpi=120, bbox_inches='tight')
+        plt.close(fig)
+
+        caption = (
+            f"📊 <b>[{symbol} 기술적 분석 차트]</b>\n"
+            f"💵 <b>현재가</b>: <code>${curr_p:.2f} USD</code>\n"
+            f"📈 <b>20일 이평선</b>: <code>${float(sma20.iloc[-1]):.2f}</code>\n"
+            f"🎯 <b>볼린저 상/하단</b>: ${float(bb_upper.iloc[-1]):.2f} / ${float(bb_lower.iloc[-1]):.2f}\n"
+        )
+        if entry_price and entry_price > 0:
+            caption += f"💼 <b>내 진입가</b>: ${entry_price:.2f} (손익 <b>{pnl_pct:+.2f}%</b>)"
+
+        return out_path, caption
+    except Exception as e:
+        logger.error("Failed to generate stock chart for {}: {}", symbol, e)
+        return "", f"⚠️ {symbol} 차트 생성 중 오류: {e}"
+
+
 if __name__ == "__main__":
     p, t = generate_daily_pnl_chart()
     print("Generated Chart File:", p)
     print("Generated Caption:\n", t.encode('utf-8', errors='ignore').decode('ascii', errors='ignore'))
+
