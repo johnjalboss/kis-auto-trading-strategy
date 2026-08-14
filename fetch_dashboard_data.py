@@ -272,34 +272,40 @@ try:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         
-        # Get overall net pnl and trading days to calculate CAGR
+        # Get overall net pnl and trading days to calculate CAGR strictly since 2026-08-14 Day 1
         try:
+            DAY_ZERO_STR = "2026-08-14"
             row = cur.execute("""
-                SELECT SUM(pnl) as net_pnl, COUNT(DISTINCT date(exit_time, '-14 hours')) as trading_days
-                FROM trades WHERE side = 'SELL' AND pnl IS NOT NULL
-            """).fetchone()
+                SELECT SUM(pnl) as net_pnl, COUNT(DISTINCT date(created_at)) as trading_days
+                FROM trades WHERE side = 'SELL' AND date(created_at) >= ? AND pnl IS NOT NULL
+            """, (DAY_ZERO_STR,)).fetchone()
             
-            realized_pnl = row["net_pnl"] if row and row["net_pnl"] else 0
-            trading_days = row["trading_days"] if row and row["trading_days"] else 0
+            realized_pnl = float(row["net_pnl"] or 0.0) if row else 0.0
             
-            # Calculate total net profit (realized + unrealized)
-            total_net_profit = realized_pnl + sum((p["current"] - p["entry"]) * p["qty"] for p in data.get("positions", []))
+            # Days elapsed since Day 1 (at least 1)
+            from datetime import date
+            day_zero = date(2026, 8, 14)
+            today_d = datetime.now().date()
+            trading_days = max(1, (today_d - day_zero).days + 1)
             
-            if trading_days > 0 and data["total_value"] > 0:
-                # Initial capital = current total value - total net profit
-                initial_capital = data["total_value"] - total_net_profit
-                
-                if initial_capital > 0:
-                    # CAGR = (Current / Initial) ^ (1 / days) - 1
-                    cagr_decimal = (data["total_value"] / initial_capital) ** (1 / trading_days) - 1
-                    data["avg_daily_pnl_pct"] = round(cagr_decimal * 100, 4)
-                else:
-                    data["avg_daily_pnl_pct"] = 0
+            # Calculate total net profit (realized since 08-14 + current unrealized)
+            open_unrealized = sum((p["current"] - p["entry"]) * p["qty"] for p in data.get("positions", []))
+            total_net_profit = realized_pnl + open_unrealized
+            
+            # Baseline capital: $766.49 USD
+            initial_capital = 766.49
+            current_total_value = initial_capital + total_net_profit
+            
+            if initial_capital > 0:
+                # Daily CAGR / Arithmetic return
+                total_return_pct = (total_net_profit / initial_capital) * 100
+                daily_avg_pct = total_return_pct / trading_days
+                data["avg_daily_pnl_pct"] = round(daily_avg_pct, 4)
             else:
-                data["avg_daily_pnl_pct"] = 0
+                data["avg_daily_pnl_pct"] = 0.0
                 
         except Exception as e:
-            data["avg_daily_pnl_pct"] = 0
+            data["avg_daily_pnl_pct"] = 0.0
             data["cagr_error"] = str(e)
             
         # Get daily stats dynamically from trades table
