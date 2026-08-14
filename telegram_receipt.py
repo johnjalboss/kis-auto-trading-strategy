@@ -164,11 +164,32 @@ class TelegramReceiptGenerator:
             f"──────────────────────\n"
             f"🧬 <b>수익 팩터 기여도 분해 (Factor Attribution)</b>:\n"
             f"{factor_lines}\n"
-            f"──────────────────────\n"
-            f"📝 <b>사후 매매 복기 (Post-Trade Analysis)</b>:\n"
-            f"• 자금 회수 완료 ➔ 차기 우수 주도주 탐색 모드 가동\n"
-            f"⏰ <b>청산시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
+        )
+
+        # AI Post-Mortem Journaling
+        try:
+            from ai_trade_post_mortem import AITradePostMortem
+            pm_text = AITradePostMortem().generate_post_mortem(
+                symbol=symbol,
+                entry_price=entry_price,
+                exit_price=exit_price,
+                quantity=quantity,
+                pnl=pnl_usd,
+                pnl_pct=pnl_pct,
+                reason=reason,
+                holding_days=hold_days
+            )
+            receipt += f"{pm_text}\n"
+        except Exception:
+            receipt += (
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"🧠 <b>[AI 퀀트 매매 복기]</b>\n"
+                f"• 원칙적 리스크 관리 청산 완료 ➔ 차기 우수 주도주 탐색 모드 가동\n"
+            )
+
+        receipt += (
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏰ <b>청산시각</b>: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST</code>\n"
             f"🌐 <b>실시간 대시보드</b>: http://141.148.172.12:8080"
         )
         return receipt

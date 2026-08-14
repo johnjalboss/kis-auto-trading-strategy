@@ -1335,6 +1335,17 @@ class StrategyEngine:
         except Exception as _nse_e:
             logger.debug("NewsSentimentEngine integration skipped for {}: {}", symbol, _nse_e)
 
+        # Smart Money & Institutional Sponsorship Footprint Radar (+3 ~ +8 pts)
+        try:
+            from smart_money_footprint import SmartMoneyFootprint
+            sm_res = SmartMoneyFootprint().analyze_ticker(symbol)
+            if sm_res['bonus_points'] > 0:
+                score += sm_res['bonus_points']
+                logger.info("📡 [SMART_MONEY_FOOTPRINT] +{} pts for {}: {}", sm_res['bonus_points'], symbol, sm_res['signal_tag'])
+                breakdown.append(f"• 스마트머니 지분 스폰서십: +{sm_res['bonus_points']}점 ({sm_res['signal_tag']})")
+        except Exception as _smf_err:
+            logger.debug("SmartMoneyFootprint skipped for {}: {}", symbol, _smf_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)

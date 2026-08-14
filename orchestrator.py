@@ -495,6 +495,17 @@ class BotOrchestrator:
                 except Exception as err:
                     logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             
+        # 11. Macro Event Horizon & Earnings D-Day Shield
+        try:
+            from macro_event_horizon import MacroEventHorizon
+            meh = MacroEventHorizon(holdings=list(self.strategy.get_all_positions().keys()))
+            meh_mult, meh_msg = meh.evaluate_risk_multiplier()
+            if meh_mult < 1.0:
+                self.state.max_exposure_pct = min(self.state.max_exposure_pct, meh_mult)
+                logger.warning("🔮 [MACRO_EVENT_HORIZON] Exposure throttled to {:.0%}: {}", meh_mult, meh_msg)
+        except Exception as meh_err:
+            logger.debug("Macro event horizon error: {}", meh_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

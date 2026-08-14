@@ -95,6 +95,10 @@ class TelegramInteractiveBot:
                     {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
                 ],
                 [
+                    {"text": "🔮 매크로 & 실적 D-Day", "callback_data": "cmd_macro_dday"},
+                    {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"}
+                ],
+                [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
                     {"text": "📈 보유 포지션", "callback_data": "cmd_positions"}
                 ],
@@ -157,7 +161,13 @@ class TelegramInteractiveBot:
                                 if sender_id != str(self.chat_id):
                                     continue
 
-                                if cb_data == "cmd_weekly_ai_report":
+                                if cb_data == "cmd_macro_dday":
+                                    self._answer_callback(cb_id, "🔮 매크로 & 실적 D-Day를 조회합니다.")
+                                    self._handle_macro_dday()
+                                elif cb_data == "cmd_smart_money":
+                                    self._answer_callback(cb_id, "📡 스마트머니 수급을 조회합니다.")
+                                    self._handle_smart_money()
+                                elif cb_data == "cmd_weekly_ai_report":
                                     self._answer_callback(cb_id, "📜 주간 AI 운용 보고서를 생성합니다.")
                                     self._handle_weekly_ai_report()
                                 elif cb_data == "cmd_shadow_paper":
@@ -775,4 +785,29 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed to render single stock chart for {}: {}", symbol, e)
             self._send_reply(f"⚠️ {symbol} 차트 생성 중 오류 발생: {e}")
+
+    def _handle_macro_dday(self):
+        """매크로 경제지표 및 보유종목 실적 D-Day 레이더 조회"""
+        try:
+            from macro_event_horizon import MacroEventHorizon
+            positions = self._get_positions_dict()
+            meh = MacroEventHorizon(holdings=list(positions.keys()) if positions else None)
+            card = meh.format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed macro D-Day handler: {}", e)
+            self._send_reply(f"⚠️ 매크로 D-Day 조회 실패: {e}")
+
+    def _handle_smart_money(self):
+        """스마트머니 & 기관 내부자 지분 레이더 조회"""
+        try:
+            from smart_money_footprint import SmartMoneyFootprint
+            positions = self._get_positions_dict()
+            smf = SmartMoneyFootprint()
+            card = smf.format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed smart money handler: {}", e)
+            self._send_reply(f"⚠️ 스마트머니 조회 실패: {e}")
+
 
