@@ -26,7 +26,15 @@ class DailySettlementReporter:
         """
         Generate daily settlement metrics and Telegram message text for target_date (YYYY-MM-DD)
         """
-        today_str = target_date or datetime.now().strftime("%Y-%m-%d")
+        if target_date:
+            today_str = target_date
+        else:
+            try:
+                import pytz
+                today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+            except Exception:
+                today_str = datetime.now().strftime("%Y-%m-%d")
+
         res = {
             "date": today_str,
             "trades_count": 0,

@@ -271,27 +271,57 @@ class TelegramInteractiveBot:
                                 if sender_id != str(self.chat_id):
                                     continue
 
-                                cmd = text.lower().strip()
+                                cmd = text.lower().strip().replace(" ", "")
 
-                                if cmd in ["/status", "/상태", "/잔고", "상태", "잔고"] or cmd.startswith("/status"):
+                                if any(cmd.startswith(c) for c in ["/status", "/상태", "/잔고", "상태", "잔고"]):
                                     self._handle_status()
-                                elif cmd in ["/포지션", "포지션", "/positions"]:
+                                elif any(cmd.startswith(c) for c in ["/포지션", "포지션", "/positions"]):
                                     self._handle_positions()
-                                elif cmd in ["/수익", "수익", "/pnl"]:
+                                elif any(cmd.startswith(c) for c in ["/수익", "수익", "/pnl", "/today"]):
                                     self._handle_pnl("today")
-                                elif cmd in ["/차트30", "차트30"]:
+                                elif any(cmd.startswith(c) for c in ["/주간수익", "주간수익", "/weekly"]):
+                                    self._handle_pnl("weekly")
+                                elif any(cmd.startswith(c) for c in ["/월간수익", "월간수익", "/monthly"]):
+                                    self._handle_pnl("monthly")
+                                elif any(cmd.startswith(c) for c in ["/전체수익", "전체수익", "/total"]):
+                                    self._handle_pnl("total")
+                                elif any(cmd.startswith(c) for c in ["/퀀트", "퀀트", "퀀트알파", "/alpha", "알파상태"]):
+                                    self._handle_quant_status()
+                                elif any(cmd.startswith(c) for c in ["/모의매매", "모의매매", "섀도우", "/shadow"]):
+                                    self._handle_shadow_paper()
+                                elif any(cmd.startswith(c) for c in ["/보고서", "보고서", "주간보고서", "/report"]):
+                                    self._handle_weekly_ai_report()
+                                elif any(cmd.startswith(c) for c in ["/후보", "후보", "탑픽", "/toppicks"]):
+                                    self._handle_top_picks()
+                                elif any(cmd.startswith(c) for c in ["/몬테카를로", "몬테카를로", "시뮬레이션"]):
+                                    self._handle_monte_carlo()
+                                elif any(cmd.startswith(c) for c in ["/dday", "디데이", "실적dday"]):
+                                    self._handle_macro_dday()
+                                elif any(cmd.startswith(c) for c in ["/스마트머니", "스마트머니", "수급"]):
+                                    self._handle_smart_money()
+                                elif any(cmd.startswith(c) for c in ["/테마", "테마", "주도테마"]):
+                                    self._handle_theme()
+                                elif any(cmd.startswith(c) for c in ["/스크리너", "스크리너"]):
+                                    self._handle_screener()
+                                elif any(cmd.startswith(c) for c in ["/레짐", "레짐", "시장레짐"]):
+                                    self._handle_regime()
+                                elif any(cmd.startswith(c) for c in ["/리스크", "리스크"]):
+                                    self._handle_risk()
+                                elif any(cmd.startswith(c) for c in ["/차트30", "차트30"]):
                                     self._handle_chart(30)
-                                elif cmd in ["/차트90", "차트90"]:
+                                elif any(cmd.startswith(c) for c in ["/차트90", "차트90", "/차트", "차트"]):
                                     self._handle_chart(90)
-                                elif cmd in ["/pause", "/정지", "/일시정지", "일시정지", "정지"]:
+                                elif any(cmd.startswith(c) for c in ["/차트전체", "전체차트"]):
+                                    self._handle_chart(0)
+                                elif any(cmd.startswith(c) for c in ["/pause", "/정지", "/일시정지", "일시정지", "정지"]):
                                     _is_bot_paused = True
                                     self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 또는 /재개 로 다시 가동)")
-                                elif cmd in ["/resume", "/재개", "/시작", "재개", "시작"]:
+                                elif any(cmd.startswith(c) for c in ["/resume", "/재개", "/시작", "재개", "시작"]):
                                     _is_bot_paused = False
                                     self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 루프를 재가동합니다.")
-                                elif cmd in ["/close_all", "/전량청산", "/청산", "전량청산", "청산"]:
+                                elif any(cmd.startswith(c) for c in ["/close_all", "/전량청산", "/청산", "전량청산", "청산"]):
                                     self._handle_close_all()
-                                elif cmd in ["/help", "/도움말", "/start", "도움말", "help"] or cmd.startswith("/start") or cmd.startswith("/help"):
+                                elif any(cmd.startswith(c) for c in ["/help", "/도움말", "/start", "도움말", "help", "메뉴"]):
                                     self._send_one_click_menu()
 
             except Exception as e:
