@@ -27,18 +27,20 @@ class CrossAssetTailRiskSentinel:
         pass
 
     def _fetch_history(self, symbol: str, days: int = 15) -> Optional[pd.DataFrame]:
-        try:
-            import kis_data as kd
-            df = kd.get_daily_ohlcv(symbol, days=days)
-            if df is not None and len(df) >= 5:
-                return df
-        except Exception:
-            pass
+        # Skip KIS for index symbols (^TNX, ^VIX)
+        if not symbol.startswith("^"):
+            try:
+                import kis_data as kd
+                df = kd.get_daily_ohlcv(symbol, days=days)
+                if df is not None and len(df) >= 5:
+                    return df
+            except Exception:
+                pass
 
         try:
             import yfinance as yf
             df = yf.download(symbol, period="1mo", interval="1d", progress=False, auto_adjust=True)
-            if df is not None and len(df) >= 5:
+            if df is not None and len(df) >= 2:
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.get_level_values(0)
                 return df

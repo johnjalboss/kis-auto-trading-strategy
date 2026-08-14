@@ -193,7 +193,7 @@ class ShadowPaperEngine:
             f"<i>실계좌 vs 가상 공격형 100% 몰빵 전략 비교</i>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"💵 <b>가상 기준 원금</b>: $1,000.00 USD\n"
-            f"{pnl_emoji} <b>가상 총 자산</b>: <code>${summary['total_shadow_equity']:.2f} USD</code> ({pnl_sign}{summary['shadow_return_pct']}%\n"
+            f"{pnl_emoji} <b>가상 총 자산</b>: <code>${summary['total_shadow_equity']:.2f} USD</code> ({pnl_sign}{summary['shadow_return_pct']}%)\n"
             f"💰 <b>가상 실현손익</b>: ${summary['realized_pnl']:+.2f} USD\n"
             f"🎯 <b>가상 매매 전적</b>: {summary['total_trades']}전 {summary['wins']}승 {summary['losses']}패 (승률 {summary['win_rate']}%)\n"
             f"━━━━━━━━━━━━━━━━━━━\n"

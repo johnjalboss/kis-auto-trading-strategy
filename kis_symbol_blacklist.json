@@ -42,6 +42,9 @@
     "ITOX",
     "IVDN",
     "IVFH",
-    "IWSH"
+    "IWSH",
+    "^TNX",
+    "^VIX",
+    "^VIX3M"
   ]
 }
