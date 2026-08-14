@@ -130,8 +130,11 @@ class SectorRotator:
                 rs_accel=rs_accel
             ))
         
-        # Sort by combined score
-        rankings.sort(key=lambda x: x.momentum_1m * 0.6 + x.momentum_3m * 0.4, reverse=True)
+        # Sort by Triple-Timeframe Dynamic Momentum:
+        # - 45% 1-Month Swing Momentum (Core Trend)
+        # - 30% 3-Month Medium-Term Foundation (Trend Sustainability)
+        # - 25% 5-Day Real-Time Relative Strength Acceleration (Captures rapid sector shifts immediately!)
+        rankings.sort(key=lambda x: (x.momentum_1m * 0.45) + (x.momentum_3m * 0.30) + (x.rs_5d_vel * 0.25), reverse=True)
         
         # Assign ranks and recommendations
         for i, r in enumerate(rankings):
