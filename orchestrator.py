@@ -831,6 +831,13 @@ class BotOrchestrator:
                 
                 from composite_signal import ActionType
                 if signal.action in [ActionType.STRONG_BUY, ActionType.BUY]:
+                    # Feed high-conviction signals to Parallel Shadow Sandbox ($1,000 baseline)
+                    try:
+                        from shadow_paper_engine import ShadowPaperEngine
+                        ShadowPaperEngine().on_high_conviction_candidate(symbol, signal.entry_price, int(signal.composite_score))
+                    except Exception as _spe_err:
+                        logger.debug("ShadowPaperEngine intake skipped: {}", _spe_err)
+
                     # Check if we already hold this symbol
                     current_positions = self.strategy.get_all_positions()
                     if symbol in current_positions:
