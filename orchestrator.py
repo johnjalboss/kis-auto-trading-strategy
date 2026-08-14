@@ -1440,6 +1440,16 @@ class BotOrchestrator:
             except Exception as v_err:
                 logger.debug("VPIN check skipped: {}", v_err)
 
+            # [NEW SOTA QUANT MODULE 4: CROSS-ASSET TAIL RISK SENTINEL]
+            try:
+                from cross_asset_tail_sentinel import CrossAssetTailRiskSentinel
+                tail_res = CrossAssetTailRiskSentinel().evaluate_tail_risk()
+                if tail_res.get('freeze_entries', False):
+                    logger.warning("🚨 [CROSS_ASSET_TAIL_FREEZE] Entry BLOCKED for {}: Triggers={}", symbol, tail_res.get('triggers', []))
+                    return
+            except Exception as _tail_err:
+                logger.debug("Cross-Asset Tail Sentinel check skipped: {}", _tail_err)
+
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:

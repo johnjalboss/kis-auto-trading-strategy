@@ -986,6 +986,34 @@ class StrategyEngine:
             logger.debug("Sector & RS check skipped for {}: {}", symbol, _rs_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 1: HURST FRACTAL REGIME FILTER] (+20 / -10 pts)
+        # ================================
+        try:
+            from hurst_fractal_regime import HurstFractalRegimeFilter
+            _hurst_res = HurstFractalRegimeFilter().analyze(df, symbol=symbol)
+            score += _hurst_res.get('score_bonus', 0)
+            if _hurst_res.get('is_persistent_trend'):
+                breakdown.append(f"📈 [허스트 프랙탈 추세] H={_hurst_res.get('hurst_exponent'):.2f} (지속 강세 추세장) (+{_hurst_res.get('score_bonus')}점)")
+                logger.info("📈 [HURST_PERSISTENT_TREND] +{:d} pts for {}: H={:.2f}", _hurst_res.get('score_bonus', 0), symbol, _hurst_res.get('hurst_exponent', 0.5))
+            elif _hurst_res.get('is_mean_reverting'):
+                breakdown.append(f"⚠️ [허스트 평균회귀 구간] H={_hurst_res.get('hurst_exponent'):.2f} (돌파 추격 진입 감점)")
+        except Exception as _hurst_err:
+            logger.debug("Hurst fractal check skipped for {}: {}", symbol, _hurst_err)
+
+        # ================================
+        # [NEW SOTA QUANT MODULE 2: AMIHUD PRICE IMPACT & INSTITUTIONAL PRESSURE] (+20 / -15 pts)
+        # ================================
+        try:
+            from amihud_liquidity_pressure import AmihudLiquidityPressureEngine
+            _amihud_res = AmihudLiquidityPressureEngine().analyze(df, symbol=symbol)
+            score += _amihud_res.get('score_bonus', 0)
+            if _amihud_res.get('is_institutional_accumulation'):
+                breakdown.append(f"🌊 [아미후드 기관 매집 압력] Z={_amihud_res.get('pie_zscore'):.2f}σ (폭등 초입 효율성 포착) (+{_amihud_res.get('score_bonus')}점)")
+                logger.info("🌊 [AMIHUD_INSTITUTIONAL_SURGE] +{:d} pts for {}: PIE Z-score={:.2f}", _amihud_res.get('score_bonus', 0), symbol, _amihud_res.get('pie_zscore', 0.0))
+        except Exception as _ami_err:
+            logger.debug("Amihud pressure check skipped for {}: {}", symbol, _ami_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:
@@ -1249,6 +1277,23 @@ class StrategyEngine:
                 return ExitSignal("SELL", pl_res['reason'], cur_price)
         except Exception as _pl_err:
             logger.debug("ProfitLockingStopEngine skipped for {}: {}", symbol, _pl_err)
+
+        # [NEW SOTA QUANT MODULE 3: DYNAMIC RATCHET TAKE-PROFIT LADDER]
+        try:
+            from dynamic_ratchet_take_profit import DynamicRatchetTakeProfitLadder
+            cur_p = realtime_price or (float(df['Close'].iloc[-1]) if df is not None and not df.empty else pos.current_price)
+            ratchet_res = DynamicRatchetTakeProfitLadder().evaluate_exit(
+                symbol=symbol,
+                entry_price=pos.entry_price,
+                current_price=cur_p,
+                high_since_entry=getattr(pos, 'high_since_entry', cur_p),
+                atr=getattr(pos, 'atr_at_entry', 0.0),
+                regime=getattr(self, '_last_regime', 'BULL_NORMAL')
+            )
+            if ratchet_res['should_exit']:
+                return ExitSignal("SELL_ALL", ratchet_res['reason'], cur_p)
+        except Exception as _ratchet_err:
+            logger.debug("DynamicRatchetTakeProfitLadder skipped for {}: {}", symbol, _ratchet_err)
         
         indicators = analyze_all(df)
         if indicators is None:
