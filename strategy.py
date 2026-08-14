@@ -1346,6 +1346,17 @@ class StrategyEngine:
         except Exception as _smf_err:
             logger.debug("SmartMoneyFootprint skipped for {}: {}", symbol, _smf_err)
 
+        # Multi-Timeframe Fractal Confluence (+4 ~ +8 pts)
+        try:
+            from multi_timeframe_confluence import MultiTimeframeConfluence
+            mtf_res = MultiTimeframeConfluence().evaluate_confluence(symbol, daily_df=df)
+            if mtf_res['bonus_points'] > 0:
+                score += mtf_res['bonus_points']
+                logger.info("🎯 [FRACTAL_CONFLUENCE] +{} pts for {}: {}", mtf_res['bonus_points'], symbol, mtf_res['summary'])
+                breakdown.append(f"• 3중 타임프레임 프랙탈 합치: +{mtf_res['bonus_points']}점 ({mtf_res['summary']})")
+        except Exception as _mtf_err:
+            logger.debug("MultiTimeframeConfluence skipped for {}: {}", symbol, _mtf_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)

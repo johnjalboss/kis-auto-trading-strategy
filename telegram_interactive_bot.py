@@ -115,6 +115,9 @@ class TelegramInteractiveBot:
                     {"text": "👥 섀도우 모의매매 현황", "callback_data": "cmd_shadow_paper"}
                 ],
                 [
+                    {"text": "🎲 몬테카를로 파산 시뮬레이션", "callback_data": "cmd_monte_carlo"}
+                ],
+                [
                     {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"},
                     {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"}
                 ],
@@ -167,6 +170,9 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_smart_money":
                                     self._answer_callback(cb_id, "📡 스마트머니 수급을 조회합니다.")
                                     self._handle_smart_money()
+                                elif cb_data == "cmd_monte_carlo":
+                                    self._answer_callback(cb_id, "🎲 10,000회 몬테카를로 시뮬레이션을 실행합니다.")
+                                    self._handle_monte_carlo()
                                 elif cb_data == "cmd_weekly_ai_report":
                                     self._answer_callback(cb_id, "📜 주간 AI 운용 보고서를 생성합니다.")
                                     self._handle_weekly_ai_report()
@@ -809,5 +815,20 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed smart money handler: {}", e)
             self._send_reply(f"⚠️ 스마트머니 조회 실패: {e}")
+
+    def _handle_monte_carlo(self):
+        """10,000회 몬테카를로 파산 확률 및 스트레스 테스트 실행"""
+        try:
+            from monte_carlo_engine import MonteCarloEngine
+            equity = 772.70
+            if self.orchestrator and hasattr(self.orchestrator, 'risk_manager'):
+                equity = getattr(self.orchestrator.risk_manager, 'current_portfolio_value', 772.70)
+            mc = MonteCarloEngine()
+            card = mc.format_telegram_card(current_equity=equity)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed monte carlo handler: {}", e)
+            self._send_reply(f"⚠️ 몬테카를로 시뮬레이션 실패: {e}")
+
 
 
