@@ -603,13 +603,24 @@ class TelegramInteractiveBot:
                 from universe_expander import UniverseExpander
                 cands = UniverseExpander().get_top_super_candidates(top_n=10)
 
+            positions = self._get_positions_dict()
+            holding_syms = set(positions.keys()) if positions else set()
+
             lines = [
                 "🚀 <b>실시간 퀀트 알파 최상위 후보 Top 5</b>",
                 "━━━━━━━━━━━━━━━━━━━",
-                "모멘텀 + 잔차 알파 + 기관 수급 복합 랭킹:"
+                "모멘텀 + 잔차 알파 + 기관 수급 복합 랭킹 (신규 진입 대기):"
             ]
-            for i, sym in enumerate(cands[:5], 1):
-                lines.append(f"{i}. <b>{sym}</b> — 기관 매집 & 추세 강도 최상위")
+            displayed = 0
+            for sym in cands:
+                tag = " <i>(현재 보유 중)</i>" if sym in holding_syms else ""
+                displayed += 1
+                lines.append(f"{displayed}. <b>{sym}</b>{tag} — 기관 매집 & 추세 강도 최상위")
+                if displayed >= 5:
+                    break
+
+            lines.append("━━━━━━━━━━━━━━━━━━━")
+            lines.append("💡 <i>기존 보유 종목 익절 시, 순차적으로 진입할 실시간 1순위 후보군입니다.</i>")
             self._send_reply("\n".join(lines))
         except Exception as e:
             self._send_reply(f"⚠️ Top 5 조회 실패: {e}")
