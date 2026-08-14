@@ -354,6 +354,9 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(encoded)
 
@@ -636,6 +639,16 @@ def render_dashboard_html() -> str:
             theme_rows = "<tr><td colspan='8' style='text-align:center;color:#8b949e;'>📡 테마 레이더 실시간 연산 중...</td></tr>"
     except Exception as e:
         theme_rows = f"<tr><td colspan='8' style='text-align:center;color:#8b949e;'>테마 데이터 조회 중: {e}</td></tr>"
+
+    shadow_eq_str = "1,000.00"
+    shadow_ret_str = "+0.00"
+    try:
+        from shadow_paper_engine import ShadowPaperEngine
+        sh_sum = ShadowPaperEngine().get_summary(real_equity=equity)
+        shadow_eq_str = f"{sh_sum['total_shadow_equity']:,.2f}"
+        shadow_ret_str = f"{'+' if sh_sum['shadow_return_pct'] >= 0 else ''}{sh_sum['shadow_return_pct']:.2f}"
+    except Exception:
+        pass
 
     html = HTML_TEMPLATE.replace("{EQUITY}", f"{equity:,.2f}")
     html = html.replace("{CASH}", f"{cash:,.2f}")
