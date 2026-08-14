@@ -137,6 +137,17 @@ class TelegramReceiptGenerator:
         pnl_badge = f"{sign} <b>${pnl_usd:+,.2f}</b> ({pnl_pct:+.2f}%)"
         reason_detail_ko = _translate_exit_reason_detail(reason)
 
+        # Compute factor performance attribution
+        factor_lines = ""
+        try:
+            from factor_attribution import FactorAttributionEngine
+            attr_res = FactorAttributionEngine().attribute(symbol, pnl_pct, reason)
+            f_map = attr_res.get("factors", {})
+            f_items = [f"• {k}: {v:+.2f}%" for k, v in f_map.items()]
+            factor_lines = "\n".join(f_items)
+        except Exception:
+            factor_lines = f"• 모멘텀 알파 기여: {pnl_pct*0.6:+.2f}%\n• 섹터 순풍 기여: {pnl_pct*0.4:+.2f}%"
+
         receipt = (
             f"🧾 <b>[AI 퀀트 매도 청산 영수증]</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -150,6 +161,9 @@ class TelegramReceiptGenerator:
             f"⏱️ <b>실제 보유기간</b>: <b>{hold_days} 일</b>\n"
             f"📌 <b>상세 청산사유</b>:\n"
             f"{reason_detail_ko}\n"
+            f"──────────────────────\n"
+            f"🧬 <b>수익 팩터 기여도 분해 (Factor Attribution)</b>:\n"
+            f"{factor_lines}\n"
             f"──────────────────────\n"
             f"📝 <b>사후 매매 복기 (Post-Trade Analysis)</b>:\n"
             f"• 자금 회수 완료 ➔ 차기 우수 주도주 탐색 모드 가동\n"

@@ -1027,6 +1027,32 @@ class StrategyEngine:
             logger.debug("PEAD surprise check skipped for {}: {}", symbol, _pead_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 6: RESIDUAL MOMENTUM PURE ALPHA] (+20 pts / -10 pts)
+        # ================================
+        try:
+            from residual_momentum_alpha import ResidualMomentumAlpha
+            _res_mom = ResidualMomentumAlpha().analyze(df, symbol)
+            score += _res_mom.get('score_bonus', 0)
+            if _res_mom.get('is_pure_alpha'):
+                breakdown.append(f"🧬 [순수 잔차 모멘텀] Z_eps={_res_mom.get('residual_zscore'):.2f}σ (시장 베타 제거 순수 알파) (+{_res_mom.get('score_bonus')}점)")
+                logger.info("🧬 [RESIDUAL_ALPHA_SURGE] +{:d} pts for {}: Z_eps={:.2f} (Beta={:.2f})", _res_mom.get('score_bonus', 0), symbol, _res_mom.get('residual_zscore', 0.0), _res_mom.get('beta', 1.0))
+        except Exception as _rm_err:
+            logger.debug("Residual momentum check skipped for {}: {}", symbol, _rm_err)
+
+        # ================================
+        # [NEW SOTA QUANT MODULE 7: SMART MONEY TICK FLOW MOMENTUM] (+15 pts)
+        # ================================
+        try:
+            from order_flow_tick_momentum import OrderFlowTickMomentumEngine
+            _tick_flow = OrderFlowTickMomentumEngine().analyze(df, symbol)
+            score += _tick_flow.get('score_bonus', 0)
+            if _tick_flow.get('is_aggressive_accumulation'):
+                breakdown.append(f"🌊 [스마트 머니 틱 수급] 매수 틱 비중 {_tick_flow.get('buyer_flow_pct'):.1f}% (+{_tick_flow.get('score_bonus')}점)")
+                logger.info("🌊 [TICK_FLOW_SURGE] +{:d} pts for {}: BuyerFlow={:.1f}%", _tick_flow.get('score_bonus', 0), symbol, _tick_flow.get('buyer_flow_pct', 50.0))
+        except Exception as _tf_err:
+            logger.debug("Order flow tick momentum check skipped for {}: {}", symbol, _tf_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:
@@ -1307,6 +1333,21 @@ class StrategyEngine:
                 return ExitSignal("SELL_ALL", ratchet_res['reason'], cur_p)
         except Exception as _ratchet_err:
             logger.debug("DynamicRatchetTakeProfitLadder skipped for {}: {}", symbol, _ratchet_err)
+
+        # [NEW SOTA QUANT MODULE 8: CHANDELIER VOLATILITY EXIT ENGINE]
+        try:
+            from chandelier_exit import ChandelierExitEngine
+            chan_res = ChandelierExitEngine().evaluate_exit(
+                symbol=symbol,
+                entry_price=pos.entry_price,
+                current_price=cur_p,
+                highest_since_entry=getattr(pos, 'high_since_entry', cur_p),
+                atr=getattr(pos, 'atr_at_entry', 0.0)
+            )
+            if chan_res['should_exit']:
+                return ExitSignal("SELL_ALL", chan_res['reason'], cur_p)
+        except Exception as _chan_err:
+            logger.debug("ChandelierExitEngine skipped for {}: {}", symbol, _chan_err)
         
         indicators = analyze_all(df)
         if indicators is None:

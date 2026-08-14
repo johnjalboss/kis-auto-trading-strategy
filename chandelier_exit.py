@@ -1,74 +1,53 @@
 """
-Chandelier ATR Dynamic Trailing Exit Module
-=============================================
-Calculates Chandelier Exit trailing stop line:
-Trailing Stop = Highest High (since entry) - (atr_multiplier * ATR)
-
-Protects 70-80%+ of peak unrealized profits during strong trend extensions.
+3. Chandelier Volatility Exit Engine (chandelier_exit.py)
+=========================================================
+Academic / Practical Concept (Chuck LeBeau):
+- Computes volatility-adaptive trailing stop based on Highest High since entry minus 3.0 * ATR(14).
+- Formula: StopPrice = HighestHigh(N) - (multiplier * ATR_14)
+- Allows winning momentum trades to run with maximum runway without premature whipsaw shakeouts.
 """
 
-from typing import Dict, Any
 import pandas as pd
+import numpy as np
+from typing import Dict, Any, Optional
 from loguru import logger
 
+class ChandelierExitEngine:
+    """Evaluates Chandelier Volatility Trailing Stop Exits"""
 
-class ChandelierExit:
-    def __init__(self, atr_multiplier: float = 2.0, atr_period: int = 14):
-        self.atr_multiplier = atr_multiplier
-        self.atr_period = atr_period
+    def __init__(self, atr_multiplier: float = 3.0, lookback: int = 14):
+        self.multiplier = atr_multiplier
+        self.lookback = lookback
 
-    def calculate_stop(self, df: pd.DataFrame, entry_price: float) -> Dict[str, Any]:
+    def evaluate_exit(self, symbol: str, entry_price: float, current_price: float,
+                      highest_since_entry: float, atr: float) -> Dict[str, Any]:
         """
-        Calculates current Chandelier Exit stop price.
-        Returns dict with stop_price, is_exit_triggered, highest_high, atr.
+        Evaluate if current price breached the Chandelier stop level.
         """
-        if df is None or len(df) < self.atr_period:
-            # Fallback to entry_price - 4.5%
-            return {
-                "stop_price": entry_price * 0.955,
-                "is_exit_triggered": False,
-                "highest_high": entry_price,
-                "atr": entry_price * 0.02
-            }
+        if highest_since_entry <= 0:
+            highest_since_entry = max(entry_price, current_price)
+        if atr <= 0:
+            atr = entry_price * 0.02
 
-        try:
-            high = df['High']
-            low = df['Low']
-            close = df['Close']
+        stop_price = highest_since_entry - (self.multiplier * atr)
+        
+        # Never allow stop price to be worse than initial hard stop (-6.0%)
+        initial_floor = entry_price * 0.94
+        effective_stop = max(stop_price, initial_floor)
 
-            # ATR Calculation
-            tr = pd.concat([
-                high - low,
-                (high - close.shift()).abs(),
-                (low - close.shift()).abs()
-            ], axis=1).max(axis=1)
-            atr = float(tr.rolling(self.atr_period).mean().iloc[-1])
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
+        peak_gain_pct = ((highest_since_entry - entry_price) / entry_price) * 100.0
 
-            # Highest High since entry (using recent bars)
-            highest_high = max(float(high.max()), entry_price)
-            current_price = float(close.iloc[-1])
+        should_exit = (current_price <= effective_stop) and (peak_gain_pct >= 4.0)
 
-            # Chandelier Exit Stop Price
-            chandelier_stop = highest_high - (self.atr_multiplier * atr)
-            
-            # Floor stop at entry - 4.5% safety stop
-            safety_stop = entry_price * 0.955
-            final_stop = max(chandelier_stop, safety_stop)
-
-            is_triggered = current_price < final_stop
-
-            return {
-                "stop_price": final_stop,
-                "is_exit_triggered": is_triggered,
-                "highest_high": highest_high,
-                "atr": atr,
-                "current_price": current_price
-            }
-        except Exception as e:
-            logger.debug("ChandelierExit calculation error: {}", e)
-            return {
-                "stop_price": entry_price * 0.955,
-                "is_exit_triggered": False,
-                "highest_high": entry_price,
-                "atr": entry_price * 0.02
-            }
+        res = {
+            "symbol": symbol,
+            "current_price": round(current_price, 2),
+            "highest_price": round(highest_since_entry, 2),
+            "chandelier_stop": round(effective_stop, 2),
+            "pnl_pct": round(pnl_pct, 2),
+            "peak_gain_pct": round(peak_gain_pct, 2),
+            "should_exit": should_exit,
+            "reason": f"CHANDELIER_VOL_EXIT: Price ${current_price:.2f} <= Stop ${effective_stop:.2f} (Peak +{peak_gain_pct:.1f}%)" if should_exit else "HOLD"
+        }
+        return res

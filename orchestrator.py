@@ -1450,19 +1450,34 @@ class BotOrchestrator:
             except Exception as _tail_err:
                 logger.debug("Cross-Asset Tail Sentinel check skipped: {}", _tail_err)
 
-        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Regime Position Sizer (Bypassed for rebalancing)
+            # [NEW SOTA QUANT MODULE 9: PORTFOLIO DE-CORRELATION & SECTOR PARITY]
+            try:
+                from portfolio_decorrelation import PortfolioDeCorrelationEngine
+                live_pos_syms = [p.symbol for p in self.trader.get_positions()]
+                decorr_res = PortfolioDeCorrelationEngine(max_correlation=0.75).check_correlation_gate(symbol, live_pos_syms)
+                if decorr_res.get('penalty_score', 0) < 0 and len(live_pos_syms) >= 2:
+                    logger.warning("🚨 [PORTFOLIO_DECORRELATION_BLOCK] Entry BLOCKED for {}: {}", symbol, decorr_res.get('reason'))
+                    return
+            except Exception as _decorr_err:
+                logger.debug("Portfolio decorrelation check skipped: {}", _decorr_err)
+
+        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
                 from position_sizer import get_position_sizer
+                from dynamic_expectancy_sizer import DynamicExpectancySizer
                 bp = self.trader.get_buying_power()
                 live_positions = self.trader.get_positions()
                 total_equity = bp + sum(p.market_value for p in live_positions)
                 
+                # Get empirical expectancy sizing multiplier (0.50x - 1.25x)
+                exp_res = DynamicExpectancySizer().get_sizing_multiplier()
+                exp_mult = exp_res.get('multiplier', 1.0)
+
                 # Get the live portfolio sizer with current total equity
                 sizer = get_position_sizer(portfolio=total_equity)
-                # [v2026 FULL-SLOT INITIAL ENTRY]
-                # Allocate 100% of target slot capital (total_equity / MAX_POSITIONS) immediately on initial entry!
-                target_slot_capital = total_equity / config.MAX_POSITIONS
+                # Allocate dynamic target slot capital adjusted by Expectancy Multiplier
+                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult
                 raw_full_qty = int(target_slot_capital / price) if price > 0 else 0
                 max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0
 
@@ -1474,8 +1489,8 @@ class BotOrchestrator:
                 if qty == 0 and max_allowed_qty >= 1 and price <= (bp * 0.98):
                     qty = 1
 
-                logger.info("🚀 [FULL_SLOT_ENTRY] {}: Price=${:.2f} | TargetSlotCap=${:.2f} -> Buying {} full shares (Max BP Qty: {})", 
-                            symbol, price, target_slot_capital, qty, max_allowed_qty)
+                logger.info("🚀 [FULL_SLOT_ENTRY] {}: Price=${:.2f} | ExpectancyMult={:.2f}x | TargetSlotCap=${:.2f} -> Buying {} shares (Max BP Qty: {})", 
+                            symbol, price, exp_mult, target_slot_capital, qty, max_allowed_qty)
             except Exception as sizer_err:
                 logger.error("Failed to run advanced Quant Sizer for {}: {}. Falling back to default raw qty.", symbol, sizer_err)
             

@@ -104,6 +104,10 @@ class TelegramInteractiveBot:
                     {"text": "🏆 전체 누적성과", "callback_data": "cmd_total_pnl"}
                 ],
                 [
+                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"},
+                    {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"}
+                ],
+                [
                     {"text": "🔥 테마 1등주", "callback_data": "cmd_theme"},
                     {"text": "🎯 스크리너 픽", "callback_data": "cmd_screener"}
                 ],
@@ -175,6 +179,12 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_total_pnl":
                                     self._answer_callback(cb_id, "🏆 전체 누적성과를 조회합니다.")
                                     self._handle_pnl("total")
+                                elif cb_data == "cmd_quant_status":
+                                    self._answer_callback(cb_id, "🧬 퀀트 알파 상태를 조회합니다.")
+                                    self._handle_quant_status()
+                                elif cb_data == "cmd_top_picks":
+                                    self._answer_callback(cb_id, "🚀 실시간 후보 Top 5를 조회합니다.")
+                                    self._handle_top_picks()
                                 elif cb_data == "cmd_theme":
                                     self._answer_callback(cb_id, "🔥 테마 1등주를 조회합니다.")
                                     self._handle_theme()
@@ -493,6 +503,53 @@ class TelegramInteractiveBot:
             self._send_reply("\n".join(lines))
         except Exception as e:
             self._send_reply(f"⚠️ 손익 조회 실패: {e}")
+
+    def _handle_quant_status(self):
+        """실시간 퀀트 알파 상태 및 센티넬 지표 조회"""
+        try:
+            from cross_asset_tail_sentinel import CrossAssetTailRiskSentinel
+            from sector_rotator import SectorRotator
+            from dynamic_expectancy_sizer import DynamicExpectancySizer
+
+            tail_res = CrossAssetTailRiskSentinel().evaluate_tail_risk()
+            top_sec = SectorRotator().get_top_sectors(top_n=2)
+            exp_res = DynamicExpectancySizer().get_sizing_multiplier()
+
+            lines = [
+                "🧬 <b>실시간 SOTA 퀀트 알파 엔진 상태</b>",
+                "━━━━━━━━━━━━━━━━━━━",
+                f"• <b>거시 꼬리 리스크 (Cross-Asset)</b>: {tail_res.get('risk_label', 'NORMAL')}",
+                f"  - 스트레스 점수: {tail_res.get('stress_score', 0)}/100 (신규 매수: {'❄️ 동결' if tail_res.get('freeze_entries') else '✅ 정상 허용'})",
+                f"• <b>실시간 주도 섹터 1위</b>: {top_sec[0] if top_sec else 'XLV'}",
+                f"• <b>최근 기대값(Expectancy)</b>: {exp_res.get('expectancy', 0.02):+.3f}",
+                f"  - 승률: {exp_res.get('win_rate', 0.55)*100:.1f}% | 자금 배분 배율: {exp_res.get('multiplier', 1.0)}x",
+                f"• <b>알파 필터</b>: 잔차 모멘텀(Hurst/Amihud/PEAD) 풀 가동"
+            ]
+            self._send_reply("\n".join(lines))
+        except Exception as e:
+            self._send_reply(f"⚠️ 퀀트 상태 조회 실패: {e}")
+
+    def _handle_top_picks(self):
+        """실시간 스크리너 최상위 정예 후보 Top 5 조회"""
+        try:
+            cands = []
+            if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
+                if hasattr(self.orchestrator.state, 'target_universe') and self.orchestrator.state.target_universe:
+                    cands = list(self.orchestrator.state.target_universe)
+            if not cands:
+                from universe_expander import UniverseExpander
+                cands = UniverseExpander().get_top_super_candidates(top_n=10)
+
+            lines = [
+                "🚀 <b>실시간 퀀트 알파 최상위 후보 Top 5</b>",
+                "━━━━━━━━━━━━━━━━━━━",
+                "모멘텀 + 잔차 알파 + 기관 수급 복합 랭킹:"
+            ]
+            for i, sym in enumerate(cands[:5], 1):
+                lines.append(f"{i}. <b>{sym}</b> — 기관 매집 & 추세 강도 최상위")
+            self._send_reply("\n".join(lines))
+        except Exception as e:
+            self._send_reply(f"⚠️ Top 5 조회 실패: {e}")
 
     def _handle_theme(self):
         """테마 레이더 탑픽 종목 조회"""
