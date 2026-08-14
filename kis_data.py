@@ -14,6 +14,8 @@ yfinance를 완전 대체하여 모든 시세/차트 데이터를 KIS API로 조
 import time
 import threading
 import requests
+import json
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
