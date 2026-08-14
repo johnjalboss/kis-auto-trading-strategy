@@ -1461,6 +1461,16 @@ class BotOrchestrator:
             except Exception as _decorr_err:
                 logger.debug("Portfolio decorrelation check skipped: {}", _decorr_err)
 
+            # [NEW SOTA QUANT MODULE 10: MACRO EVENT VOLATILITY SHIELD (CPI/FOMC)]
+            try:
+                from macro_event_shield import MacroEventVolatilityShield
+                ev_res = MacroEventVolatilityShield().check_macro_event_freeze()
+                if ev_res.get('is_event_freeze', False):
+                    logger.warning("🚨 [MACRO_EVENT_FREEZE] Entry BLOCKED for {}: {}", symbol, ev_res.get('reason'))
+                    return
+            except Exception as _ev_err:
+                logger.debug("Macro event shield check skipped: {}", _ev_err)
+
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:

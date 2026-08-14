@@ -1053,6 +1053,19 @@ class StrategyEngine:
             logger.debug("Order flow tick momentum check skipped for {}: {}", symbol, _tf_err)
 
         # ================================
+        # [NEW SOTA QUANT MODULE 11: VOLUME PROFILE POC SUPPORT BOUNCE] (+15 pts)
+        # ================================
+        try:
+            from volume_profile_poc import VolumeProfilePOCEngine
+            _vp_res = VolumeProfilePOCEngine().analyze(df, symbol)
+            score += _vp_res.get('score_bonus', 0)
+            if _vp_res.get('is_poc_bounce'):
+                breakdown.append(f"📈 [볼륨프로파일 POC 지지 반등] 60일 대량 매물대 ${ _vp_res.get('poc_price'):.2f} 지지 확인 (+{_vp_res.get('score_bonus')}점)")
+                logger.info("📈 [POC_SUPPORT_BOUNCE] +{:d} pts for {}: POC=${:.2f} (Dist={:.1f}%)", _vp_res.get('score_bonus', 0), symbol, _vp_res.get('poc_price', 0.0), _vp_res.get('dist_from_poc_pct', 0.0))
+        except Exception as _vp_err:
+            logger.debug("Volume profile POC check skipped for {}: {}", symbol, _vp_err)
+
+        # ================================
         # VIX Regime Adjustment (+/- 15)
         # ================================
         try:
