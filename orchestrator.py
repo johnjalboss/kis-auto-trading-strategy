@@ -1901,6 +1901,17 @@ class BotOrchestrator:
             except Exception as _ds_err:
                 logger.debug("Daily settlement reporter error: {}", _ds_err)
 
+            # [AUTO EXECUTIVE AI REPORT: Friday/Saturday EOD automatic weekly delivery]
+            if datetime.now().weekday() in (4, 5):
+                try:
+                    from weekly_ai_report_generator import WeeklyAIReportGenerator
+                    from notification import get_notifier
+                    rep_html = WeeklyAIReportGenerator().generate_report()
+                    get_notifier().send_message(rep_html)
+                    logger.info("📜 [AUTO_WEEKLY_AI_REPORT] Automatically sent weekly AI investor letter to Telegram.")
+                except Exception as _war_err:
+                    logger.debug("Auto weekly report error: {}", _war_err)
+
             # [NEW SOTA QUANT MODULE 18: DB INTEGRITY & 7-DAY ROTATING BACKUP]
             try:
                 from db_maintenance_guard import DBMaintenanceGuard

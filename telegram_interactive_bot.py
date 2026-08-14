@@ -81,23 +81,18 @@ class TelegramInteractiveBot:
         menu_text = (
             f"📋 <b>AI 스윙 봇 퀀트 마스터 제어판</b> [{paused}]\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "원하시는 버튼을 원클릭하시면 AI 주간 운용 보고서, 보유 종목 캔들 차트,\n"
-            "섀도우 모의매매 성과, 실시간 추천주, 리스크 제어가 즉시 실행됩니다.\n\n"
+            "💡 <i>주간 AI 운용보고서, 섀도우 모의매매, 일일 결산은 100% 전자동으로 발송됩니다.</i>\n"
+            "원하시는 버튼을 원클릭하시면 보유종목 실시간 캔들 차트, 봇 상태, 리스크 제어가 즉시 실행됩니다.\n\n"
             f"🌐 <b>실시간 웹 대시보드 주소</b>:\n{dash_url}\n"
             "🔑 <b>접속 비밀번호</b>: <code>0201!</code>"
         )
         reply_markup = {
             "inline_keyboard": [
                 [
+                    {"text": "📊 보유종목 캔들 차트 (원클릭 생성)", "callback_data": "cmd_stock_charts_menu"}
+                ],
+                [
                     {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
-                ],
-                [
-                    {"text": "📜 주간 AI 운용 보고서", "callback_data": "cmd_weekly_ai_report"},
-                    {"text": "👥 섀도우 모의매매 성과", "callback_data": "cmd_shadow_paper"}
-                ],
-                [
-                    {"text": "📊 보유종목 캔들 차트", "callback_data": "cmd_stock_charts_menu"},
-                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"}
                 ],
                 [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
@@ -112,8 +107,12 @@ class TelegramInteractiveBot:
                     {"text": "🏆 전체 누적성과", "callback_data": "cmd_total_pnl"}
                 ],
                 [
-                    {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"},
-                    {"text": "🔥 테마 1등주", "callback_data": "cmd_theme"}
+                    {"text": "📜 주간 AI 보고서 즉시조회", "callback_data": "cmd_weekly_ai_report"},
+                    {"text": "👥 섀도우 모의매매 현황", "callback_data": "cmd_shadow_paper"}
+                ],
+                [
+                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"},
+                    {"text": "🚀 실시간 후보 Top 5", "callback_data": "cmd_top_picks"}
                 ],
                 [
                     {"text": "🎯 스크리너 픽", "callback_data": "cmd_screener"},
