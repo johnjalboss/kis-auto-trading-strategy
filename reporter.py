@@ -192,19 +192,23 @@ class PerformanceReporter:
         chart_path = ""
         try:
             from chart_generator import generate_daily_pnl_chart
-            chart_path = generate_daily_pnl_chart(days=90)
+            chart_res = generate_daily_pnl_chart(days=90)
+            if isinstance(chart_res, tuple):
+                chart_path = chart_res[0]
+            else:
+                chart_path = chart_res
         except Exception as e:
             logger.warning("Chart generation failed safely: {}", e)
             
         success = False
         try:
-            if chart_path and hasattr(self.notifier, 'send_photo_sync'):
+            if chart_path and os.path.exists(chart_path) and hasattr(self.notifier, 'send_photo_sync'):
                 success = self.notifier.send_photo_sync(photo_path=chart_path, caption=report)
             elif hasattr(self.notifier, 'send_sync'):
                 success = self.notifier.send_sync(report)
             else:
                 # Fallback to async if sync method doesn't exist
-                if chart_path and hasattr(self.notifier, 'send_photo'):
+                if chart_path and os.path.exists(chart_path) and hasattr(self.notifier, 'send_photo'):
                     self.notifier.send_photo(photo_path=chart_path, caption=report)
                 else:
                     self.notifier.send(report)
@@ -224,7 +228,8 @@ class PerformanceReporter:
         from chart_generator import generate_daily_pnl_chart
         
         # Explicitly request 365 days
-        chart_path = generate_daily_pnl_chart(days=365)
+        chart_res = generate_daily_pnl_chart(days=365)
+        chart_path = chart_res[0] if isinstance(chart_res, tuple) else chart_res
         
         # Summary text for yearly report
         # Get total realized P&L from all time
