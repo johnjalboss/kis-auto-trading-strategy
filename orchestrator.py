@@ -576,6 +576,20 @@ class BotOrchestrator:
         except Exception as _omni_orch_err:
             logger.debug("Omni alpha suite in Phase 2 skipped: {}", _omni_orch_err)
 
+        # 18. Systematic CTA Trend-Following Fund Sentinel (Positioning & Cliff Level Monitoring)
+        try:
+            from cta_trend_following_sentinel import get_cta_sentinel
+            cta_sig = get_cta_sentinel().analyze()
+            if cta_sig:
+                if cta_sig.cta_regime in ("UNWIND_RISK", "MAX_SHORT"):
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.45)
+                    logger.warning("🚨 [CTA_UNWIND_DEFENSE] Systematic CTA funds dumping equities! Portfolio exposure capped at 45%")
+                logger.info("  -> cta_trend_following_sentinel.py: CTA Exposure={}% ({}), 20D Trigger=${:.2f} (Dist: {:+.1f}%)",
+                            cta_sig.cta_net_exposure_pct, cta_sig.cta_regime,
+                            cta_sig.trigger_levels.get('level_1_20d_sma', 0), cta_sig.distance_to_nearest_sell_trigger_pct)
+        except Exception as _cta_orch_err:
+            logger.debug("CTA sentinel in Phase 2 skipped: {}", _cta_orch_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

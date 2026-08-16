@@ -1477,6 +1477,16 @@ class StrategyEngine:
         except Exception as _omni_err:
             logger.debug("OmniInstitutionalAlphaSuite skipped for {}: {}", symbol, _omni_err)
 
+        # Systematic CTA Trend-Following Fund Sentinel (CTA 100% Long / Deleveraging Cliff Trigger)
+        try:
+            from cta_trend_following_sentinel import get_cta_sentinel
+            cta_sig = get_cta_sentinel().analyze()
+            if cta_sig and cta_sig.score_adj != 0:
+                score += cta_sig.score_adj
+                breakdown.append(f"• CTA 추세추종 펀드 수급 지수: {cta_sig.score_adj:+d}점 ({cta_sig.cta_regime})")
+        except Exception as _cta_err:
+            logger.debug("CTATrendFollowingSentinel skipped for {}: {}", symbol, _cta_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
