@@ -246,13 +246,14 @@ class BotOrchestrator:
         self._safe_import("trade_journal", _journal)
         
         # 10. Emergency Stop
-        def _estop():
-            from emergency_stop import get_emergency_stop
-            self._emergency = get_emergency_stop()
-            logger.info("  -> emergency_stop.py circuit breaker ready")
-        self._safe_import("emergency_stop", _estop)
-        
-        # Sync positions from API
+        # Sync positions from API & Auto-Reconcile with DB
+        try:
+            from reconciliation_guard import BrokerPositionReconciliationGuard
+            reconcile_res = BrokerPositionReconciliationGuard().reconcile(self.trader)
+            logger.info("  -> reconciliation_guard.py: Broker vs DB reconciliation complete: {}", reconcile_res)
+        except Exception as _rec_err:
+            logger.debug("Broker reconciliation failed: {}", _rec_err)
+
         api_positions = self.trader.get_positions()
         self.strategy.sync_positions(api_positions)
 
@@ -672,6 +673,44 @@ class BotOrchestrator:
                         logger.debug("ExtendedHoursRiskSentinel check skipped for {}: {}", sym, _ext_err)
 
                     curr_price = self.trader.get_price(sym)
+                    if curr_price <= 0:
+                        curr_price = pos.current_price
+
+                    # [SMART PARTIAL TAKE-PROFIT & 1-SHARE BREAKEVEN LADDER]
+                    try:
+                        from partial_profit_router import SmartPartialTakeProfitRouter
+                        tp_router = SmartPartialTakeProfitRouter()
+                        atr = getattr(pos, 'atr_at_entry', 0.0)
+                        if atr <= 0:
+                            atr = getattr(self.strategy, '_atr_cache', {}).get(sym, pos.entry_price * 0.03)
+                        risk = max(1.0, 2.0 * atr)
+                        tp1 = pos.entry_price + (1.5 * risk)
+                        tp2 = pos.entry_price + (2.5 * risk)
+                        
+                        tp_res = tp_router.evaluate_take_profit(
+                            symbol=sym,
+                            quantity=pos.quantity,
+                            entry_price=pos.entry_price,
+                            current_price=curr_price,
+                            current_stop=getattr(pos, 'stop_price', 0.0),
+                            tp1=tp1,
+                            tp2=tp2
+                        )
+                        if tp_res['action'] == "PARTIAL_SELL":
+                            sell_qty = tp_res['sell_qty']
+                            self.phase_5_execute_trade(sym, "SELL", sell_qty, curr_price, tp_res['reason'])
+                            pos.quantity = tp_res['remaining_qty']
+                            pos.stop_price = tp_res['new_stop']
+                            continue
+                        elif tp_res['action'] == "LOCK_BREAKEVEN":
+                            pos.stop_price = tp_res['new_stop']
+                        elif tp_res['action'] == "SELL_ALL":
+                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, tp_res['reason'])
+                            self.strategy.remove_position(sym)
+                            continue
+                    except Exception as _tpr_err:
+                        logger.debug("SmartPartialTakeProfitRouter skipped for {}: {}", sym, _tpr_err)
+
                     exit_sig = self.strategy.check_exit(sym, curr_price)
                     if exit_sig and exit_sig.action != "HOLD":
                         logger.warning("🚨 EXIT TRIGGERED: {} -> {} ({})", sym, exit_sig.action, exit_sig.reason)

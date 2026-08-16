@@ -118,6 +118,10 @@ class TelegramInteractiveBot:
                     {"text": "🏆 전체 누적성과", "callback_data": "cmd_total_pnl"}
                 ],
                 [
+                    {"text": "⚙️ AI 파라미터 자가 튜닝", "callback_data": "cmd_auto_tuning"},
+                    {"text": "📈 보유 포지션 수익률/스탑선", "callback_data": "cmd_positions"}
+                ],
+                [
                     {"text": "📜 주간 AI 보고서 즉시조회", "callback_data": "cmd_weekly_ai_report"},
                     {"text": "👥 섀도우 모의매매 현황", "callback_data": "cmd_shadow_paper"}
                 ],
@@ -175,7 +179,10 @@ class TelegramInteractiveBot:
                                 def _run_async(target_func, *args):
                                     threading.Thread(target=target_func, args=args, daemon=True).start()
 
-                                if cb_data == "cmd_macro_dday":
+                                if cb_data == "cmd_auto_tuning":
+                                    self._answer_callback(cb_id, "⚙️ AI 퀀트 자가 튜닝 리포트를 조회합니다.")
+                                    _run_async(self._handle_auto_tuning)
+                                elif cb_data == "cmd_macro_dday":
                                     self._answer_callback(cb_id, "🔮 매크로 & 실적 D-Day를 조회합니다.")
                                     _run_async(self._handle_macro_dday)
                                 elif cb_data == "cmd_smart_money":
@@ -476,32 +483,86 @@ class TelegramInteractiveBot:
             logger.error("Failed to fetch status for Telegram reply: {}", e)
             self._send_reply(f"⚠️ 상태 조회 중 오류 발생: {e}")
 
+    def _handle_auto_tuning(self):
+        """주간 AI 퀀트 파라미터 자가 튜닝 보고서 원클릭 전송"""
+        try:
+            from auto_tuning_engine import AutoTuningEngine
+            tuner = AutoTuningEngine()
+            card = tuner.format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed to generate auto-tuning report: {}", e)
+            self._send_reply(f"⚠️ 튜닝 보고서 조회 실패: {e}")
+
     def _handle_positions(self):
-        """보유 포지션 상세 조회 (P&L 포함)"""
+        """보유 포지션 상세 조회 (실시간 수익률, 동적 ATR 스탑선, 1차/2차 목표 익절선 포함)"""
         try:
             positions = self._get_positions_dict()
             if not positions:
-                self._send_reply("📭 현재 보유 포지션이 없습니다.")
+                self._send_reply("📭 현재 보유 포지션이 없습니다. (100% 현금 대기 중)")
                 return
-            lines = [f"📈 <b>현재 보유 포지션 ({len(positions)}개)</b>", "━" * 18]
-            for sym, pos in positions.items():
-                entry_p = getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0))
-                curr_p = entry_p
-                if self.orchestrator and hasattr(self.orchestrator, 'trader'):
-                    try:
-                        lp = self.orchestrator.trader.get_price(sym)
-                        if lp > 0: curr_p = lp
-                    except Exception: pass
 
-                pnl_pct = ((curr_p - entry_p) / entry_p * 100) if entry_p > 0 else 0
-                pnl_usd = (curr_p - entry_p) * pos.quantity
-                sign = "🟢" if pnl_pct >= 0 else "🔴"
-                lines.append(
-                    f"{sign} <b>{sym}</b>: {pos.quantity}주\n"
-                    f"  평단가: ${entry_p:.2f} | 현재가: ${curr_p:.2f}\n"
-                    f"  손익: <b>${pnl_usd:+,.2f}</b> ({pnl_pct:+.2f}%)"
+            name_map = {"MDT": "메드트로닉", "STRC": "사라토가", "VTOL": "브리스토우", "MRK": "머크"}
+            lines = [
+                f"💼 <b>[실계좌 보유 포지션 브리핑]</b>",
+                f"<i>총 {len(positions)}개 종목 실시간 수익률 & 퀀트 익절/손절선</i>",
+                "━━━━━━━━━━━━━━━━━━━"
+            ]
+
+            import yfinance as yf
+            import pandas as pd
+
+            for sym, pos in positions.items():
+                entry_p = float(getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0)))
+                qty = int(getattr(pos, 'quantity', 0))
+                curr_p = entry_p
+                atr = 0.0
+
+                try:
+                    df = yf.download(sym, period="60d", progress=False)
+                    if df is not None and not df.empty:
+                        if isinstance(df.columns, pd.MultiIndex):
+                            df.columns = df.columns.get_level_values(0)
+                        curr_p = float(df['Close'].iloc[-1])
+                        tr1 = df['High'] - df['Low']
+                        tr2 = (df['High'] - df['Close'].shift(1)).abs()
+                        tr3 = (df['Low'] - df['Close'].shift(1)).abs()
+                        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                        atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
+                except Exception:
+                    pass
+
+                if atr > 0:
+                    dyn_stop = round(entry_p - (2.0 * atr), 2)
+                    risk = max(1.0, entry_p - dyn_stop)
+                    tp1 = round(entry_p + (1.5 * risk), 2)
+                    tp2 = round(entry_p + (2.5 * risk), 2)
+                else:
+                    dyn_stop = round(entry_p * 0.955, 2)
+                    tp1 = round(entry_p * 1.075, 2)
+                    tp2 = round(entry_p * 1.120, 2)
+
+                pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+                pnl_usd = (curr_p - entry_p) * qty
+                sign_p = "+" if pnl_pct >= 0 else ""
+                sign_u = "+" if pnl_usd >= 0 else ""
+                emoji = "🟢" if pnl_pct >= 0 else "🔴"
+                sym_korean = name_map.get(sym, "")
+                name_label = f" ({sym_korean})" if sym_korean else ""
+                stop_pct = ((dyn_stop - entry_p) / entry_p) * 100.0 if entry_p > 0 else -4.5
+                tp1_pct = ((tp1 - entry_p) / entry_p) * 100.0 if entry_p > 0 else 7.5
+                tp2_pct = ((tp2 - entry_p) / entry_p) * 100.0 if entry_p > 0 else 12.0
+
+                block = (
+                    f"{emoji} <b>{sym}{name_label}</b> | <code>{qty}주</code>\n"
+                    f"  • 매수가: <code>${entry_p:.2f}</code> ➔ 현재가: <b>${curr_p:.2f}</b>\n"
+                    f"  • 수익률: <b>{sign_p}{pnl_pct:.2f}%</b> ({sign_u}${pnl_usd:.2f} USD)\n"
+                    f"  • 🛡️ <b>안전 스탑선</b>: <code>${dyn_stop:.2f}</code> ({stop_pct:+.1f}%)\n"
+                    f"  • 🎯 <b>예상 익절선</b>: 1차 <code>${tp1:.2f}</code> (+{tp1_pct:.1f}%) | 2차 <code>${tp2:.2f}</code> (+{tp2_pct:.1f}%)"
                 )
-            self._send_reply("\n".join(lines))
+                lines.append(block)
+
+            self._send_reply("\n\n".join(lines))
         except Exception as e:
             logger.error("Failed positions lookup: {}", e)
             self._send_reply(f"⚠️ 포지션 조회 실패: {e}")
