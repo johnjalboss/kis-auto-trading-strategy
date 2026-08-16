@@ -511,6 +511,19 @@ class BotOrchestrator:
         except Exception as _gms_err:
             logger.debug("Global macro sentinel in Phase 2 skipped: {}", _gms_err)
 
+        # 13. Institutional Fed Net Liquidity & Money Supply Engine (WALCL - TGA - RRP & M2 YoY)
+        try:
+            from institutional_liquidity_engine import get_liquidity_macro_report
+            liq_rep = get_liquidity_macro_report()
+            if liq_rep:
+                if liq_rep.liquidity_regime == "CONTRACTION":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.50)
+                    logger.warning("🚨 [FED_LIQUIDITY_CONTRACTION] Net Liquidity draining! Exposure throttled to 50%")
+                logger.info("  -> institutional_liquidity_engine.py: Net Liq=${:.2f}T, M2 YoY=+{:.1f}%, Regime={}",
+                            liq_rep.fed_net_liquidity_trillion, liq_rep.m2_yoy_growth_pct, liq_rep.liquidity_regime)
+        except Exception as _liq_err:
+            logger.debug("Institutional liquidity in Phase 2 skipped: {}", _liq_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

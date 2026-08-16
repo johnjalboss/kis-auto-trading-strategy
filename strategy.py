@@ -1410,6 +1410,16 @@ class StrategyEngine:
         except Exception as _gms_err:
             logger.debug("GlobalMacroSignal skipped for {}: {}", symbol, _gms_err)
 
+        # Institutional Fed Net Liquidity & M2 Expansion Engine (WALCL - TGA - RRP & M2 YoY)
+        try:
+            from institutional_liquidity_engine import get_liquidity_macro_report
+            liq_rep = get_liquidity_macro_report()
+            if liq_rep and liq_rep.macro_score_adjustment != 0:
+                score += liq_rep.macro_score_adjustment
+                breakdown.append(f"• 연준 순유동성/M2 통화량 ({liq_rep.liquidity_regime}): {liq_rep.macro_score_adjustment:+d}점 (Net Liq: ${liq_rep.fed_net_liquidity_trillion:.2f}T, M2: +{liq_rep.m2_yoy_growth_pct:.1f}%)")
+        except Exception as _liq_err:
+            logger.debug("InstitutionalLiquidityEngine skipped for {}: {}", symbol, _liq_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)

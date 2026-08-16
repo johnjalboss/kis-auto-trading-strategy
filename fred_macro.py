@@ -6,9 +6,13 @@ import pandas as pd
 from loguru import logger
 from typing import Dict, Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 class FREDMacroAnalyzer:
     def __init__(self):
-        self.api_key = os.getenv("FRED_API_KEY", "")
+        load_dotenv()
+        self.api_key = os.getenv("FRED_API_KEY", "").strip()
         self.base_url = "https://api.stlouisfed.org/fred"
         self.cache_file = "fred_cache.json"
         
