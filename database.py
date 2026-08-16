@@ -499,6 +499,37 @@ class TradeDatabase:
             """, (cutoff,)).fetchall()
         return [dict(row) for row in rows]
 
+    def create_daily_backup(self, backup_dir: str = "backups") -> Optional[str]:
+        """Creates an atomic timestamped SQLite snapshot backup with 30-day retention."""
+        import shutil
+        import os
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            today_str = datetime.now().strftime("%Y%m%d")
+            backup_file = os.path.join(backup_dir, f"trades_backup_{today_str}.db")
+            
+            if os.path.exists(self.db_path):
+                # SQLite Online Backup API for 100% ACID consistency during live trading
+                with self._get_conn() as src_conn:
+                    dst_conn = sqlite3.connect(backup_file)
+                    src_conn.backup(dst_conn)
+                    dst_conn.close()
+                logger.info("🛡️ [DB_BACKUP] Atomic snapshot created: {}", backup_file)
+                
+                # Retention cleanup (keep last 30 daily backups)
+                all_backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("trades_backup_")])
+                if len(all_backups) > 30:
+                    for old_b in all_backups[:-30]:
+                        try:
+                            os.remove(old_b)
+                            logger.debug("Cleaned up expired DB backup: {}", old_b)
+                        except Exception:
+                            pass
+                return backup_file
+        except Exception as b_err:
+            logger.warning("DB backup creation skipped: {}", b_err)
+        return None
+
 
 # Global instance
 _db = None
@@ -507,6 +538,10 @@ def get_database() -> TradeDatabase:
     global _db
     if _db is None:
         _db = TradeDatabase()
+        try:
+            _db.create_daily_backup()
+        except Exception:
+            pass
     return _db
 
 
