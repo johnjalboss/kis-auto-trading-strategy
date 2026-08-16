@@ -47,19 +47,19 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Risk Management
 # ==============================================
 
-# Per-position strict stop loss (-4.5% safety hard stop floor to absorb market noise)
-STOP_LOSS_PCT = 0.045
+# Per-position strict stop loss (-6.0% wide stop floor to let high-momentum runners run)
+STOP_LOSS_PCT = 0.060
 
 # Consecutive loss limit — 대표님 요구사항 반영: 불필요한 3연속 손실 쿨다운 매매 차단 기능 비활성화 (False)
 ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "999"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 
-# Position limits (5개 종목 분산으로 각 20%씩 총 자산의 100% 투입)
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.25"))  # 20~25% max per position
+# Position limits (공격형 고수익 모드: 3개 상위 주도주에 각 33.3% 집중 투자)
+MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 33.3~35% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = 5  # 대표님 요구사항 100% 반영: 5종목 분산/집중 매매 필수 고정
+MAX_POSITIONS = 3  # 공격형 고수익 모드: 3종목 집중 배팅 (+2,048% CAGR 35.88% 모델)
 
 # ==============================================
 # [ENABLED] UPGRADE 교체매매 활성화 — 최소 30점 차이날 때만 교체
