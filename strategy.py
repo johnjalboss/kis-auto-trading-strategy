@@ -327,8 +327,17 @@ class StrategyEngine:
                     _block_threshold = -0.05          # >0.05% of MC
                 if _net_pct < _block_threshold:
                     return EntrySignal("HOLD", 0, f"INSIDER_GUARD: MC-tiered dump | {_net_pct:.3f}% of ~${_implied_mc/1e9:.0f}B MC (threshold: {_block_threshold:.2f}%) Net: ${_net_val/1e6:.1f}M", 0)
-        except Exception as err:
-            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
+        except Exception as _ins_err:
+            logger.debug("Insider guard check failed for {}: {}", symbol, _ins_err)
+
+        # 4.1. Share Dilution & ATM Secondary Offering Guard
+        try:
+            from dilution_atm_offering_sentinel import get_dilution_sentinel
+            dil_sig = get_dilution_sentinel().analyze(symbol)
+            if dil_sig and dil_sig.is_blocked:
+                return EntrySignal("HOLD", 0, f"DILUTION_GUARD: {dil_sig.reason}", 0)
+        except Exception as _dil_err:
+            logger.debug("Dilution guard check failed for {}: {}", symbol, _dil_err)
 
         # BREADTH_GUARD moved to the end of check_entry to support High-Score Bypass
 
@@ -1486,6 +1495,16 @@ class StrategyEngine:
                 breakdown.append(f"• CTA 추세추종 펀드 수급 지수: {cta_sig.score_adj:+d}점 ({cta_sig.cta_regime})")
         except Exception as _cta_err:
             logger.debug("CTATrendFollowingSentinel skipped for {}: {}", symbol, _cta_err)
+
+        # Share Dilution & ATM Secondary Offering Sentinel (Buybacks vs Dilution Overhang)
+        try:
+            from dilution_atm_offering_sentinel import get_dilution_sentinel
+            dil_sig = get_dilution_sentinel().analyze(symbol)
+            if dil_sig and dil_sig.score_adj != 0:
+                score += dil_sig.score_adj
+                breakdown.append(f"• 주식 희석/자사주 매입 지수: {dil_sig.score_adj:+d}점 ({dil_sig.reason})")
+        except Exception as _dil_sc_err:
+            logger.debug("Dilution score calculation skipped for {}: {}", symbol, _dil_sc_err)
 
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
