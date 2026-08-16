@@ -1431,6 +1431,26 @@ class StrategyEngine:
         except Exception as _pol_err:
             logger.debug("USElectionPolicySentinel skipped for {}: {}", symbol, _pol_err)
 
+        # Short Squeeze Ignition Engine (Short Interest % Float & Days to Cover)
+        try:
+            from short_squeeze_igniter import get_short_squeeze_igniter
+            sq_sig = get_short_squeeze_igniter().analyze(symbol, rvol=getattr(indicators, 'rvol_20', 1.0) if indicators else 1.0)
+            if sq_sig and sq_sig.score_bonus > 0:
+                score += sq_sig.score_bonus
+                breakdown.append(f"• 쇼트 스퀴즈 뇌관 점수: +{sq_sig.score_bonus}점 ({sq_sig.reason})")
+        except Exception as _sq_err:
+            logger.debug("ShortSqueezeIgniter skipped for {}: {}", symbol, _sq_err)
+
+        # Market-On-Close (MOC) Smart Money Closing Auction Radar
+        try:
+            from moc_imbalance_radar import get_moc_imbalance_radar
+            moc_sig = get_moc_imbalance_radar().evaluate_stock_closing(symbol, df)
+            if moc_sig and moc_sig.score_adj != 0:
+                score += moc_sig.score_adj
+                breakdown.append(f"• MOC 스마트머니 종가 경매: {moc_sig.score_adj:+d}점 ({moc_sig.reason})")
+        except Exception as _moc_err:
+            logger.debug("MOCImbalanceRadar skipped for {}: {}", symbol, _moc_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
