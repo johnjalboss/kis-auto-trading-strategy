@@ -711,6 +711,23 @@ class BotOrchestrator:
                     except Exception as _tpr_err:
                         logger.debug("SmartPartialTakeProfitRouter skipped for {}: {}", sym, _tpr_err)
 
+                    # [v11.0 OVERNIGHT RISK ASSESSOR: Pre-Close 15:45-16:00 ET Landmine Exit]
+                    try:
+                        from extended_hours_sentinel import _EASTERN_TZ
+                        from datetime import datetime as _dt
+                        now_et = _dt.now(_EASTERN_TZ)
+                        if now_et.hour == 15 and now_et.minute >= 45:
+                            from overnight_risk_assessor import OvernightRiskAssessor
+                            ora_res = OvernightRiskAssessor().evaluate_position_overnight(sym, curr_price, pos.entry_price)
+                            if ora_res.get('should_close_before_bell', False):
+                                warn_str = ', '.join(ora_res.get('warnings', []))
+                                logger.error("🚨 [OVERNIGHT_RISK_EXIT] Pre-close liquidation for {}: {}", sym, warn_str)
+                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"OVERNIGHT_RISK_DEFENSE: {warn_str}")
+                                self.strategy.remove_position(sym)
+                                continue
+                    except Exception as _ora_err:
+                        logger.debug("OvernightRiskAssessor check skipped for {}: {}", sym, _ora_err)
+
                     exit_sig = self.strategy.check_exit(sym, curr_price)
                     if exit_sig and exit_sig.action != "HOLD":
                         logger.warning("🚨 EXIT TRIGGERED: {} -> {} ({})", sym, exit_sig.action, exit_sig.reason)
@@ -1973,6 +1990,13 @@ class BotOrchestrator:
                 ds_rep.export_tax_csv()
             except Exception as _ds_err:
                 logger.debug("Daily settlement reporter error: {}", _ds_err)
+
+            # [월스트리트 AI 퀀트 일일 장 마감 성적표 자동 발송]
+            try:
+                from daily_quant_report import DailyQuantReportCard
+                DailyQuantReportCard().generate_and_send_report(self.trader)
+            except Exception as _dqr_err:
+                logger.debug("DailyQuantReportCard error: {}", _dqr_err)
 
             # [AUTO EXECUTIVE AI REPORT: Friday/Saturday EOD automatic weekly delivery]
             if datetime.now().weekday() in (4, 5):

@@ -1378,6 +1378,21 @@ class StrategyEngine:
         except Exception as _mtf_err:
             logger.debug("MultiTimeframeConfluence skipped for {}: {}", symbol, _mtf_err)
 
+        # Portfolio Beta & Regime Balancer (+5 ~ +10 pts in Bull / -30 pts in Panic)
+        try:
+            from portfolio_beta_balancer import PortfolioBetaBalancer
+            beta_eval = PortfolioBetaBalancer().evaluate_new_symbol_beta_fit(
+                symbol=symbol,
+                current_positions=self._positions,
+                regime=current_regime
+            )
+            score += beta_eval.get('score_bonus', 0)
+            if abs(beta_eval.get('score_bonus', 0)) > 0:
+                logger.info("⚖️ [PORTFOLIO_BETA] {} pts for {}: {}", beta_eval.get('score_bonus'), symbol, beta_eval.get('reason'))
+                breakdown.append(f"• 포트폴리오 베타 적합도: {beta_eval.get('score_bonus'):+d}점 ({beta_eval.get('reason')})")
+        except Exception as _pbb_err:
+            logger.debug("PortfolioBetaBalancer skipped for {}: {}", symbol, _pbb_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
