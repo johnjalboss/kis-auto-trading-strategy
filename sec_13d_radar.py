@@ -48,7 +48,7 @@ class SEC13DRadar:
                     ]
                     if recent_large_buys:
                         res['has_13d_whale'] = True
-                        res['score_adj'] = 25
+                        res['score_adj'] = 15
                         res['reason'] = f"SEC Form 4/13D Whale Buy ({len(recent_large_buys)} major block filings)"
                         _sec_13d_cache[symbol] = {'ts': now, 'data': res}
                         return res
@@ -64,7 +64,7 @@ class SEC13DRadar:
                 total_pct = float(holders['pctHeld'].sum()) if 'pctHeld' in holders.columns else 0.0
                 if total_pct > 0.40:  # >40% institutional ownership concentration
                     res['has_13d_whale'] = True
-                    res['score_adj'] = 25
+                    res['score_adj'] = 15
                     res['reason'] = f"SEC 13D/13G Institutional Whale Concentration ({total_pct*100:.1f}% held)"
         except Exception as e:
             logger.debug("SEC13DRadar fallback failed for {}: {}", symbol, e)

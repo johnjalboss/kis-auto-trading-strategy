@@ -63,18 +63,18 @@ class DealerGEXRadar:
 
                 # 1. Low PCR (Heavy Bullish Call buying)
                 if 0 < snap.put_call_ratio < 0.65:
-                    score_adj += 15
+                    score_adj += 10
                     reasons.append(f"Bullish Call Bias (PCR {snap.put_call_ratio:.2f})")
                 elif snap.put_call_ratio > 1.25:
-                    score_adj -= 15
+                    score_adj -= 10
                     reasons.append(f"Bearish Put Bias (PCR {snap.put_call_ratio:.2f})")
 
                 # 2. Positive Dealer Gamma Wall Support
                 if snap.gex > 0.5:
-                    score_adj += 10
+                    score_adj += 8
                     reasons.append(f"Dealer Gamma Wall Support (GEX ${snap.gex:.1f}B)")
                 elif snap.gex < -1.0:
-                    score_adj += 20  # Gamma squeeze volatility fuel
+                    score_adj += 12  # Gamma squeeze volatility fuel
                     reasons.append(f"Gamma Squeeze Trigger Zone (Short GEX ${snap.gex:.1f}B)")
 
                 res['score_adj'] = score_adj

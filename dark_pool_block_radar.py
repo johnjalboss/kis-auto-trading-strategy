@@ -47,11 +47,11 @@ class DarkPoolBlockRadar:
 
             if score_val >= 30 or any('ACCUM' in str(s) or 'INST_BUYING' in str(s) for s in signals):
                 res['is_institutional_accum'] = True
-                res['score_adj'] = 20
+                res['score_adj'] = 12
                 res['reason'] = f"DARKPOOL_BLOCK_ACCUMULATION: Score +{score_val} ({', '.join(signals)})"
             elif score_val <= -30 or any('DIST' in str(s) or 'DUMP' in str(s) for s in signals):
                 res['is_institutional_dump'] = True
-                res['score_adj'] = -20
+                res['score_adj'] = -15
                 res['reason'] = f"DARKPOOL_BLOCK_DUMPING: Score {score_val} ({', '.join(signals)})"
 
             _DP_CACHE[symbol] = (now, res)
