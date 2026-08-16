@@ -96,18 +96,17 @@ class WeeklyAIReportGenerator:
 
             # Query open positions
             try:
-                cursor.execute("SELECT symbol, quantity, entry_price, current_price, pnl_pct FROM positions")
+                cursor.execute("SELECT symbol, quantity, avg_price, stop_price FROM positions WHERE quantity > 0")
                 pos_rows = cursor.fetchall()
                 for p in pos_rows:
                     stats["current_positions"].append({
                         "symbol": p["symbol"],
-                        "qty": p["quantity"],
-                        "entry": p["entry_price"],
-                        "curr": p["current_price"],
-                        "pnl_pct": p["pnl_pct"]
+                        "qty": int(p["quantity"]),
+                        "entry": float(p["avg_price"]),
+                        "stop": float(p["stop_price"] or 0.0)
                     })
-            except Exception:
-                pass
+            except Exception as pe:
+                logger.debug("Failed to query positions: {}", pe)
 
             conn.close()
         except Exception as e:
@@ -123,12 +122,12 @@ class WeeklyAIReportGenerator:
         pnl_emoji = "🟢" if stats["gross_pnl"] >= 0 else "🔴"
         pnl_sign = "+" if stats["gross_pnl"] >= 0 else ""
         
-        best_str = f"{stats['best_trade']['symbol']} ({stats['best_trade']['pnl_pct']:+.1%}, ${stats['best_trade']['pnl']:+.2f})" if stats["best_trade"] else "해당 없음"
-        worst_str = f"{stats['worst_trade']['symbol']} ({stats['worst_trade']['pnl_pct']:+.1%}, ${stats['worst_trade']['pnl']:+.2f})" if stats["worst_trade"] else "해당 없음"
+        best_str = f"{stats['best_trade']['symbol']} ({stats['best_trade']['pnl_pct']:+.1%}, ${stats['best_trade']['pnl']:+.2f})" if stats["best_trade"] else "해당 없음 (전량 홀딩 중)"
+        worst_str = f"{stats['worst_trade']['symbol']} ({stats['worst_trade']['pnl_pct']:+.1%}, ${stats['worst_trade']['pnl']:+.2f})" if stats["worst_trade"] else "해당 없음 (손절 0건)"
         
         pos_lines = []
         for p in stats["current_positions"]:
-            pos_lines.append(f"  • <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} (손익 {p['pnl_pct']:+.1%})")
+            pos_lines.append(f"  • <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} (스탑 ${p['stop']:.2f})")
         pos_str = "\n".join(pos_lines) if pos_lines else "  • 현재 보유 포지션 없음 (100% 현금 대기)"
 
         # 2. Try Gemini AI commentary
