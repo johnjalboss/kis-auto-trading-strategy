@@ -1,20 +1,20 @@
 """
-[v9.0 $10M+ DARK POOL BLOCK SWEEP RADAR]
-Tracks $10M+ single off-exchange dark pool block prints (ATS data) to classify institutional buying vs dumping.
+[v11.0 $10M+ DARK POOL BLOCK SWEEP RADAR]
+===========================================
+Tracks $10M+ single off-exchange dark pool block prints (FINRA ATS data) to classify institutional buying vs dumping.
 
 Rules:
 - Dark Pool Net Dollar Notional > $10,000,000 ($10M+)
-- Institutional Buying Imbalance (Ask Ratio > 60%) -> +20 pts Bonus.
+- Institutional Buying Imbalance (DPI > 50% / Ask Ratio > 60%) -> +20 pts Bonus.
 - Institutional Dumping Imbalance (Bid Ratio > 60%) -> -20 pts Penalty.
 """
 
 import time
 from typing import Dict, Any
 from loguru import logger
-import yfinance as yf
 
 _DP_CACHE = {}
-_DP_TTL = 3600  # 1 hour TTL
+_DP_TTL = 1800  # 30 min TTL
 
 
 class DarkPoolBlockRadar:
@@ -29,12 +29,13 @@ class DarkPoolBlockRadar:
                 return res
 
         res = {
+            'symbol': symbol,
             'dark_pool_score': 0,
             'is_institutional_accum': False,
             'is_institutional_dump': False,
             'net_notional_usd': 0.0,
             'score_adj': 0,
-            'reason': ''
+            'reason': 'Neutral dark pool flow'
         }
 
         try:
@@ -44,13 +45,13 @@ class DarkPoolBlockRadar:
             score_val = getattr(sm_res, 'score', 0)
             signals = getattr(sm_res, 'signals', [])
 
-            if score_val >= 40 or 'DARKPOOL_ACCUM:0.8x' in signals or 'INST_BUYING' in str(signals):
+            if score_val >= 30 or any('ACCUM' in str(s) or 'INST_BUYING' in str(s) for s in signals):
                 res['is_institutional_accum'] = True
-                res['score_adj'] = 18
+                res['score_adj'] = 20
                 res['reason'] = f"DARKPOOL_BLOCK_ACCUMULATION: Score +{score_val} ({', '.join(signals)})"
-            elif score_val <= -30 or 'DARKPOOL_DIST' in signals:
+            elif score_val <= -30 or any('DIST' in str(s) or 'DUMP' in str(s) for s in signals):
                 res['is_institutional_dump'] = True
-                res['score_adj'] = -18
+                res['score_adj'] = -20
                 res['reason'] = f"DARKPOOL_BLOCK_DUMPING: Score {score_val} ({', '.join(signals)})"
 
             _DP_CACHE[symbol] = (now, res)
@@ -59,3 +60,6 @@ class DarkPoolBlockRadar:
             logger.debug("DarkPoolBlockRadar failed for {}: {}", symbol, e)
             _DP_CACHE[symbol] = (now, res)
             return res
+
+def get_dark_pool_block_radar() -> DarkPoolBlockRadar:
+    return DarkPoolBlockRadar()

@@ -1,11 +1,12 @@
 """
-[v11.0 ULTRA QUANT] Dealer Gamma Exposure (GEX) Radar
-====================================================
-Calculates Dealer Net Gamma Exposure across option strikes:
+[v11.0 ULTRA QUANT] Dealer Gamma Exposure (GEX) & CBOE Options Radar
+=====================================================================
+Calculates Dealer Net Gamma Exposure across option strikes and CBOE Put/Call Ratio:
 GEX = Sum(Spot * Gamma * OpenInterest * 100)
 
-Short Gamma Zone (GEX < 0): Dealer short gamma squeeze acceleration (+25 pts)
-Long Gamma Zone (GEX > 0): Dealer long gamma pinning/damping (-15 pts)
+- Short Gamma Zone (GEX < 0 & Squeeze): Dealer short gamma squeeze acceleration (+25 pts)
+- Bullish Put/Call Ratio (PCR < 0.65): Heavy call buying (+15 pts)
+- Long Gamma Support Zone (Positive GEX Wall): Support bounce (+10 pts)
 """
 
 import time
@@ -14,7 +15,7 @@ from typing import Dict, Any
 from loguru import logger
 
 _gex_cache: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SEC = 1800  # 30 minutes cache for 1GB VPS RAM optimization
+CACHE_TTL_SEC = 1800  # 30 minutes cache for VPS optimization
 
 
 class DealerGEXRadar:
@@ -44,75 +45,49 @@ class DealerGEXRadar:
             'symbol': symbol,
             'net_gex': 0.0,
             'gex_regime': 'NEUTRAL',
+            'put_call_ratio': 1.0,
             'score_adj': 0,
-            'reason': 'No options GEX data'
+            'reason': 'Neutral options market profile'
         }
 
         try:
-            import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            expirations = ticker.options
-            if not expirations:
+            from options_flow import get_options_snapshot
+            snap = get_options_snapshot(symbol)
+
+            if snap:
+                score_adj = 0
+                reasons = []
+
+                res['net_gex'] = getattr(snap, 'gex', 0.0)
+                res['put_call_ratio'] = getattr(snap, 'put_call_ratio', 1.0)
+
+                # 1. Low PCR (Heavy Bullish Call buying)
+                if 0 < snap.put_call_ratio < 0.65:
+                    score_adj += 15
+                    reasons.append(f"Bullish Call Bias (PCR {snap.put_call_ratio:.2f})")
+                elif snap.put_call_ratio > 1.25:
+                    score_adj -= 15
+                    reasons.append(f"Bearish Put Bias (PCR {snap.put_call_ratio:.2f})")
+
+                # 2. Positive Dealer Gamma Wall Support
+                if snap.gex > 0.5:
+                    score_adj += 10
+                    reasons.append(f"Dealer Gamma Wall Support (GEX ${snap.gex:.1f}B)")
+                elif snap.gex < -1.0:
+                    score_adj += 20  # Gamma squeeze volatility fuel
+                    reasons.append(f"Gamma Squeeze Trigger Zone (Short GEX ${snap.gex:.1f}B)")
+
+                res['score_adj'] = score_adj
+                res['reason'] = ', '.join(reasons) if reasons else 'Normal options distribution'
+                res['gex_regime'] = 'BULLISH' if score_adj > 0 else ('BEARISH' if score_adj < 0 else 'NEUTRAL')
+
                 _gex_cache[symbol] = {'ts': now, 'data': res}
                 return res
-
-            spot_price = float(ticker.fast_info.last_price or 0.0)
-            if spot_price <= 0:
-                _gex_cache[symbol] = {'ts': now, 'data': res}
-                return res
-
-            # Analyze nearest expiration date
-            exp_date = expirations[0]
-            opt = ticker.option_chain(exp_date)
-            calls = opt.calls
-            puts = opt.puts
-
-            # Calculate expiration T in years
-            from datetime import datetime
-            exp_dt = datetime.strptime(exp_date, '%Y-%m-%d')
-            days_to_exp = max(1, (exp_dt - datetime.now()).days)
-            T = days_to_exp / 365.0
-
-            total_call_gex = 0.0
-            total_put_gex = 0.0
-
-            if calls is not None and not calls.empty:
-                for _, row in calls.iterrows():
-                    strike = float(row.get('strike', 0))
-                    oi = float(row.get('openInterest', 0) or 0)
-                    iv = float(row.get('impliedVolatility', 0) or 0.30)
-                    if strike > 0 and oi > 0:
-                        gamma = self._approx_gamma(spot_price, strike, T, sigma=max(0.05, iv))
-                        total_call_gex += spot_price * gamma * oi * 100.0
-
-            if puts is not None and not puts.empty:
-                for _, row in puts.iterrows():
-                    strike = float(row.get('strike', 0))
-                    oi = float(row.get('openInterest', 0) or 0)
-                    iv = float(row.get('impliedVolatility', 0) or 0.30)
-                    if strike > 0 and oi > 0:
-                        gamma = self._approx_gamma(spot_price, strike, T, sigma=max(0.05, iv))
-                        # Dealer is long call gamma, short put gamma
-                        total_put_gex += spot_price * gamma * oi * 100.0
-
-            net_gex = (total_call_gex - total_put_gex) / 1e6  # In $M
-
-            if net_gex < -1.0:
-                res['gex_regime'] = 'SHORT_GAMMA_SQUEEZE'
-                res['score_adj'] = 25
-                res['reason'] = f"Dealer Short Gamma Squeeze Zone (Net GEX: ${net_gex:.1f}M)"
-            elif net_gex > 5.0:
-                res['gex_regime'] = 'LONG_GAMMA_PINNED'
-                res['score_adj'] = -10
-                res['reason'] = f"Dealer Long Gamma Pinning Zone (Net GEX: ${net_gex:.1f}M)"
-            else:
-                res['gex_regime'] = 'NEUTRAL'
-                res['score_adj'] = 0
-                res['reason'] = f"Neutral GEX (${net_gex:.1f}M)"
-
-            res['net_gex'] = net_gex
         except Exception as e:
-            logger.debug("DealerGEXRadar analysis failed for {}: {}", symbol, e)
+            logger.debug("DealerGEXRadar options_flow integration failed for {}: {}", symbol, e)
 
         _gex_cache[symbol] = {'ts': now, 'data': res}
         return res
+
+def get_dealer_gex_radar() -> DealerGEXRadar:
+    return DealerGEXRadar()
