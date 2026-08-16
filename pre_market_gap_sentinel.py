@@ -25,7 +25,19 @@ class PreMarketGapSentinel:
         self.chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
 
     def get_held_symbols(self) -> list:
+        """Fetch actual live positions from Broker API first, then DB fallback."""
         symbols = []
+        try:
+            from trader import get_trader
+            tr = get_trader()
+            pos_list = tr.get_positions()
+            if pos_list:
+                symbols = [p.symbol for p in pos_list if getattr(p, 'quantity', 0) > 0]
+                if symbols:
+                    return symbols
+        except Exception as _tr_err:
+            logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
+
         if os.path.exists(self.db_path):
             try:
                 conn = sqlite3.connect(self.db_path)
@@ -34,7 +46,8 @@ class PreMarketGapSentinel:
                 symbols = [row[0] for row in cur.fetchall()]
                 conn.close()
             except Exception as e:
-                logger.debug("Failed to fetch positions: {}", e)
+                logger.debug("Failed to fetch positions from DB: {}", e)
+
         if not symbols:
             symbols = ["MDT", "STRC", "VTOL", "MRK"]
         return symbols
@@ -126,15 +139,21 @@ class PreMarketGapSentinel:
     def generate_report(self) -> str:
         """Generates pre-market opening intelligence brief."""
         res = self.scan_gaps()
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        now_dt = datetime.now()
+        now_str = now_dt.strftime("%Y-%m-%d %H:%M")
+        is_weekend = now_dt.weekday() in (5, 6)  # Saturday or Sunday
 
         lines = [
             f"🌅 <b>[정규장 개장 30분 전 프리마켓 레이더]</b>",
             f"<i>{now_str} KST (Pre-Market Gap Sentinel)</i>",
-            "━━━━━━━━━━━━━━━━━━━",
-            "💼 <b>보유 종목 프리마켓 현황</b>:"
+            "━━━━━━━━━━━━━━━━━━━"
         ]
 
+        if is_weekend:
+            lines.append("☕ <b>[주말 휴장 안내]</b>: 현재 미국 증시 주말 휴장 상태입니다.")
+            lines.append("   (프리마켓 시세는 금요일 종가 기준으로 고정되어 있습니다)\n")
+
+        lines.append("💼 <b>보유 종목 프리마켓 현황</b>:")
         if res["held_status"]:
             for h in res["held_status"]:
                 sign = "+" if h["gap_pct"] >= 0 else ""
@@ -154,7 +173,10 @@ class PreMarketGapSentinel:
             lines.append("  • 특이 갭(±3%) 발생 종목 없음 (안정적 보합 출발 예상)")
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
-        lines.append("💡 <i>23:30 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
+        if not is_weekend:
+            lines.append("💡 <i>23:30 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
+        else:
+            lines.append("💡 <i>월요일 밤 23:30 정규장 개장 시 실시간 자동 매매가 재개됩니다.</i>")
 
         return "\n".join(lines)
 
