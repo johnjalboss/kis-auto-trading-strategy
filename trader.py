@@ -494,18 +494,18 @@ class Trader:
                 resp.raise_for_status()
                 data = resp.json()
                 
-                if data.get("rt_cd") != "0":
+                if self.check_token_error(data, resp.status_code):
+                    time.sleep(1)
                     continue
-                    
-                for item in data.get("output1", []):
-                    # Use ovrs_cblc_qty (해외체결잔고수량) as the total quantity held
-                    qty_str = item.get("ovrs_cblc_qty", "0")
-                    qty = int(float(qty_str)) if qty_str.strip() else 0
-                    
+
                 if data.get("rt_cd") == "0":
                     for item in data.get("output1", []):
                         sym = item.get("ovrs_pdno", "").strip()
-                        qty = int(item.get("ord_psbl_qty", 0) or item.get("ovrs_cblc_qty", 0) or 0)
+                        qty_str = item.get("ovrs_cblc_qty", "") or item.get("ord_psbl_qty", "") or "0"
+                        try:
+                            qty = int(float(str(qty_str).strip()))
+                        except Exception:
+                            qty = 0
                         
                         if qty > 0 and sym:
                             positions_dict[sym] = PositionInfo(
@@ -515,9 +515,8 @@ class Trader:
                                 current_price=float(item.get("now_pric2", 0) or 0),
                                 exchange=exchange_code
                             )
-                elif self.check_token_error(data, resp.status_code):
-                    time.sleep(1)
-                    continue
+                else:
+                    logger.debug("Position query returned non-zero code {} on {}", data.get("rt_cd"), exchange_code)
             except Exception as e:
                 logger.error("Position query failed for {}: {}", exchange_code, e)
                 

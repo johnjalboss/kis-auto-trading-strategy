@@ -192,8 +192,9 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     
     # Smoothed values
     atr = tr.ewm(span=period, adjust=False).mean()
-    plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr)
-    minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr)
+    atr_safe = atr.replace(0, np.nan).fillna(1e-6)
+    plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr_safe)
+    minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr_safe)
     
     # DX and ADX
     dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, 1)
