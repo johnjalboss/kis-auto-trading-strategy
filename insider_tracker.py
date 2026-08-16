@@ -137,19 +137,20 @@ class InsiderInstitutionalTracker:
             score += 25
             details.append(f"CLUSTER_BUYING:{insider_buys}_insiders")
         
-        # Institutional ownership
+        # Institutional ownership & Securities Lending Overhang Filter
         inst_pct = info.get('heldPercentInstitutions', 0) or 0
         inst_pct = inst_pct * 100 if inst_pct < 1 else inst_pct
         
-        # Estimate quarterly change (not directly available)
-        inst_change = 0  # Would need historical data
-        
         if inst_pct > 90:
-            details.append("HIGH_INST_OWNERSHIP")
-        elif inst_pct > 70:
+            details.append("HIGH_INST_OWNERSHIP_MAX")
+            # Over 90% institutional ownership often acts as massive securities lending pool for short sellers
+            score += 5
+        elif 60 <= inst_pct <= 90:
             score += 10
-        elif inst_pct < 30:
+            details.append(f"HEALTHY_INST_SPONSORSHIP:{inst_pct:.0f}%")
+        elif inst_pct < 20:
             score -= 10
+            details.append("LOW_INST_SPONSORSHIP")
         
         # Short interest
         short_pct = info.get('shortPercentOfFloat', 0) or 0
