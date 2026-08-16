@@ -27,8 +27,33 @@ class ProfitLockingStop:
         stop_price = max(entry_price * 0.94, chandelier_stop)
         protection_type = "Chandelier ATR Trailing Stop"
 
-        # 2. Multi-Tiered Profit Locking Floor Enforcement
-        if peak_pnl >= 12.0 or pnl_pct >= 12.0:
+        # 2. Multi-Tiered Profit Locking Floor Enforcement (Never give back large gains)
+        if peak_pnl >= 100.0 or pnl_pct >= 100.0:
+            locked_floor = entry_price * 1.820 # Minimum +82.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 9 Mega-Lock (+82.0% Guaranteed)"
+        elif peak_pnl >= 80.0 or pnl_pct >= 80.0:
+            locked_floor = entry_price * 1.650 # Minimum +65.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 8 Mega-Lock (+65.0% Guaranteed)"
+        elif peak_pnl >= 50.0 or pnl_pct >= 50.0:
+            locked_floor = entry_price * 1.400 # Minimum +40.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 7 Super-Lock (+40.0% Guaranteed)"
+        elif peak_pnl >= 35.0 or pnl_pct >= 35.0:
+            locked_floor = entry_price * 1.260 # Minimum +26.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 6 Super-Lock (+26.0% Guaranteed)"
+        elif peak_pnl >= 20.0 or pnl_pct >= 20.0:
+            locked_floor = entry_price * 1.140 # Minimum +14.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 5 Lock-In (+14.0% Guaranteed)"
+        elif peak_pnl >= 12.0 or pnl_pct >= 12.0:
             locked_floor = entry_price * 1.080 # Minimum +8.0% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
@@ -38,7 +63,7 @@ class ProfitLockingStop:
             if stop_price < locked_floor:
                 stop_price = locked_floor
                 protection_type = "Tier 3 Lock-In (+5.0% Guaranteed)"
-        elif peak_pnl >= 5.0 or pnl_pct >= 4.8: # Include near 5% (+4.8%)
+        elif peak_pnl >= 5.0 or pnl_pct >= 4.8:
             locked_floor = entry_price * 1.030 # Minimum +3.0% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
