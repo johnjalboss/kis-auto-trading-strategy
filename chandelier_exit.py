@@ -24,6 +24,18 @@ class ChandelierExitEngine:
         """
         Evaluate if current price breached the Chandelier stop level.
         """
+        if entry_price <= 0 or current_price <= 0:
+            return {
+                "symbol": symbol,
+                "current_price": 0.0,
+                "highest_price": 0.0,
+                "chandelier_stop": 0.0,
+                "pnl_pct": 0.0,
+                "peak_gain_pct": 0.0,
+                "should_exit": False,
+                "reason": "Invalid price"
+            }
+
         if highest_since_entry <= 0:
             highest_since_entry = max(entry_price, current_price)
         if atr <= 0:

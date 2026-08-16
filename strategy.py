@@ -1507,8 +1507,14 @@ class StrategyEngine:
 
         # [Fallback 3]         
         if price <= 0:
-            price = df['Close'].iloc[-1]
-            logger.warning("Price lookup failed for {}. Defaulting to Daily Close: ${:.2f}", symbol, price)
+            price = float(df['Close'].iloc[-1]) if not df.empty else 0.0
+            if price > 0:
+                logger.warning("Price lookup failed for {}. Defaulting to Daily Close: ${:.2f}", symbol, price)
+        
+        # [CRITICAL DATA GLITCH GUARD] If price is STILL <= 0, abort exit check immediately
+        if price <= 0:
+            logger.error("🚨 [DATA_GLITCH_GUARD] Price is 0 for {}. Aborting exit check to prevent false stop-loss!", symbol)
+            return ExitSignal("HOLD", "Data glitch: Price unavailable", 0)
         
         # Update tracking
         old_high = pos.high_since_entry
@@ -1520,7 +1526,7 @@ class StrategyEngine:
                 db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price)
             except Exception as e:
                 logger.warning("⚠️ [strategy.py] Fallback triggered: {}", e)
-        pnl_pct = (price - pos.entry_price) / pos.entry_price
+        pnl_pct = (price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
         
         #  / ETF    (  )
         import config
