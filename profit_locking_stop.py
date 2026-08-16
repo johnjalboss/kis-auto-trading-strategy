@@ -58,5 +58,27 @@ class ProfitLockingStop:
             "pnl_pct": pnl_pct
         }
 
+    def evaluate_profit_lock(self, symbol: str, entry_price: float, current_price: float,
+                             high_since_entry: float, atr: float = 0.0) -> Dict[str, Any]:
+        """Evaluates whether current price has fallen below the profit-locked floor."""
+        if entry_price <= 0 or current_price <= 0:
+            return {"should_exit": False, "reason": "Invalid price"}
+
+        res = self.calculate_locked_stop(entry_price, current_price, high_since_entry, atr)
+        stop_price = res.get("stop_price", 0.0)
+        pnl_pct = res.get("pnl_pct", 0.0)
+        prot_type = res.get("type", "")
+
+        # If locked floor is active and current price dropped below it, trigger exit!
+        if "Lock-In" in prot_type and current_price <= stop_price:
+            return {
+                "should_exit": True,
+                "reason": f"PROFIT_LOCK_EXIT: {prot_type} triggered at ${current_price:.2f} (Lock Floor: ${stop_price:.2f}, PnL: {pnl_pct:+.1f}%)"
+            }
+
+        return {"should_exit": False, "reason": "HOLD", "stop_price": stop_price}
+
+ProfitLockingStopEngine = ProfitLockingStop
+
 def get_profit_locking_stop() -> ProfitLockingStop:
     return ProfitLockingStop()

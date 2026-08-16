@@ -1164,10 +1164,24 @@ class StrategyEngine:
         # ================================
         # [v3.0.0 INSTITUTIONAL TRUE BREAKOUT VERIFICATION ENGINE]
         # Prevents buying False Breakouts & Exhaustion Tops at ATH / 20d Highs!
-        # - Simply hitting a high does NOT mean it's good (User's exact directive).
-        # - Require RVOL >= 1.25 AND No Bearish Divergence to confirm Institutional Demand!
-        # - Deduct -40 pts penalty if RSI > 76 or Bearish Divergence (False Breakout Trap)!
+        # - Require RVOL >= 1.10 AND RSI <= 76 to confirm Institutional Demand!
+        # - Deduct -40 pts penalty if RSI > 76 or Bearish Exhaustion (False Breakout Trap)!
         # ================================
+        try:
+            if df is not None and len(df) >= 20:
+                vol_20 = float(df['Volume'].iloc[-21:-1].mean()) if len(df) >= 21 else 1.0
+                curr_vol = float(df['Volume'].iloc[-1])
+                rvol = curr_vol / vol_20 if vol_20 > 0 else 1.0
+                high_20 = float(df['High'].iloc[-21:-1].max()) if len(df) >= 21 else float(df['High'].max())
+                curr_close = float(df['Close'].iloc[-1])
+                
+                # Near high (within 2%) but low volume (< 1.1x) or extreme overbought RSI (> 76)
+                if (curr_close >= high_20 * 0.98 and rvol < 1.10) or (getattr(ind, 'rsi', 50.0) > 76.0):
+                    score -= 40
+                    breakdown.append(f"🚫 [가짜 돌파/과열 방어] 고점 부근 거래량 부족(RVOL {rvol:.2f}x < 1.1x) 또는 RSI {getattr(ind, 'rsi', 50.0):.1f}>76 (-40점)")
+                    logger.warning("🚫 [FALSE_BREAKOUT_GUARD] -40 pts for {}: RVOL={:.2f}x, RSI={:.1f} at Highs", symbol, rvol, getattr(ind, 'rsi', 50.0))
+        except Exception as _fb_err:
+            logger.debug("False breakout check skipped for {}: {}", symbol, _fb_err)
         # ================================
         # [v6.0 INSTITUTIONAL QUANT ALPHA ENGINE]
         # 1. Macro Cross-Asset Risk Matrix (Yields & US Dollar Spikes)
@@ -2019,7 +2033,8 @@ class StrategyEngine:
     def mark_half_sold(self, symbol: str):
         if symbol in self._positions:
             self._positions[symbol].half_sold = True
-            self._positions[symbol].quantity //= 2
+            if self._positions[symbol].quantity > 1:
+                self._positions[symbol].quantity //= 2
     
     def remove_position(self, symbol: str):
         if symbol in self._positions:

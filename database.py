@@ -232,8 +232,15 @@ class TradeDatabase:
             """, (symbol, quantity, price, total, datetime.now(), pnl, pnl_pct, reason))
             trade_id = cursor.lastrowid
             
-            # Remove from positions
-            conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+            # Check remaining quantity in positions table
+            cur_pos = conn.execute("SELECT quantity FROM positions WHERE symbol = ?", (symbol,)).fetchone()
+            if cur_pos and cur_pos[0] > quantity:
+                rem_qty = cur_pos[0] - quantity
+                conn.execute("UPDATE positions SET quantity = ?, updated_at = ? WHERE symbol = ?",
+                             (rem_qty, datetime.now(), symbol))
+                logger.info("Partial exit in DB: {} remaining {} -> {}", symbol, cur_pos[0], rem_qty)
+            else:
+                conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
             
         logger.debug("Recorded exit: {} x {} @ ${:.2f} (P&L: ${:.2f})", 
                     symbol, quantity, price, pnl)

@@ -344,6 +344,19 @@ class TokenManager:
         except Exception:
             return False
 
+    def invalidate(self):
+        """Invalidates in-memory and disk token immediately"""
+        with self._lock:
+            self._token = None
+            self._expires_at = None
+            try:
+                p = Path(self.TOKEN_FILE)
+                if p.exists():
+                    p.unlink()
+                logger.warning("🔑 KIS access token invalidated from memory and disk.")
+            except Exception as e:
+                logger.debug("Token file unlink error: {}", e)
+
 
 # ==============================================
 # Trader Class
@@ -377,6 +390,22 @@ class Trader:
         
         self._token_mgr = TokenManager(self.app_key, self.app_secret, self.base_url)
         self._exchange_mapper = ExchangeMapper()
+
+    def invalidate_token(self):
+        """Invalidate token to force immediate re-authentication"""
+        self._token_mgr.invalidate()
+
+    def check_token_error(self, data: dict, status_code: int = 200) -> bool:
+        """Checks if response contains token expiry error (EGW00123/EGW00121/401) and invalidates"""
+        if not isinstance(data, dict):
+            data = {}
+        msg_cd = str(data.get("msg_cd", ""))
+        msg1 = str(data.get("msg1", ""))
+        if status_code in (401, 403) or msg_cd in ("EGW00123", "EGW00121", "EGW00201") or "기간이 만료된 token" in msg1 or "유효하지 않은 token" in msg1:
+            logger.warning("🚨 [TOKEN_EXPIRED] In-flight token error detected: {} ({}). Invalidating now!", msg_cd, msg1)
+            self.invalidate_token()
+            return True
+        return False
     
     def start(self):
         """Start trader (token auto-refresh)"""
@@ -473,22 +502,22 @@ class Trader:
                     qty_str = item.get("ovrs_cblc_qty", "0")
                     qty = int(float(qty_str)) if qty_str.strip() else 0
                     
-                    if qty > 0:
-                        symbol = item.get("ovrs_pdno", "")
+                if data.get("rt_cd") == "0":
+                    for item in data.get("output1", []):
+                        sym = item.get("ovrs_pdno", "").strip()
+                        qty = int(item.get("ord_psbl_qty", 0) or item.get("ovrs_cblc_qty", 0) or 0)
                         
-                        if symbol not in positions_dict:
-                            # Use current price if available, otherwise 0
-                            curr_price_str = item.get("now_pric2", "0")
-                            avg_price_str = item.get("pchs_avg_pric", "0")
-                            
-                            positions_dict[symbol] = PositionInfo(
-                                symbol=symbol,
+                        if qty > 0 and sym:
+                            positions_dict[sym] = PositionInfo(
+                                symbol=sym,
                                 quantity=qty,
-                                avg_price=float(avg_price_str) if avg_price_str.strip() else 0.0,
-                                current_price=float(curr_price_str) if curr_price_str.strip() else 0.0,
-                                exchange=self._exchange_mapper.normalize(
-                                    item.get("ovrs_excg_cd", exchange_code[:3]))
+                                avg_price=float(item.get("pchs_avg_pric", 0) or 0),
+                                current_price=float(item.get("now_pric2", 0) or 0),
+                                exchange=exchange_code
                             )
+                elif self.check_token_error(data, resp.status_code):
+                    time.sleep(1)
+                    continue
             except Exception as e:
                 logger.error("Position query failed for {}: {}", exchange_code, e)
                 
@@ -741,6 +770,9 @@ class Trader:
                         
                         return result
                     else:
+                        if self.check_token_error(data, resp.status_code):
+                            time.sleep(1)
+                            continue
                         msg = data.get("msg1", "Error")
                         logger.error("BUY failed on {}: {}", try_exchange, msg)
                         if no_info_error in msg:
@@ -833,6 +865,9 @@ class Trader:
                     
                     return result
                 else:
+                    if self.check_token_error(data, resp.status_code):
+                        time.sleep(1)
+                        continue
                     msg = data.get("msg1", "Error")
                     logger.error("SELL failed: {}", msg)
                     return OrderResult(False, "", symbol, "SELL", quantity, limit_price, msg)

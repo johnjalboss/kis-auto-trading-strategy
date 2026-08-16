@@ -596,13 +596,20 @@ class CompositeSignalEngine:
         return CategoryScore("RISK", max(-100, min(100, score)), self.WEIGHTS['risk'], signals)
     
     def _calculate_rsi(self, close: pd.Series, period: int = 14) -> float:
-        """Calculate RSI"""
+        """Calculate RSI with mathematically correct division handling"""
         delta = close.diff()
-        gain = delta.where(delta > 0, 0).rolling(period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-        rs = gain / loss.replace(0, 1)
-        rsi = 100 - (100 / (1 + rs))
-        return float(rsi.iloc[-1])
+        gain = delta.where(delta > 0, 0.0).rolling(period).mean()
+        loss = (-delta.where(delta < 0, 0.0)).rolling(period).mean()
+        
+        last_gain = float(gain.iloc[-1]) if not pd.isna(gain.iloc[-1]) else 0.0
+        last_loss = float(loss.iloc[-1]) if not pd.isna(loss.iloc[-1]) else 0.0
+        
+        if last_loss == 0.0:
+            return 100.0 if last_gain > 0 else 50.0
+        
+        rs = last_gain / last_loss
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        return float(rsi)
     
     def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
         """Calculate ATR"""
@@ -688,7 +695,7 @@ def get_composite_engine() -> CompositeSignalEngine:
 # Per-symbol result cache: {symbol: (CompositeSignal, timestamp)}
 _signal_result_cache: dict = {}
 _signal_cache_lock = threading.Lock()
-_SIGNAL_CACHE_TTL = 1800  # 30 minutes
+_SIGNAL_CACHE_TTL = 120  # 2 minutes (Ultra-fresh live signal evaluation)
 
 def get_signal(symbol: str) -> CompositeSignal:
     """

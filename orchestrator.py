@@ -1551,6 +1551,16 @@ class BotOrchestrator:
             except Exception as _ev_err:
                 logger.debug("Macro event shield check skipped: {}", _ev_err)
 
+            # [NEW SOTA QUANT MODULE: OPENING SPREAD GUARD (SLIPPAGE DEFENSE)]
+            try:
+                from opening_spread_guard import OpeningSpreadGuard
+                spread_check = OpeningSpreadGuard().check_spread(symbol, trader_instance=self.trader)
+                if not spread_check.get("allowed", True):
+                    logger.warning("🚨 [SPREAD_GUARD_BLOCK] Entry BLOCKED for {}: {}", symbol, spread_check.get("reason"))
+                    return
+            except Exception as _sp_err:
+                logger.debug("Opening spread guard check skipped: {}", _sp_err)
+
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
@@ -1762,12 +1772,18 @@ class BotOrchestrator:
                     self._exec_tracker.record(symbol, price, getattr(order, 'avg_fill_price', price),
                                              getattr(order.order_type, 'value', "LIMIT"))
                 
-                if order.status == OrderStatus.FILLED:
+                # [QUANT UPGRADE: PARTIAL FILL & REAL EXECUTION PRICE ACCOUNTING]
+                fill_qty = getattr(order, 'filled_quantity', 0)
+                if fill_qty <= 0 and order.status == OrderStatus.FILLED:
+                    fill_qty = qty
+                fill_price = getattr(order, 'avg_fill_price', 0.0) or price
+
+                if fill_qty > 0:
                     if action == "BUY":
                         atr = self.strategy.get_current_atr(symbol)
-                        self.strategy.add_position(symbol, price, qty, atr)
+                        self.strategy.add_position(symbol, fill_price, fill_qty, atr)
                         try:
-                            self.db.record_entry(symbol, qty, price, self.state.current_regime)
+                            self.db.record_entry(symbol, fill_qty, fill_price, self.state.current_regime)
                         except Exception as db_err:
                             logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
                             
@@ -1775,7 +1791,7 @@ class BotOrchestrator:
                             from trade_error_notebook import TradeErrorNotebook
                             sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, {})
                             score = getattr(self.strategy, '_last_scores', {}).get(symbol, 80)
-                            TradeErrorNotebook().record_entry_detail(symbol, qty, price, score, sb, self.state.current_regime, reason=reason)
+                            TradeErrorNotebook().record_entry_detail(symbol, fill_qty, fill_price, score, sb, self.state.current_regime, reason=reason)
                         except Exception as nb_err:
                             logger.debug("TradeErrorNotebook entry logging skipped: {}", nb_err)
                         
@@ -1784,22 +1800,22 @@ class BotOrchestrator:
                             bp = self.trader.get_buying_power()
                             actual_positions = self.trader.get_positions()
                             total_portfolio = bp + sum(p.quantity * p.current_price for p in actual_positions)
-                            exposure_pct = (qty * price) / total_portfolio if total_portfolio > 0 else 0
-                            self.rm.add_position(symbol, price, qty, exposure_pct)
+                            exposure_pct = (fill_qty * fill_price) / total_portfolio if total_portfolio > 0 else 0
+                            self.rm.add_position(symbol, fill_price, fill_qty, exposure_pct)
                             logger.info("[QUANT_RISK] Real-time position added to RiskManager: {} (exp={:.1%})", symbol, exposure_pct)
                         except Exception as rm_err:
                             logger.error("[QUANT_RISK] Failed to sync RiskManager for entry: {}", rm_err)
                     else:
                         # Get actual entry price before removing position to calculate PNL correctly
-                        entry_price = price  # fallback
+                        entry_price = fill_price  # fallback
                         if symbol in self.strategy._positions:
                             pos = self.strategy._positions[symbol]
                             entry_price = pos.entry_price
                             
                             # Handle partial sells properly without losing entry tracking
-                            if qty < pos.quantity:
-                                pos.quantity -= qty
-                                logger.info("Partial sell: {} remaining {} -> {}", symbol, pos.quantity + qty, pos.quantity)
+                            if fill_qty < pos.quantity:
+                                pos.quantity -= fill_qty
+                                logger.info("Partial sell: {} remaining {} -> {}", symbol, pos.quantity + fill_qty, pos.quantity)
                             else:
                                 self.strategy.remove_position(symbol)
                                 try:
@@ -1809,21 +1825,21 @@ class BotOrchestrator:
                                     logger.error("[QUANT_RISK] Failed to remove from RiskManager: {}", rm_err)
                         
                         try:
-                            self.db.record_exit(symbol, qty, price, entry_price, reason)
+                            self.db.record_exit(symbol, fill_qty, fill_price, entry_price, reason)
                         except Exception as db_err:
                             logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
                         
                         try:
                             from trade_error_notebook import TradeErrorNotebook
-                            _pnl = (price - entry_price) * qty
-                            _pnl_pct = (_pnl / (entry_price * qty)) if (entry_price * qty) > 0 else 0.0
-                            TradeErrorNotebook().record_exit_detail(symbol, qty, price, _pnl, _pnl_pct, reason)
+                            _pnl = (fill_price - entry_price) * fill_qty
+                            _pnl_pct = (_pnl / (entry_price * fill_qty)) if (entry_price * fill_qty) > 0 else 0.0
+                            TradeErrorNotebook().record_exit_detail(symbol, fill_qty, fill_price, _pnl, _pnl_pct, reason)
                         except Exception as nb_err:
                             logger.debug("TradeErrorNotebook exit logging skipped: {}", nb_err)
                         
                         # [RiskManager Sync] Record realized trade results in RiskManager Daily & Weekly Stats
                         try:
-                            _realized_pnl = (price - entry_price) * qty
+                            _realized_pnl = (fill_price - entry_price) * fill_qty
                             self.rm.record_trade(_realized_pnl, _realized_pnl >= 0)
                             logger.info("[QUANT_RISK] Realized trade recorded in RiskManager: PnL=${:+.2f}", _realized_pnl)
                         except Exception as rm_err:
