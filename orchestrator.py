@@ -550,6 +550,19 @@ class BotOrchestrator:
         except Exception as _apex_orch_err:
             logger.debug("Apex macro sentinel in Phase 2 skipped: {}", _apex_orch_err)
 
+        # 16. Dynamic Empirical Correlation Matrix & Theory Decoupling Validator
+        try:
+            from dynamic_correlation_matrix_validator import get_correlation_validator
+            c_rep = get_correlation_validator().evaluate_matrix()
+            if c_rep:
+                logger.info("  -> dynamic_correlation_matrix_validator.py: Matrix active (HYG rho={:+.2f}, EEM rho={:+.2f}, CPER rho={:+.2f}, GLD rho={:+.2f})",
+                            c_rep.correlations_with_spy.get('HYG', 0.0),
+                            c_rep.correlations_with_spy.get('EEM', 0.0),
+                            c_rep.correlations_with_spy.get('CPER', 0.0),
+                            c_rep.correlations_with_spy.get('GLD', 0.0))
+        except Exception as _corr_orch_err:
+            logger.debug("Correlation validator in Phase 2 skipped: {}", _corr_orch_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

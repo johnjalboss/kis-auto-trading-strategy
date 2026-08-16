@@ -66,6 +66,21 @@ class ApexMacroIntelligenceSentinel:
         alerts = []
         score_adj = 0
 
+        # Fetch empirical multipliers
+        cper_mult = 1.0
+        gld_fear_mult = 1.0
+        hyg_mult = 1.0
+        tlt_mult = 1.0
+        try:
+            from dynamic_correlation_matrix_validator import get_correlation_validator
+            c_val = get_correlation_validator()
+            cper_mult = c_val.get_factor_multiplier('CPER_FACTOR_WEIGHT')
+            gld_fear_mult = c_val.get_factor_multiplier('GLD_FEAR_WEIGHT')
+            hyg_mult = c_val.get_factor_multiplier('HYG_FACTOR_WEIGHT')
+            tlt_mult = c_val.get_factor_multiplier('TLT_FACTOR_WEIGHT')
+        except Exception:
+            pass
+
         # 1. Dr. Copper / Gold Real Growth Ratio (CPER / GLD)
         cg_ratio = 0.16
         cg_trend = "NEUTRAL"
@@ -81,11 +96,11 @@ class ApexMacroIntelligenceSentinel:
 
                 if cg_5d_ret > 1.5:
                     cg_trend = "GROWTH_EXPANSION"
-                    score_adj += 5
+                    score_adj += int(5 * cper_mult)
                     alerts.append(f"🏗️ [DR_COPPER_GROWTH] Copper/Gold ratio rising (+{cg_5d_ret:.1f}% 5d). Real economic & capex demand strong.")
                 elif cg_5d_ret < -2.0:
                     cg_trend = "FEAR_CONTRACTION"
-                    score_adj -= 10
+                    score_adj -= int(10 * gld_fear_mult)
                     alerts.append(f"⚠️ [STAGFLATION_FEAR] Gold outperforming Copper ({cg_5d_ret:.1f}% 5d). Defensive safe-haven rotation.")
             except Exception:
                 pass
@@ -105,11 +120,11 @@ class ApexMacroIntelligenceSentinel:
 
                 if credit_5d_ret > 0.8:
                     credit_trend = "RISK_SEEKING"
-                    score_adj += 5
+                    score_adj += int(5 * hyg_mult)
                     alerts.append("💳 [CREDIT_RISK_ON] Junk bonds outperforming IG bonds. Corporate credit appetite high.")
                 elif credit_5d_ret < -1.2:
                     credit_trend = "CREDIT_FLIGHT_TO_QUALITY"
-                    score_adj -= 10
+                    score_adj -= int(10 * hyg_mult)
                     alerts.append("🚨 [CREDIT_STRESS] High Yield spreads widening vs Investment Grade. Credit risk-off.")
             except Exception:
                 pass
