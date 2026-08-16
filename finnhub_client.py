@@ -250,6 +250,27 @@ class FinnhubClient:
         self._set_cached("stock/earnings", symbol, data)
         return data
 
+    def get_earnings_calendar(self, symbol: str, days_ahead: int = 14) -> list:
+        """Fetch upcoming earnings calendar for symbol"""
+        symbol = symbol.upper()
+        cached = self._get_cached("calendar/earnings", symbol)
+        if cached is not None:
+            return cached
+
+        from_date = datetime.now().strftime("%Y-%m-%d")
+        to_date = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+        params = {
+            "symbol": symbol,
+            "from": from_date,
+            "to": to_date
+        }
+        res = self._request("calendar/earnings", params)
+        data = []
+        if res and isinstance(res, dict):
+            data = res.get("earningsCalendar", [])
+        self._set_cached("calendar/earnings", symbol, data)
+        return data
+
     def get_basic_financials(self, symbol: str) -> Optional[dict]:
         """Fetch basic financials (metrics) for a symbol"""
         symbol = symbol.upper()

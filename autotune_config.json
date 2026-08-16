@@ -1,0 +1,9 @@
+{
+  "MIN_ENTRY_SCORE": 80,
+  "STOP_LOSS_PCT": 0.045,
+  "TAKE_PROFIT_PCT": 0.09,
+  "MAX_POSITION_PCT": 0.2,
+  "RVOL_MIN": 1.5,
+  "TUNED_AT": "2026-08-14 22:51:11",
+  "REASON": "Baseline Optimization"
+}

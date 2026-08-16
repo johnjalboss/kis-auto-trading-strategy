@@ -618,5 +618,36 @@
       "fiftyTwoWeekLow": 35.8,
       "sector": ""
     }
+  },
+  "SPY": {
+    "timestamp": 1786724069.7305694,
+    "data": {
+      "symbol": "SPY",
+      "regularMarketPrice": 776.495,
+      "previousClose": 777.88,
+      "averageVolume": 45580379.8,
+      "volume": 6435195,
+      "marketCap": 707863298294.0,
+      "shortPercentOfFloat": 0.0,
+      "institutionPercentHeld": 0.0,
+      "insidersPercentHeld": 0.0,
+      "earningsGrowth": 0.033569374933446916,
+      "revenueGrowth": 0.02014162496006815,
+      "trailingPE": 0.0,
+      "forwardPE": 0.0,
+      "pegRatio": 0.0,
+      "priceToBook": 0.0,
+      "priceToSalesTrailing12Months": 0.0,
+      "trailingEps": 0.0,
+      "profitMargins": 0.0,
+      "returnOnEquity": 0.0,
+      "debtToEquity": 0.0,
+      "currentRatio": 0.0,
+      "freeCashflow": 0.0,
+      "beta": 0.7820752825880591,
+      "fiftyTwoWeekHigh": 776.85,
+      "fiftyTwoWeekLow": 629.28,
+      "sector": ""
+    }
   }
 }

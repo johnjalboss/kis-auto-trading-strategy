@@ -85,40 +85,40 @@ class GeminiNewsSentinel:
             if self.api_key and (now - _LAST_GEMINI_CALL >= 4.0):
                 try:
                     import google.generativeai as genai
-                    model = None
-                    for m_name in ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-2.0-flash-lite"]:
-                        try:
-                            model = genai.GenerativeModel(m_name)
-                            break
-                        except Exception:
-                            continue
-                    if model is None:
-                        model = genai.GenerativeModel("gemini-1.5-flash")
-                    
                     prompt = f"Analyze market sentiment for stock {symbol} from headlines: {combined_text}. Respond ONLY with a single integer score from -100 (extreme negative/disaster) to +100 (extreme positive/catalyst)."
                     
-                    _LAST_GEMINI_CALL = time.time()
-                    response = model.generate_content(prompt)
-                    score_str = response.text.strip()
+                    response = None
+                    for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                        try:
+                            m = genai.GenerativeModel(m_name)
+                            response = m.generate_content(prompt)
+                            if response and hasattr(response, 'text') and response.text:
+                                break
+                        except Exception:
+                            continue
                     
-                    # Extract numeric integer score
-                    import re
-                    match = re.search(r'(-?\d+)', score_str)
-                    if match:
-                        sent_score = int(match.group(1))
-                        sent_score = max(-100, min(100, sent_score))
-                        res['sentiment_score'] = sent_score
+                    if response and hasattr(response, 'text') and response.text:
+                        _LAST_GEMINI_CALL = time.time()
+                        score_str = response.text.strip()
                         
-                        if sent_score >= 50:
-                            res['score_adj'] = 15
-                            res['reason'] = f"GEMINI_AI_BULLISH_NEWS (+{sent_score})"
-                        elif sent_score <= -50:
-                            res['score_adj'] = -25
-                            res['reason'] = f"GEMINI_AI_BEARISH_NEWS ({sent_score})"
-                        else:
-                            res['reason'] = f"GEMINI_AI_NEUTRAL_NEWS ({sent_score})"
+                        # Extract numeric integer score
+                        import re
+                        match = re.search(r'(-?\d+)', score_str)
+                        if match:
+                            sent_score = int(match.group(1))
+                            sent_score = max(-100, min(100, sent_score))
+                            res['sentiment_score'] = sent_score
                             
-                        logger.info("🤖 [GEMINI_AI_NEWS] Symbol {} Sentiment Score: {} -> Adj: {:+d} pts", symbol, sent_score, res['score_adj'])
+                            if sent_score >= 50:
+                                res['score_adj'] = 15
+                                res['reason'] = f"GEMINI_AI_BULLISH_NEWS (+{sent_score})"
+                            elif sent_score <= -50:
+                                res['score_adj'] = -25
+                                res['reason'] = f"GEMINI_AI_BEARISH_NEWS ({sent_score})"
+                            else:
+                                res['reason'] = f"GEMINI_AI_NEUTRAL_NEWS ({sent_score})"
+                                
+                            logger.info("🤖 [GEMINI_AI_NEWS] Symbol {} Sentiment Score: {} -> Adj: {:+d} pts", symbol, sent_score, res['score_adj'])
                 except Exception as ai_err:
                     logger.debug("Gemini AI API call skipped/throttled: {}", ai_err)
 

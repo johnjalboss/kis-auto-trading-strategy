@@ -1,12 +1,29 @@
 import sqlite3
-import pandas as pd
 
-if __name__ == "__main__":
-    conn = sqlite3.connect("trades.db")
-    df = pd.read_sql_query("SELECT * FROM trades", conn)
+conn = sqlite3.connect("trades.db")
+cur = conn.cursor()
 
-    print("SQQQ Trades:")
-    print(df[df['symbol'] == 'SQQQ'].tail(5))
+print("=== TABLES ===")
+for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+    print(r)
 
-    print("\nTQQQ Trades:")
-    print(df[df['symbol'] == 'TQQQ'].tail(5))
+print("\n=== DAILY REPORTS LOCK TABLE ===")
+try:
+    for row in cur.execute("SELECT * FROM daily_reports ORDER BY id DESC LIMIT 15"):
+        print(row)
+except Exception as e:
+    print("daily_reports err:", e)
+
+print("\n=== RECENT TRADES ===")
+try:
+    for row in cur.execute("SELECT id, symbol, side, quantity, price, pnl, created_at FROM trades ORDER BY id DESC LIMIT 10"):
+        print(row)
+except Exception as e:
+    print("trades err:", e)
+
+print("\n=== POSITIONS ===")
+try:
+    for row in cur.execute("SELECT symbol, quantity, entry_price, current_price, pnl_pct FROM positions"):
+        print(row)
+except Exception as e:
+    print("positions err:", e)
