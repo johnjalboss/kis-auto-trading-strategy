@@ -497,15 +497,19 @@ class BotOrchestrator:
                     logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
             
         # 11. Macro Event Horizon & Earnings D-Day Shield
+        # 12. Global Macro & Cross-Border Capital Flow Sentinel (Japan/Europe/China/EM)
         try:
-            from macro_event_horizon import MacroEventHorizon
-            meh = MacroEventHorizon(holdings=list(self.strategy.get_all_positions().keys()))
-            meh_mult, meh_msg = meh.evaluate_risk_multiplier()
-            if meh_mult < 1.0:
-                self.state.max_exposure_pct = min(self.state.max_exposure_pct, meh_mult)
-                logger.warning("🔮 [MACRO_EVENT_HORIZON] Exposure throttled to {:.0%}: {}", meh_mult, meh_msg)
-        except Exception as meh_err:
-            logger.debug("Macro event horizon error: {}", meh_err)
+            from global_macro import get_global_macro_signal
+            gms = get_global_macro_signal()
+            if gms:
+                if gms.overall_risk == "RISK_OFF":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.40)
+                    logger.warning("🚨 [GLOBAL_MACRO_SENTINEL] Global Risk-Off! Alerts: {}", gms.active_alerts)
+                elif gms.overall_risk == "CAUTION":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.70)
+                logger.info("  -> global_macro.py: Global Risk={}, US Relative Flow={:.3f}", gms.overall_risk, gms.us_outperformance_ratio)
+        except Exception as _gms_err:
+            logger.debug("Global macro sentinel in Phase 2 skipped: {}", _gms_err)
 
         self.state.last_macro_refresh = datetime.now()
 

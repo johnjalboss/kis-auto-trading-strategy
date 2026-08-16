@@ -1393,6 +1393,23 @@ class StrategyEngine:
         except Exception as _pbb_err:
             logger.debug("PortfolioBetaBalancer skipped for {}: {}", symbol, _pbb_err)
 
+        # Global Macro & Intermarket Flow Sentinel (Japan Yen Carry / Europe / China / US Inflow)
+        try:
+            from global_macro import get_global_macro_signal
+            gms = get_global_macro_signal()
+            if gms:
+                if gms.overall_risk == "RISK_ON":
+                    score += 5
+                    breakdown.append(f"• 글로벌 인터마켓 유동성: +5점 (글로벌 자금 미국 증시 유입)")
+                elif gms.overall_risk == "RISK_OFF":
+                    score -= 20
+                    breakdown.append(f"• 글로벌 매크로 리스크오프: -20점 ({', '.join(gms.active_alerts)})")
+                elif gms.overall_risk == "CAUTION":
+                    score -= 10
+                    breakdown.append(f"• 글로벌 매크로 경계 국면: -10점")
+        except Exception as _gms_err:
+            logger.debug("GlobalMacroSignal skipped for {}: {}", symbol, _gms_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
