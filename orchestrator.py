@@ -537,6 +537,19 @@ class BotOrchestrator:
         except Exception as _elec_err:
             logger.debug("US Election sentinel in Phase 2 skipped: {}", _elec_err)
 
+        # 15. Apex Macro Intelligence Sentinel (Copper/Gold, Credit Quality, Banking Health, Bond Vol)
+        try:
+            from apex_macro_intelligence_sentinel import get_apex_macro_intelligence_signal
+            apex_sig = get_apex_macro_intelligence_signal()
+            if apex_sig:
+                if apex_sig.banking_stress or apex_sig.risk_parity_deleveraging_risk:
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.50)
+                    logger.warning("🚨 [APEX_MACRO_DEFENSE] Banking stress or Risk-Parity deleveraging alert! Exposure capped at 50%")
+                logger.info("  -> apex_macro_intelligence_sentinel.py: Copper/Gold={}, Credit={}, BankingStress={}, BondVol={:.1f}%",
+                            apex_sig.copper_gold_trend, apex_sig.credit_appetite_trend, apex_sig.banking_stress, apex_sig.bond_volatility_pct)
+        except Exception as _apex_orch_err:
+            logger.debug("Apex macro sentinel in Phase 2 skipped: {}", _apex_orch_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

@@ -1451,6 +1451,16 @@ class StrategyEngine:
         except Exception as _moc_err:
             logger.debug("MOCImbalanceRadar skipped for {}: {}", symbol, _moc_err)
 
+        # Apex Macro Intelligence Sentinel (Dr. Copper/Gold, Credit Appetite, Banking Health, Bond Vol)
+        try:
+            from apex_macro_intelligence_sentinel import get_apex_macro_intelligence_signal
+            apex_sig = get_apex_macro_intelligence_signal()
+            if apex_sig and apex_sig.score_adjustment != 0:
+                score += apex_sig.score_adjustment
+                breakdown.append(f"• Apex 거시경제 지능 지수: {apex_sig.score_adjustment:+d}점 ({apex_sig.summary})")
+        except Exception as _apex_err:
+            logger.debug("ApexMacroIntelligenceSentinel skipped for {}: {}", symbol, _apex_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
