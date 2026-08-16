@@ -590,6 +590,16 @@ class BotOrchestrator:
         except Exception as _cta_orch_err:
             logger.debug("CTA sentinel in Phase 2 skipped: {}", _cta_orch_err)
 
+        # 19. Monthly OpEx & Quadruple Witching Gamma Pin Sentinel
+        try:
+            from opex_gamma_pin_sentinel import get_opex_sentinel
+            op_sig = get_opex_sentinel().evaluate_cycle()
+            if op_sig:
+                logger.info("  -> opex_gamma_pin_sentinel.py: Phase={}, DaysToOpEx={}, QuadWitching={}",
+                            op_sig.opex_phase, op_sig.days_to_third_friday, op_sig.is_quadruple_witching)
+        except Exception as _op_orch_err:
+            logger.debug("OpEx sentinel in Phase 2 skipped: {}", _op_orch_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

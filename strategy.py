@@ -1506,6 +1506,26 @@ class StrategyEngine:
         except Exception as _dil_sc_err:
             logger.debug("Dilution score calculation skipped for {}: {}", symbol, _dil_sc_err)
 
+        # Monthly OpEx & Quadruple Witching Gamma Pin Cycle
+        try:
+            from opex_gamma_pin_sentinel import get_opex_sentinel
+            op_sig = get_opex_sentinel().evaluate_cycle()
+            if op_sig and op_sig.score_adj != 0:
+                score += op_sig.score_adj
+                breakdown.append(f"• 옵션 만기/감마 핀 주기: {op_sig.score_adj:+d}점 ({op_sig.opex_phase})")
+        except Exception as _op_err:
+            logger.debug("OpEx Sentinel skipped: {}", _op_err)
+
+        # PEAD Earnings Surprise & Estimate Revision Drift
+        try:
+            from pead_earnings_radar import PEADEarningsRadar
+            pead_active, pead_surp = PEADEarningsRadar().check_pead_breakout(symbol)
+            if pead_active and pead_surp > 0:
+                score += 15
+                breakdown.append(f"• PEAD 실적 서프라이즈 드리프트: +15점 (어닝 서프라이즈 +{pead_surp:.1f}%)")
+        except Exception as _pead_err:
+            logger.debug("PEAD radar skipped for {}: {}", symbol, _pead_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
