@@ -104,16 +104,19 @@ class WeeklyAIReportGenerator:
                     avg_p = float(p["avg_price"])
                     stop_p = float(p["stop_price"] or 0.0)
 
-                    # Fetch live / latest price
+                    # Fetch live / latest market close price robustly
                     curr_p = avg_p
                     try:
                         import yfinance as yf
-                        t = yf.Ticker(sym)
-                        fast_p = t.fast_info.get("last_price", 0.0)
-                        if fast_p and fast_p > 0:
-                            curr_p = float(fast_p)
-                    except Exception:
-                        pass
+                        df_hist = yf.download(sym, period="5d", progress=False)
+                        if df_hist is not None and not df_hist.empty:
+                            close_val = df_hist['Close'].iloc[-1]
+                            curr_p = float(close_val.item() if hasattr(close_val, 'item') else close_val)
+                    except Exception as he:
+                        logger.debug("Failed hist price for {}: {}", sym, he)
+
+                    if stop_p <= 0 and avg_p > 0:
+                        stop_p = round(avg_p * 0.955, 2)
 
                     diff_pct = ((curr_p - avg_p) / avg_p) * 100.0 if avg_p > 0 else 0.0
                     diff_usd = (curr_p - avg_p) * qty
@@ -147,16 +150,30 @@ class WeeklyAIReportGenerator:
         best_str = f"{stats['best_trade']['symbol']} ({stats['best_trade']['pnl_pct']:+.1%}, ${stats['best_trade']['pnl']:+.2f})" if stats["best_trade"] else "해당 없음 (전량 홀딩 중)"
         worst_str = f"{stats['worst_trade']['symbol']} ({stats['worst_trade']['pnl_pct']:+.1%}, ${stats['worst_trade']['pnl']:+.2f})" if stats["worst_trade"] else "해당 없음 (손절 0건)"
         
-        pos_lines = []
+        name_map = {
+            "MDT": "메드트로닉",
+            "STRC": "사라토가",
+            "VTOL": "브리스토우",
+            "MRK": "머크"
+        }
+
+        pos_blocks = []
         for p in stats["current_positions"]:
             pos_sign = "+" if p["pnl_pct"] >= 0 else ""
             pos_emoji = "🟢" if p["pnl_pct"] >= 0 else "🔴"
-            stop_str = f" | 스탑 ${p['stop']:.2f}" if p['stop'] > 0 else ""
-            pos_lines.append(
-                f"  • {pos_emoji} <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} ➔ <b>${p['curr']:.2f}</b> "
-                f"(<b>{pos_sign}{p['pnl_pct']:.2f}%</b>, {pos_sign}${p['pnl_usd']:.2f}{stop_str})"
+            sym_name = name_map.get(p["symbol"], "")
+            name_label = f" ({sym_name})" if sym_name else ""
+            stop_pct = ((p["stop"] - p["entry"]) / p["entry"]) * 100.0 if p["entry"] > 0 else -4.5
+
+            block = (
+                f"{pos_emoji} <b>{p['symbol']}{name_label}</b> | <code>{p['qty']}주</code>\n"
+                f"  • 매수가: <code>${p['entry']:.2f}</code> ➔ 현재가: <b>${p['curr']:.2f}</b>\n"
+                f"  • 수익률: <b>{pos_sign}{p['pnl_pct']:.2f}%</b> ({pos_sign}${p['pnl_usd']:.2f} USD)\n"
+                f"  • 안전선: 스탑 <code>${p['stop']:.2f}</code> ({stop_pct:+.1f}%)"
             )
-        pos_str = "\n".join(pos_lines) if pos_lines else "  • 현재 보유 포지션 없음 (100% 현금 대기)"
+            pos_blocks.append(block)
+
+        pos_str = "\n\n".join(pos_blocks) if pos_blocks else "  • 현재 보유 포지션 없음 (100% 현금 대기)"
 
         # 2. Try Gemini AI commentary
         ai_commentary = ""
