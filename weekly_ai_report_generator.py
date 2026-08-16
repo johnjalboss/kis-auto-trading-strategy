@@ -199,6 +199,50 @@ class WeeklyAIReportGenerator:
         )
         return report_html
 
+    def send_weekly_report(self) -> bool:
+        """Generates and sends the weekly AI report directly to Telegram."""
+        try:
+            report_text = self.generate_report()
+            token = getattr(config, 'TELEGRAM_BOT_TOKEN', '')
+            chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
+            
+            if not token or not chat_id:
+                env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+                if os.path.exists(env_file):
+                    from dotenv import load_dotenv
+                    load_dotenv(env_file)
+                    token = os.getenv("TELEGRAM_BOT_TOKEN", token)
+                    chat_id = os.getenv("TELEGRAM_CHAT_ID", chat_id)
+
+            if not token or not chat_id:
+                logger.warning("Telegram credentials missing. Weekly report cannot be sent.")
+                return False
+
+            import requests
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": report_text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.ok:
+                logger.success("Weekly AI report successfully sent to Telegram!")
+                return True
+            else:
+                import re
+                clean_text = re.sub(r'<[^>]+>', '', report_text)
+                payload["text"] = clean_text
+                payload.pop("parse_mode", None)
+                requests.post(url, json=payload, timeout=10)
+                logger.info("Weekly AI report sent to Telegram via plain text fallback.")
+                return True
+        except Exception as e:
+            logger.error("Failed to send weekly report to Telegram: {}", e)
+            return False
+
 if __name__ == "__main__":
     rep = WeeklyAIReportGenerator()
-    print(rep.generate_report())
+    rep.send_weekly_report()
+
