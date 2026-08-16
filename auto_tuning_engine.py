@@ -151,7 +151,83 @@ class AutoTuningEngine:
             
         return tuned_params
 
+    def format_telegram_card(self) -> str:
+        """Formats the Auto-Tuning results as a beautiful Telegram HTML Card."""
+        metrics = self.analyze_performance(lookback_days=30)
+        tuned = self.run_autotune()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        card = (
+            f"⚙️ <b>[주간 AI 파라미터 자가 튜닝 리포트]</b>\n"
+            f"<i>{now_str} (Autonomous Self-Optimization Engine)</i>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>최근 30일 매매 분석</b>:\n"
+            f"  • 전적: {metrics.get('total_trades', 0)}전 {metrics.get('wins', 0)}승 {metrics.get('losses', 0)}패\n"
+            f"  • 승률: <b>{metrics.get('win_rate', 0.0):.1f}%</b> | Profit Factor: <b>{metrics.get('profit_factor', 1.0):.2f}</b>\n\n"
+            f"💎 <b>다음 주 자동 적용 퀀트 파라미터</b>:\n"
+            f"  • 🎯 <b>진입 최저 점수 (Min Score)</b>: <code>{tuned.get('MIN_ENTRY_SCORE', 80)}점</code>\n"
+            f"  • 🛡️ <b>손절선 기준폭 (Stop Loss)</b>: <code>{tuned.get('STOP_LOSS_PCT', 0.045)*100:.1f}%</code>\n"
+            f"  • 📈 <b>트레일링 익절폭 (Take Profit)</b>: <code>{tuned.get('TAKE_PROFIT_PCT', 0.090)*100:.1f}%</code>\n"
+            f"  • 💼 <b>종목당 최대 비중 (Max Size)</b>: <code>{tuned.get('MAX_POSITION_PCT', 0.20)*100:.0f}%</code>\n"
+            f"  • ⚡ <b>수급 폭발 필터 (Min RVOL)</b>: <code>{tuned.get('RVOL_MIN', 1.5):.1f}배</code>\n\n"
+            f"🤖 <b>[AI 튜닝 판정 사유]</b>:\n"
+            f"<i>\"{tuned.get('REASON', 'Baseline Optimization')}\"</i>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"💡 <i>다음 주 장 시작 시 모든 전략 모듈에 실시간 자동 반영됩니다.</i>"
+        )
+        return card
+
+    def send_tuning_report_to_telegram(self) -> bool:
+        """Sends the tuning report directly to Telegram."""
+        try:
+            card_text = self.format_telegram_card()
+            
+            token = ""
+            chat_id = ""
+            env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+            if os.path.exists(env_file):
+                from dotenv import load_dotenv
+                load_dotenv(env_file)
+                token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+                chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+
+            if not token or not chat_id:
+                try:
+                    import config
+                    token = getattr(config, 'TELEGRAM_BOT_TOKEN', '')
+                    chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
+                except Exception:
+                    pass
+
+            if not token or not chat_id:
+                logger.warning("Telegram credentials missing. Tuning report cannot be sent.")
+                return False
+
+            import requests
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": card_text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.ok:
+                logger.success("Auto-Tuning report successfully sent to Telegram!")
+                return True
+            else:
+                import re
+                clean_text = re.sub(r'<[^>]+>', '', card_text)
+                payload["text"] = clean_text
+                payload.pop("parse_mode", None)
+                requests.post(url, json=payload, timeout=10)
+                logger.info("Auto-Tuning report sent via plain text fallback.")
+                return True
+        except Exception as e:
+            logger.error("Failed to send tuning report to Telegram: {}", e)
+            return False
+
 if __name__ == "__main__":
     tuner = AutoTuningEngine()
-    res = tuner.run_autotune()
-    print("AutoTuning Result:", json.dumps(res, indent=2, ensure_ascii=False))
+    tuner.send_tuning_report_to_telegram()
+

@@ -99,11 +99,33 @@ class WeeklyAIReportGenerator:
                 cursor.execute("SELECT symbol, quantity, avg_price, stop_price FROM positions WHERE quantity > 0")
                 pos_rows = cursor.fetchall()
                 for p in pos_rows:
+                    sym = p["symbol"]
+                    qty = int(p["quantity"])
+                    avg_p = float(p["avg_price"])
+                    stop_p = float(p["stop_price"] or 0.0)
+
+                    # Fetch live / latest price
+                    curr_p = avg_p
+                    try:
+                        import yfinance as yf
+                        t = yf.Ticker(sym)
+                        fast_p = t.fast_info.get("last_price", 0.0)
+                        if fast_p and fast_p > 0:
+                            curr_p = float(fast_p)
+                    except Exception:
+                        pass
+
+                    diff_pct = ((curr_p - avg_p) / avg_p) * 100.0 if avg_p > 0 else 0.0
+                    diff_usd = (curr_p - avg_p) * qty
+
                     stats["current_positions"].append({
-                        "symbol": p["symbol"],
-                        "qty": int(p["quantity"]),
-                        "entry": float(p["avg_price"]),
-                        "stop": float(p["stop_price"] or 0.0)
+                        "symbol": sym,
+                        "qty": qty,
+                        "entry": avg_p,
+                        "curr": curr_p,
+                        "pnl_pct": diff_pct,
+                        "pnl_usd": diff_usd,
+                        "stop": stop_p
                     })
             except Exception as pe:
                 logger.debug("Failed to query positions: {}", pe)
@@ -127,7 +149,13 @@ class WeeklyAIReportGenerator:
         
         pos_lines = []
         for p in stats["current_positions"]:
-            pos_lines.append(f"  • <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} (스탑 ${p['stop']:.2f})")
+            pos_sign = "+" if p["pnl_pct"] >= 0 else ""
+            pos_emoji = "🟢" if p["pnl_pct"] >= 0 else "🔴"
+            stop_str = f" | 스탑 ${p['stop']:.2f}" if p['stop'] > 0 else ""
+            pos_lines.append(
+                f"  • {pos_emoji} <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} ➔ <b>${p['curr']:.2f}</b> "
+                f"(<b>{pos_sign}{p['pnl_pct']:.2f}%</b>, {pos_sign}${p['pnl_usd']:.2f}{stop_str})"
+            )
         pos_str = "\n".join(pos_lines) if pos_lines else "  • 현재 보유 포지션 없음 (100% 현금 대기)"
 
         # 2. Try Gemini AI commentary
