@@ -563,6 +563,19 @@ class BotOrchestrator:
         except Exception as _corr_orch_err:
             logger.debug("Correlation validator in Phase 2 skipped: {}", _corr_orch_err)
 
+        # 17. Omni Institutional Alpha Suite (VIX Term Structure Contango/Backwardation)
+        try:
+            from omni_institutional_alpha_suite import get_omni_alpha_suite
+            omni_sig = get_omni_alpha_suite().evaluate_volatility_and_yield_regime()
+            if omni_sig:
+                if omni_sig.volatility_regime == "BACKWARDATION_PANIC":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.40)
+                    logger.warning("🚨 [VIX_BACKWARDATION_DEFENSE] Options curve inverted! Maximum portfolio exposure capped at 40%")
+                logger.info("  -> omni_institutional_alpha_suite.py: VIX Term={}, Ratio={:.3f}, Spot={:.2f}, 10Y Yield={:.2f}%",
+                            omni_sig.volatility_regime, omni_sig.vix_term_ratio, omni_sig.vix_spot, omni_sig.yield_10y)
+        except Exception as _omni_orch_err:
+            logger.debug("Omni alpha suite in Phase 2 skipped: {}", _omni_orch_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)

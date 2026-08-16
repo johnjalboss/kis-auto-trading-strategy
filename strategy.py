@@ -1461,6 +1461,22 @@ class StrategyEngine:
         except Exception as _apex_err:
             logger.debug("ApexMacroIntelligenceSentinel skipped for {}: {}", symbol, _apex_err)
 
+        # Omni Institutional Alpha Suite (VIX Term Structure & 12M-1M Academic Momentum)
+        try:
+            from omni_institutional_alpha_suite import get_omni_alpha_suite
+            omni_suite = get_omni_alpha_suite()
+            omni_vix = omni_suite.evaluate_volatility_and_yield_regime()
+            if omni_vix and omni_vix.vix_score_adj != 0:
+                score += omni_vix.vix_score_adj
+                breakdown.append(f"• VIX 기간구조 콘탱고/백워데이션: {omni_vix.vix_score_adj:+d}점 ({omni_vix.volatility_regime})")
+
+            omni_mom = omni_suite.calculate_12m_1m_momentum(symbol, df)
+            if omni_mom and omni_mom.get('score_bonus', 0) != 0:
+                score += omni_mom.get('score_bonus', 0)
+                breakdown.append(f"• 학술 12M-1M 크로스섹셔널 모멘텀: {omni_mom.get('score_bonus', 0):+d}점 ({omni_mom.get('reason')})")
+        except Exception as _omni_err:
+            logger.debug("OmniInstitutionalAlphaSuite skipped for {}: {}", symbol, _omni_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)
