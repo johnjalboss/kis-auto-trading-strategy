@@ -106,17 +106,41 @@ class WeeklyAIReportGenerator:
 
                     # Fetch live / latest market close price robustly
                     curr_p = avg_p
+                    atr = 0.0
                     try:
                         import yfinance as yf
-                        df_hist = yf.download(sym, period="5d", progress=False)
+                        import pandas as pd
+                        df_hist = yf.download(sym, period="60d", progress=False)
                         if df_hist is not None and not df_hist.empty:
+                            if isinstance(df_hist.columns, pd.MultiIndex):
+                                df_hist.columns = df_hist.columns.get_level_values(0)
                             close_val = df_hist['Close'].iloc[-1]
                             curr_p = float(close_val.item() if hasattr(close_val, 'item') else close_val)
-                    except Exception as he:
-                        logger.debug("Failed hist price for {}: {}", sym, he)
 
-                    if stop_p <= 0 and avg_p > 0:
-                        stop_p = round(avg_p * 0.955, 2)
+                            # Calculate true ATR(14)
+                            high = df_hist['High']
+                            low = df_hist['Low']
+                            close = df_hist['Close']
+                            tr1 = high - low
+                            tr2 = (high - close.shift(1)).abs()
+                            tr3 = (low - close.shift(1)).abs()
+                            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                            atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
+                    except Exception as he:
+                        logger.debug("Failed hist price/ATR for {}: {}", sym, he)
+
+                    # Dynamic ATR Stop & Take-Profit Targets
+                    if atr > 0:
+                        dynamic_stop = round(avg_p - (2.0 * atr), 2)
+                        risk = max(1.0, avg_p - dynamic_stop)
+                        tp_target1 = round(avg_p + (1.5 * risk), 2)
+                        tp_target2 = round(avg_p + (2.5 * risk), 2)
+                    else:
+                        dynamic_stop = round(avg_p * 0.955, 2)
+                        tp_target1 = round(avg_p * 1.075, 2)
+                        tp_target2 = round(avg_p * 1.120, 2)
+
+                    final_stop = stop_p if (stop_p and stop_p > 0) else dynamic_stop
 
                     diff_pct = ((curr_p - avg_p) / avg_p) * 100.0 if avg_p > 0 else 0.0
                     diff_usd = (curr_p - avg_p) * qty
@@ -128,7 +152,9 @@ class WeeklyAIReportGenerator:
                         "curr": curr_p,
                         "pnl_pct": diff_pct,
                         "pnl_usd": diff_usd,
-                        "stop": stop_p
+                        "stop": final_stop,
+                        "tp1": tp_target1,
+                        "tp2": tp_target2
                     })
             except Exception as pe:
                 logger.debug("Failed to query positions: {}", pe)
@@ -164,12 +190,15 @@ class WeeklyAIReportGenerator:
             sym_name = name_map.get(p["symbol"], "")
             name_label = f" ({sym_name})" if sym_name else ""
             stop_pct = ((p["stop"] - p["entry"]) / p["entry"]) * 100.0 if p["entry"] > 0 else -4.5
+            tp1_pct = ((p["tp1"] - p["entry"]) / p["entry"]) * 100.0 if p["entry"] > 0 else 7.5
+            tp2_pct = ((p["tp2"] - p["entry"]) / p["entry"]) * 100.0 if p["entry"] > 0 else 12.0
 
             block = (
                 f"{pos_emoji} <b>{p['symbol']}{name_label}</b> | <code>{p['qty']}주</code>\n"
                 f"  • 매수가: <code>${p['entry']:.2f}</code> ➔ 현재가: <b>${p['curr']:.2f}</b>\n"
                 f"  • 수익률: <b>{pos_sign}{p['pnl_pct']:.2f}%</b> ({pos_sign}${p['pnl_usd']:.2f} USD)\n"
-                f"  • 안전선: 스탑 <code>${p['stop']:.2f}</code> ({stop_pct:+.1f}%)"
+                f"  • 🛡️ <b>안전 스탑선</b>: <code>${p['stop']:.2f}</code> ({stop_pct:+.1f}%)\n"
+                f"  • 🎯 <b>예상 익절선</b>: 1차 <code>${p['tp1']:.2f}</code> (+{tp1_pct:.1f}%) | 2차 <code>${p['tp2']:.2f}</code> (+{tp2_pct:.1f}%)"
             )
             pos_blocks.append(block)
 
