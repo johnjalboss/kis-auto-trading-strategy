@@ -411,15 +411,24 @@ def get_macro_analyzer() -> MacroAnalyzer:
     return _analyzer
 
 
+def get_macro_data():
+    """Convenience wrapper: returns full MacroState object"""
+    try:
+        analyzer = get_macro_analyzer()
+        return analyzer.analyze()
+    except Exception as e:
+        logger.error("get_macro_data failed: {}", e)
+        return None
+
 def get_macro_score() -> float:
     """Convenience wrapper: returns just the numeric score (-100 to +100)"""
     try:
         analyzer = get_macro_analyzer()
         result = analyzer.analyze()
-        return result.score
+        return result.score if result else 0.0
     except Exception as e:
         logger.error("get_macro_score failed: {}", e)
-        return 0
+        return 0.0
 
 
 if __name__ == "__main__":
