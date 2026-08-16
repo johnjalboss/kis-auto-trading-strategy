@@ -1420,6 +1420,17 @@ class StrategyEngine:
         except Exception as _liq_err:
             logger.debug("InstitutionalLiquidityEngine skipped for {}: {}", symbol, _liq_err)
 
+        # US Election & Political Policy Uncertainty Sentinel (EPU & Midterm Seasonality)
+        try:
+            from us_election_policy_sentinel import USElectionPolicySentinel
+            pol_fit = USElectionPolicySentinel().evaluate_symbol_political_fit(symbol)
+            if pol_fit and pol_fit.get('bonus', 0) != 0:
+                pol_bonus = pol_fit.get('bonus', 0)
+                score += pol_bonus
+                breakdown.append(f"• 미국 정치/선거 정책 감응도: {pol_bonus:+d}점 ({pol_fit.get('reason')})")
+        except Exception as _pol_err:
+            logger.debug("USElectionPolicySentinel skipped for {}: {}", symbol, _pol_err)
+
         # Dynamic Softmax Scaling / Continuous Normalization (Preserves 170 vs 110 raw score ranking without flattening)
         final_score = min(100, max(0, int(score)))
         logger.info("🎯 [QUANT_SCORE] Symbol {}: Clamped {}/100 (Unclamped Raw Score: {:.1f} pts)", symbol, final_score, score)

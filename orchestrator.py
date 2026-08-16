@@ -524,6 +524,19 @@ class BotOrchestrator:
         except Exception as _liq_err:
             logger.debug("Institutional liquidity in Phase 2 skipped: {}", _liq_err)
 
+        # 14. US Election & Political Policy Uncertainty Sentinel (EPU & Midterm Seasonality)
+        try:
+            from us_election_policy_sentinel import get_election_policy_signal
+            elec_sig = get_election_policy_signal()
+            if elec_sig:
+                if elec_sig.epu_regime == "EXTREME":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.60)
+                    logger.warning("🚨 [ELECTION_POLICY_SPIKE] EPU Index extreme! Exposure capped at 60%")
+                logger.info("  -> us_election_policy_sentinel.py: EPU={:.1f} ({}), Phase={}, D-{} days",
+                            elec_sig.epu_index, elec_sig.epu_regime, elec_sig.election_cycle_phase, elec_sig.days_to_election)
+        except Exception as _elec_err:
+            logger.debug("US Election sentinel in Phase 2 skipped: {}", _elec_err)
+
         self.state.last_macro_refresh = datetime.now()
 
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)
