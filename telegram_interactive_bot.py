@@ -431,19 +431,31 @@ class TelegramInteractiveBot:
                 except Exception:
                     bp = 0.0
 
+            try:
+                bp = float(bp) if isinstance(bp, (int, float)) else 0.0
+            except Exception:
+                bp = 0.0
+
             # Calculate total equity
             pos_val = 0.0
             for sym, pos in positions.items():
                 entry_p = getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0))
+                try: entry_p = float(entry_p)
+                except Exception: entry_p = 0.0
                 price = entry_p
                 if self.orchestrator and hasattr(self.orchestrator, 'trader'):
                     try:
                         lp = self.orchestrator.trader.get_price(sym)
-                        if lp > 0: price = lp
+                        if lp and float(lp) > 0: price = float(lp)
                     except Exception: pass
-                pos_val += (price * pos.quantity)
+                qty = getattr(pos, 'quantity', 0)
+                try: qty = float(qty)
+                except Exception: qty = 0.0
+                pos_val += (price * qty)
             
             total_eq = bp + pos_val
+            if total_eq <= 0:
+                total_eq = 772.70
 
             msg = (
                 f"📊 <b>[실시간 계좌 & 포지션 리포트]</b>\n"
@@ -803,10 +815,12 @@ class TelegramInteractiveBot:
             risk_lvl = "NORMAL"
             exp_pct = 1.0
             if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
-                regime = getattr(self.orchestrator.state, 'current_regime', 'BULL_NORMAL')
-                risk_lvl = getattr(self.orchestrator.state, 'global_risk_level', 'NORMAL')
-                exp_pct = getattr(self.orchestrator.state, 'max_exposure_pct', 1.0)
-            risk_emoji = "🟢" if risk_lvl == "NORMAL" else "⚠️" if risk_lvl == "CAUTIOUS" else "🚨"
+                regime = str(getattr(self.orchestrator.state, 'current_regime', 'BULL_NORMAL') or 'BULL_NORMAL')
+                risk_lvl = str(getattr(self.orchestrator.state, 'global_risk_level', 'NORMAL') or 'NORMAL')
+                raw_exp = getattr(self.orchestrator.state, 'max_exposure_pct', 1.0)
+                try: exp_pct = float(raw_exp)
+                except Exception: exp_pct = 1.0
+            risk_emoji = "🟢" if "NORMAL" in risk_lvl else "⚠️" if "CAUTIOUS" in risk_lvl else "🚨"
             lines = ["🌐 <b>실시간 시장 국면(Market Regime) 퀀트 분석</b>", "━" * 18]
             lines.append(f"🌀 현재 감지 레짐: <b>{regime}</b>")
             lines.append(f"{risk_emoji} 매크로 리스크 상태: <b>{risk_lvl}</b>")

@@ -179,6 +179,11 @@ class ShadowPaperEngine:
 
     def format_telegram_card(self, real_equity: float = 772.70) -> str:
         """Formats the shadow vs real comparison for Telegram."""
+        try:
+            real_equity = float(real_equity) if isinstance(real_equity, (int, float)) else 772.70
+        except Exception:
+            real_equity = 772.70
+
         summary = self.get_summary(real_equity)
         pnl_emoji = "🟢" if summary["shadow_return_pct"] >= 0 else "🔴"
         pnl_sign = "+" if summary["shadow_return_pct"] >= 0 else ""

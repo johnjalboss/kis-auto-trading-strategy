@@ -48,8 +48,17 @@ class MonteCarloEngine:
             ]
         return returns
 
-    def run_simulation(self, current_equity: float = 772.70, position_size_pct: float = 0.25) -> Dict[str, Any]:
+    def run_simulation(self, current_equity: float = 772.70, position_size_pct: float = 0.35) -> Dict[str, Any]:
         """Runs 10,000 Monte Carlo simulations using empirical bootstrap sampling."""
+        try:
+            current_equity = float(current_equity) if isinstance(current_equity, (int, float)) else 772.70
+        except Exception:
+            current_equity = 772.70
+        try:
+            position_size_pct = float(position_size_pct) if isinstance(position_size_pct, (int, float)) else 0.35
+        except Exception:
+            position_size_pct = 0.35
+
         empirical_returns = self._get_historical_pnl_returns()
         np_returns = np.array(empirical_returns)
 
