@@ -38,26 +38,39 @@ class TelegramInteractiveBot:
         t.start()
         logger.info("🤖 TelegramInteractiveBot daemon started (One-Click Interactive Remote Active)")
 
-    def _send_reply(self, text: str, reply_markup: dict = None):
+    def _send_reply(self, text: str, reply_markup: dict = None, target_chat_id: str = None):
         try:
+            dest_chat = target_chat_id or self.chat_id
+            if not dest_chat or not self.bot_token:
+                logger.warning("Telegram send_reply skipped: missing chat_id or token")
+                return
+
+            if reply_markup is None:
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "📋 메인 제어판 메뉴 열기", "callback_data": "cmd_main_menu"}]
+                    ]
+                }
+
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
             payload = {
-                "chat_id": self.chat_id,
+                "chat_id": dest_chat,
                 "text": text,
                 "parse_mode": "HTML"
             }
             if reply_markup:
                 payload["reply_markup"] = reply_markup
-            resp = requests.post(url, json=payload, timeout=8)
+            resp = requests.post(url, json=payload, timeout=10)
             if not resp.ok:
                 # Fallback: Strip HTML tags and re-send cleanly if Telegram rejected HTML entities
                 import re
                 clean_text = re.sub(r'<[^>]+>', '', text)
                 payload["text"] = clean_text
                 payload.pop("parse_mode", None)
-                requests.post(url, json=payload, timeout=8)
+                resp = requests.post(url, json=payload, timeout=10)
+            logger.info("📤 Telegram message sent to chat {} | status: {}", dest_chat, resp.status_code)
         except Exception as e:
-            logger.debug("Telegram reply error: {}", e)
+            logger.error("Telegram reply error: {}", e)
 
     def _send_photo(self, photo_path: str, caption: str = ""):
         try:
@@ -176,7 +189,10 @@ class TelegramInteractiveBot:
 
                                 # Accept if sender_id or chat_id matches configured TELEGRAM_CHAT_ID (or if empty)
                                 if self.chat_id and str(self.chat_id) not in (sender_id, chat_id):
+                                    logger.warning("Unauthorized callback from sender: {} (chat: {})", sender_id, chat_id)
                                     continue
+
+                                logger.info("📲 [TELEGRAM_CALLBACK] Executing: '{}' from sender: {} (chat: {})", cb_data, sender_id, chat_id)
 
                                 def _run_async(target_func, *args):
                                     threading.Thread(target=target_func, args=args, daemon=True).start()
