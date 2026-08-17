@@ -60,11 +60,25 @@ class RealTimeEconomicSurpriseReactor:
             return live_data
 
         series_map = {
-            "cpi_yoy": "CPIAUCSL",
-            "yield_spread_10_2": "T10Y2Y",
-            "inflation_breakeven_10y": "T10YIE",
-            "high_yield_spread": "BAMLH0A0HYM2",
-            "fed_funds_rate": "DFF"
+            # 1. Inflation & Prices (물가/인플레이션)
+            "cpi_yoy": "CPIAUCSL",                 # 소비자물가지수 (CPI)
+            "core_pce_yoy": "PCEPILFE",            # 연준 최선호 근원 PCE 물가지수
+            "ppi_yoy": "PPIACO",                   # 생산자물가지수 (PPI 선행물가)
+            "inflation_breakeven_10y": "T10YIE",   # 10년물 기대 인플레이션
+
+            # 2. Labor & Employment (고용/노동 시장 - NFP, 실업률, 주간실업수당)
+            "unemployment_rate": "UNRATE",         # 공식 실업률 (삼의 법칙 추적)
+            "nonfarm_payrolls": "PAYEMS",          # 비농업 고용자수 (NFP)
+            "initial_claims": "ICSA",              # 주간 신규 실업수당 청구건수
+            "avg_hourly_earnings": "CES0500000003", # 평균 시간당 임금 (임금 인플레)
+            "jolts_job_openings": "JTSJOL",        # JOLTs 구인구직 보고서
+
+            # 3. Growth & Monetary Policy (경기/금리/신용)
+            "retail_sales": "RSXFS",               # 소매판매 (소비 성장)
+            "yield_spread_10_2": "T10Y2Y",         # 10Y-2Y 장단기 금리차 (수익률 곡선)
+            "high_yield_spread": "BAMLH0A0HYM2",   # 하이일드 신용 스프레드 (OAS)
+            "fed_funds_rate": "DFF",               # 연방기금 기준금리
+            "consumer_sentiment": "UMCSENT"        # 미시간대 소비자심리지수
         }
 
         try:
