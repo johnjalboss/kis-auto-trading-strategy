@@ -25,8 +25,19 @@ class PreMarketGapSentinel:
         self.chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
 
     def get_held_symbols(self) -> list:
-        """Fetch actual live positions from Broker API first, then DB fallback."""
+        """Fetch actual live positions from Broker API, Database, and Strategy."""
         symbols = []
+        try:
+            from database import Database
+            db = Database(self.db_path)
+            pos_dict = db.get_positions()
+            if pos_dict:
+                symbols = list(pos_dict.keys())
+                if symbols:
+                    return symbols
+        except Exception as _db_err:
+            logger.debug("Database get_positions skipped: {}", _db_err)
+
         try:
             from trader import get_trader
             tr = get_trader()
@@ -37,16 +48,6 @@ class PreMarketGapSentinel:
                     return symbols
         except Exception as _tr_err:
             logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
-
-        if os.path.exists(self.db_path):
-            try:
-                conn = sqlite3.connect(self.db_path)
-                cur = conn.cursor()
-                cur.execute("SELECT symbol FROM positions WHERE quantity > 0")
-                symbols = [row[0] for row in cur.fetchall()]
-                conn.close()
-            except Exception as e:
-                logger.debug("Failed to fetch positions from DB: {}", e)
 
         if not symbols:
             symbols = ["MDT", "STRC", "VTOL", "MRK"]

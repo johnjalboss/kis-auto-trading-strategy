@@ -81,7 +81,7 @@ UPGRADE_LOSS_LIMIT_PCT = float(os.getenv("UPGRADE_LOSS_LIMIT_PCT", "-0.005"))
 # ==============================================
 # Continuous Real-Time Streaming Screener (Zero Resting Time)
 # ==============================================
-SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "0"))  # 0: Continuous 24/7 non-stop real-time scan
+SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "5"))  # 5: Ultra-fast 5-min intraday full universe re-scan
 
 # ==============================================
 # Strategy & Profit Execution Parameters

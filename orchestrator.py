@@ -637,7 +637,7 @@ class BotOrchestrator:
         
         # ---- Dynamic screener result cache ----
         now = datetime.now()
-        cache_seconds = getattr(config, 'SCREENER_CACHE_MINUTES', 15) * 60
+        cache_seconds = getattr(config, 'SCREENER_CACHE_MINUTES', 5) * 60
         # 타겟 유니버스가 5개 이상 충실하게 차 있을 때만 캐시를 사용 (1개만 남아 매매가 멈추는 현상 원천 방지)
         if (self.state.last_screen_refresh is not None and
                 (now - self.state.last_screen_refresh).total_seconds() < cache_seconds and
