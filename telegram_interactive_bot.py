@@ -417,19 +417,27 @@ class TelegramInteractiveBot:
                 self.current_price = float(curr_p) if curr_p else float(avg_p)
 
         # ── 1순위: KIS 브로커 API (항상 실시간) ──────────────────────────
-        if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
-            try:
-                k_pos = self.orchestrator.trader.get_positions()
+        # ── 1순위: Orchestrator 또는 Trader 직접 조회 ──────────────────────
+        try:
+            trader_obj = None
+            if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
+                trader_obj = self.orchestrator.trader
+            else:
+                from trader import Trader
+                trader_obj = Trader()
+
+            if trader_obj:
+                k_pos = trader_obj.get_positions()
                 if k_pos:
                     result = {}
                     for p in k_pos:
                         avg_p = getattr(p, 'avg_price', getattr(p, 'entry_price', 0.0))
                         curr_p = getattr(p, 'current_price', avg_p)
                         result[p.symbol] = _PosDummy(p.quantity, avg_p, curr_p)
-                    logger.debug("KIS API positions: {} symbols", len(result))
+                    logger.debug("Live KIS API positions: {} symbols", len(result))
                     return result
-            except Exception as ke:
-                logger.warning("KIS get_positions() failed, falling back: {}", ke)
+        except Exception as ke:
+            logger.warning("KIS get_positions() failed, falling back: {}", ke)
 
         # ── 2순위: StrategyEngine 인메모리 포지션 ─────────────────────────
         if self.orchestrator and hasattr(self.orchestrator, 'strategy') and self.orchestrator.strategy:
@@ -445,19 +453,22 @@ class TelegramInteractiveBot:
                 logger.debug("Strategy memory positions: {} symbols", len(result))
                 return result
 
-        # ── 3순위: SQLite DB (마지막 수단, 오래된 데이터일 수 있음) ─────────
+        # ── 3순위: SQLite DB (동적 스키마 감지) ──────────────────────────
         try:
             import sqlite3
             db_path = "trades.db"
             if os.path.exists(db_path):
                 conn = sqlite3.connect(db_path)
                 cur = conn.cursor()
-                cur.execute("SELECT symbol, quantity, avg_price FROM positions WHERE quantity > 0")
+                cur.execute("PRAGMA table_info(positions)")
+                cols = [c[1] for c in cur.fetchall()]
+                p_col = "entry_price" if "entry_price" in cols else ("avg_price" if "avg_price" in cols else "price")
+                cur.execute(f"SELECT symbol, quantity, {p_col} FROM positions WHERE quantity > 0")
                 rows = cur.fetchall()
                 conn.close()
                 if rows:
                     result = {row[0]: _PosDummy(row[1], row[2]) for row in rows}
-                    logger.warning("Using stale DB positions ({} symbols) — KIS API unavailable", len(result))
+                    logger.info("Using DB positions ({} symbols: {})", len(result), list(result.keys()))
                     return result
         except Exception as e:
             logger.debug("DB positions fallback error: {}", e)
