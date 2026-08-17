@@ -1831,10 +1831,9 @@ class BotOrchestrator:
                         # Check if order was confirmed filled (order.status == FILLED)
                         if order.status == OrderStatus.FILLED:
                             if action == "BUY":
-                                sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
-                                notifier.trade_entry(symbol, order.filled_quantity, order.avg_fill_price or price, reason, score_breakdown=sb)
                                 try:
                                     from telegram_receipt import TelegramReceiptGenerator
+                                    sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
                                     q_score = getattr(self.strategy, '_last_scores', {}).get(symbol, 100)
                                     atr_val = self.strategy.get_current_atr(symbol) if hasattr(self.strategy, 'get_current_atr') else 0.0
                                     sl_calc = (order.avg_fill_price or price) - (atr_val * 1.5) if atr_val > 0 else (order.avg_fill_price or price) * 0.95
@@ -1852,9 +1851,9 @@ class BotOrchestrator:
                                     )
                                     notifier.send(receipt_msg)
                                 except Exception as _tr_err:
-                                    logger.debug("Telegram BUY receipt error: {}", _tr_err)
+                                    logger.debug("Telegram BUY receipt fallback: {}", _tr_err)
+                                    notifier.trade_entry(symbol, order.filled_quantity, order.avg_fill_price or price, reason)
                             else:
-                                notifier.trade_exit(symbol, order.filled_quantity, order.avg_fill_price or price, pnl_pct, reason)
                                 try:
                                     from telegram_receipt import TelegramReceiptGenerator
                                     entry_p = 0.0
