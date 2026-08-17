@@ -119,6 +119,14 @@ class TelegramInteractiveBot:
                     {"text": "🔮 매크로 & 실적 D-Day", "callback_data": "cmd_macro_dday"}
                 ],
                 [
+                    {"text": "🕶️ 다크풀 장외 매집", "callback_data": "cmd_dark_pool"},
+                    {"text": "📊 CBOE 옵션 풋/콜 비율", "callback_data": "cmd_cboe_options"}
+                ],
+                [
+                    {"text": "🏛️ 미국 의원 주식 매매", "callback_data": "cmd_congress_trades"},
+                    {"text": "📰 AI 뉴스 센티멘트", "callback_data": "cmd_news_sentiment"}
+                ],
+                [
                     {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"},
                     {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"}
                 ],
@@ -219,6 +227,18 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_economic_surprise":
                                     self._answer_callback(cb_id, "🏛️ 경제지표 서프라이즈 반응을 조회합니다.")
                                     _run_async(self._handle_economic_surprise)
+                                elif cb_data == "cmd_dark_pool":
+                                    self._answer_callback(cb_id, "🕶️ 다크풀 장외 매집 현황을 조회합니다.")
+                                    _run_async(self._handle_dark_pool)
+                                elif cb_data == "cmd_cboe_options":
+                                    self._answer_callback(cb_id, "📊 CBOE 옵션 풋/콜 비율을 조회합니다.")
+                                    _run_async(self._handle_cboe_options)
+                                elif cb_data == "cmd_congress_trades":
+                                    self._answer_callback(cb_id, "🏛️ 미국 의원 주식 매매 현황을 조회합니다.")
+                                    _run_async(self._handle_congress_trades)
+                                elif cb_data == "cmd_news_sentiment":
+                                    self._answer_callback(cb_id, "📰 AI 뉴스 센티멘트를 분석합니다.")
+                                    _run_async(self._handle_news_sentiment)
                                 elif cb_data == "cmd_shadow_paper":
                                     self._answer_callback(cb_id, "👥 섀도우 모의매매 성과를 조회합니다.")
                                     _run_async(self._handle_shadow_paper)
@@ -332,6 +352,14 @@ class TelegramInteractiveBot:
                                     self._handle_macro_dday()
                                 elif any(cmd.startswith(c) for c in ["/경제지표", "경제지표", "서프라이즈", "/surprise", "/macro", "거시지표"]):
                                     self._handle_economic_surprise()
+                                elif any(cmd.startswith(c) for c in ["/다크풀", "다크풀", "/darkpool", "장외매집"]):
+                                    self._handle_dark_pool()
+                                elif any(cmd.startswith(c) for c in ["/풋콜", "풋콜비율", "/cboe", "옵션비율", "풋콜"]):
+                                    self._handle_cboe_options()
+                                elif any(cmd.startswith(c) for c in ["/의원매매", "의원매매", "/congress", "정치인매매"]):
+                                    self._handle_congress_trades()
+                                elif any(cmd.startswith(c) for c in ["/뉴스", "뉴스", "/sentiment", "뉴스감성", "애널리스트"]):
+                                    self._handle_news_sentiment()
                                 elif any(cmd.startswith(c) for c in ["/스마트머니", "스마트머니", "수급"]):
                                     self._handle_smart_money()
                                 elif any(cmd.startswith(c) for c in ["/테마", "테마", "주도테마"]):
@@ -1038,6 +1066,49 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed economic surprise handler: {}", e)
             self._send_reply(f"⚠️ 경제지표 서프라이즈 조회 실패: {e}")
+
+    def _handle_dark_pool(self):
+        """월가 다크풀(Dark Pool) 장외 매집 레이더 조회"""
+        try:
+            from dark_pool_radar import get_dark_pool_radar
+            positions = self._get_positions_dict()
+            card = get_dark_pool_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed dark pool handler: {}", e)
+            self._send_reply(f"⚠️ 다크풀 레이더 조회 실패: {e}")
+
+    def _handle_cboe_options(self):
+        """CBOE 옵션 풋/콜 비율 & SKEW 센티넬 조회"""
+        try:
+            from cboe_options_sentinel import get_cboe_options_sentinel
+            card = get_cboe_options_sentinel().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed cboe options handler: {}", e)
+            self._send_reply(f"⚠️ CBOE 옵션 센티넬 조회 실패: {e}")
+
+    def _handle_congress_trades(self):
+        """미국 의회 의원 실시간 주식 매매 레이더 조회"""
+        try:
+            from congressional_trade_tracker import get_congressional_tracker
+            positions = self._get_positions_dict()
+            card = get_congressional_tracker().format_telegram_card(holdings=list(positions.keys()) if positions else None)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed congress trades handler: {}", e)
+            self._send_reply(f"⚠️ 미국 의원 매매 조회 실패: {e}")
+
+    def _handle_news_sentiment(self):
+        """AI 실시간 뉴스 센티멘트 & 애널리스트 레이더 조회"""
+        try:
+            from ai_news_sentiment_engine import get_ai_news_sentiment_engine
+            positions = self._get_positions_dict()
+            card = get_ai_news_sentiment_engine().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed news sentiment handler: {}", e)
+            self._send_reply(f"⚠️ 뉴스 센티멘트 조회 실패: {e}")
 
     def _handle_smart_money(self):
         """스마트머니 & 기관 내부자 지분 레이더 조회"""
