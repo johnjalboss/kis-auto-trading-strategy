@@ -70,11 +70,12 @@ def _proxy_download(tickers, *args, **kwargs):
     progress = kwargs.get('progress', False)
     auto_adjust = kwargs.get('auto_adjust', True)
     
-    # All GICS Sector ETFs and Macro ETFs are bypassed to yfinance directly
+    # All GICS Sector ETFs and Macro ETFs/Indices are bypassed to yfinance directly
     # to protect KIS API rate limits for target stock scans
     BYPASS_TICKERS = [
         "KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF", 
-        "VIXY", "UUP", "LQD", "GLD", "SPY", 
+        "VIXY", "UUP", "LQD", "GLD", "SPY", "QQQ", "IWM", "USO", "BTC-USD", "CL=F",
+        "CPER", "FXY", "EEM", "KBE", "^VIX", "^TNX", "^IRX", "^GSPC", "^DJI", "^IXIC",
         "XLK", "XLV", "XLC", "XLY", "XLP", "XLE", "XLU", "XLRE", "XLB"
     ]
     
