@@ -115,8 +115,12 @@ class TelegramInteractiveBot:
                     {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
                 ],
                 [
-                    {"text": "🔮 매크로 & 실적 D-Day", "callback_data": "cmd_macro_dday"},
-                    {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"}
+                    {"text": "🏛️ 경제지표 서프라이즈 반응", "callback_data": "cmd_economic_surprise"},
+                    {"text": "🔮 매크로 & 실적 D-Day", "callback_data": "cmd_macro_dday"}
+                ],
+                [
+                    {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"},
+                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"}
                 ],
                 [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
@@ -212,6 +216,9 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_weekly_ai_report":
                                     self._answer_callback(cb_id, "📜 주간 AI 운용 보고서를 생성합니다.")
                                     _run_async(self._handle_weekly_ai_report)
+                                elif cb_data == "cmd_economic_surprise":
+                                    self._answer_callback(cb_id, "🏛️ 경제지표 서프라이즈 반응을 조회합니다.")
+                                    _run_async(self._handle_economic_surprise)
                                 elif cb_data == "cmd_shadow_paper":
                                     self._answer_callback(cb_id, "👥 섀도우 모의매매 성과를 조회합니다.")
                                     _run_async(self._handle_shadow_paper)
@@ -323,6 +330,8 @@ class TelegramInteractiveBot:
                                     self._handle_monte_carlo()
                                 elif any(cmd.startswith(c) for c in ["/dday", "디데이", "실적dday"]):
                                     self._handle_macro_dday()
+                                elif any(cmd.startswith(c) for c in ["/경제지표", "경제지표", "서프라이즈", "/surprise", "/macro", "거시지표"]):
+                                    self._handle_economic_surprise()
                                 elif any(cmd.startswith(c) for c in ["/스마트머니", "스마트머니", "수급"]):
                                     self._handle_smart_money()
                                 elif any(cmd.startswith(c) for c in ["/테마", "테마", "주도테마"]):
@@ -1019,6 +1028,16 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed macro D-Day handler: {}", e)
             self._send_reply(f"⚠️ 매크로 D-Day 조회 실패: {e}")
+
+    def _handle_economic_surprise(self):
+        """실시간 경제지표 발표치 vs 시장 예상 서프라이즈 반응 조회"""
+        try:
+            from realtime_economic_surprise_reactor import get_economic_surprise_reactor
+            card = get_economic_surprise_reactor().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed economic surprise handler: {}", e)
+            self._send_reply(f"⚠️ 경제지표 서프라이즈 조회 실패: {e}")
 
     def _handle_smart_money(self):
         """스마트머니 & 기관 내부자 지분 레이더 조회"""

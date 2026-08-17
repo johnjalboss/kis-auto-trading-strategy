@@ -38,6 +38,7 @@ class TestTelegramHandlers(unittest.TestCase):
             ("quant_status", self.bot._handle_quant_status),
             ("auto_tuning", self.bot._handle_auto_tuning),
             ("macro_dday", self.bot._handle_macro_dday),
+            ("economic_surprise", self.bot._handle_economic_surprise),
             ("smart_money", self.bot._handle_smart_money),
             ("monte_carlo", self.bot._handle_monte_carlo),
             ("weekly_ai_report", self.bot._handle_weekly_ai_report),
