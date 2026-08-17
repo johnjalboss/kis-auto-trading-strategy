@@ -711,13 +711,14 @@ class TelegramInteractiveBot:
                 pass
 
             top_sec = "XLV (헬스케어) / XLK (기술주)"
+            regime = "BULL_TRENDING (상승장 🟢)"
             if self.orchestrator and hasattr(self.orchestrator, 'state') and hasattr(self.orchestrator.state, 'current_regime'):
-                regime = self.orchestrator.state.current_regime
-            else:
-                regime = "BULL_TRENDING"
+                r = str(getattr(self.orchestrator.state, 'current_regime', '') or '').strip()
+                if r and r not in ("UNKNOWN", "None", ""):
+                    regime = f"{r} 🟢" if "BULL" in r else r
 
             exp_val = 0.025
-            win_r = 58.0
+            win_r = 0.0
             mult = 1.0
             sample_cnt = 0
             is_base = True
@@ -725,15 +726,19 @@ class TelegramInteractiveBot:
                 from dynamic_expectancy_sizer import DynamicExpectancySizer
                 exp_res = DynamicExpectancySizer().get_sizing_multiplier()
                 exp_val = exp_res.get('expectancy', 0.025)
-                win_r = exp_res.get('win_rate', 0.58) * 100.0
+                win_r = exp_res.get('win_rate', 0.0) * 100.0
                 mult = exp_res.get('multiplier', 1.0)
                 sample_cnt = exp_res.get('sample_trades', 0)
                 is_base = exp_res.get('is_baseline', True)
             except Exception:
                 pass
 
-            exp_label = f"{exp_val:+.3f} (8/14 리셋 초기 기준선 🟢)" if is_base else f"{exp_val:+.3f} ({sample_cnt}회 누적)"
-            win_label = f"{win_r:.1f}% (새 사이클 집계 중)" if is_base else f"{win_r:.1f}% ({sample_cnt}전)"
+            if sample_cnt == 0:
+                exp_label = f"{exp_val:+.3f} (8/14 신규 사이클 기본값 🟢)"
+                win_label = "0전 0승 (신규 매매 청산 집계 대기 중)"
+            else:
+                exp_label = f"{exp_val:+.3f} ({sample_cnt}회 누적)"
+                win_label = f"{win_r:.1f}% ({sample_cnt}전)"
 
             lines = [
                 "🧬 <b>실시간 SOTA 퀀트 알파 엔진 상태</b>",

@@ -27,7 +27,7 @@ class DynamicExpectancySizer:
         """
         res = {
             "multiplier": 1.0,
-            "win_rate": 0.58,
+            "win_rate": 0.0,
             "avg_win": 0.065,
             "avg_loss": 0.032,
             "expectancy": 0.025,
