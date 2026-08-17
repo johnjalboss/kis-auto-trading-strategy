@@ -83,7 +83,7 @@ class DynamicScreener:
     """KIS API 기반 동적 스크리너"""
     
     MIN_SCORE = 45  # 유니버스 확장(250+)에 맞춰 기준 강화 (이전: 40)
-    MAX_RESULTS = 10
+    MAX_RESULTS = 25  # 최적 정예 후보군 확장 (25개 분산 테마/주도주 동시 추적)
     
     def __init__(self):
         self._cache = {}

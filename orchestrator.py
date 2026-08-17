@@ -684,7 +684,7 @@ class BotOrchestrator:
             # [UNIVERSE GUARANTEE] 스크리닝 결과가 적거나 비어있을 경우, 방어주/우량주 1등주 유니버스를 항시 최소 10개 이상 자동으로 보충 주입
             def_candidates = [s for s in getattr(config, 'DEFENSIVE_UNIVERSE_SET', set()) if s not in held_symbols and s not in recently_sold_exclude]
             for def_sym in def_candidates:
-                if len(self.state.target_universe) >= 12:
+                if len(self.state.target_universe) >= 28:
                     break
                 if def_sym not in self.state.target_universe:
                     self.state.target_universe.append(def_sym)
