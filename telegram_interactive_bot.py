@@ -890,32 +890,124 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 스크리너 조회 실패: {e}")
 
     def _handle_regime(self):
-        """실시간 시장 국면 레짐 분석 조회"""
+        """실시간 시장 국면 레짐 분석 조회 - 오케스트레이터 상태에 의존하지 않고 직접 계산"""
         try:
-            regime = "BULL_NORMAL"
+            # ── 1순위: 오케스트레이터가 이미 레짐을 계산했으면 그대로 사용 ──
+            regime = None
             risk_lvl = "NORMAL"
             exp_pct = 1.0
+
             if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
-                regime = str(getattr(self.orchestrator.state, 'current_regime', 'BULL_NORMAL') or 'BULL_NORMAL')
-                risk_lvl = str(getattr(self.orchestrator.state, 'global_risk_level', 'NORMAL') or 'NORMAL')
-                raw_exp = getattr(self.orchestrator.state, 'max_exposure_pct', 1.0)
-                try: exp_pct = float(raw_exp)
-                except Exception: exp_pct = 1.0
-            risk_emoji = "🟢" if "NORMAL" in risk_lvl else "⚠️" if "CAUTIOUS" in risk_lvl else "🚨"
-            lines = ["🌐 <b>실시간 시장 국면(Market Regime) 퀀트 분석</b>", "━" * 18]
-            lines.append(f"🌀 현재 감지 레짐: <b>{regime}</b>")
-            lines.append(f"{risk_emoji} 매크로 리스크 상태: <b>{risk_lvl}</b>")
-            lines.append(f"📊 최대 자산 베팅 한도: <b>{exp_pct:.0%}</b>")
-            lines.append("━" * 18)
-            if "BULL" in regime:
-                lines.append("💡 <b>상승장 알파 전략</b>: 주도주 35% 집중 투자 & +9% 분할익절 가동 중")
-            elif "BEAR" in regime:
-                lines.append("💡 <b>하락장 방어 전략</b>: 현금 비중 확대 & 헤징 ETF 감시 가동 중")
-            else:
-                lines.append("💡 <b>횡보장 퀀트 전략</b>: 변동성 박스권 리스크 타이트 제어 중")
-            self._send_reply("\n".join(lines))
+                orch_regime = str(getattr(self.orchestrator.state, 'current_regime', '') or '')
+                if orch_regime and orch_regime != 'UNKNOWN':
+                    regime = orch_regime
+                    risk_lvl = str(getattr(self.orchestrator.state, 'global_risk_level', 'NORMAL') or 'NORMAL')
+                    raw_exp = getattr(self.orchestrator.state, 'max_exposure_pct', 1.0)
+                    try:
+                        exp_pct = float(raw_exp)
+                    except Exception:
+                        exp_pct = 1.0
+
+            # ── 2순위: UNKNOWN이거나 미초기화 상태면 HMM을 직접 실시간 계산 ──
+            if not regime or regime == 'UNKNOWN':
+                try:
+                    from hidden_markov_regime import HiddenMarkovRegime
+                    hmm_result = HiddenMarkovRegime().analyze()
+                    regime = hmm_result.get('regime', 'UNKNOWN')
+                    risk_score = hmm_result.get('risk_score', 50)
+                    # risk_score → risk_lvl 매핑
+                    if risk_score >= 80:
+                        risk_lvl = "CRITICAL"
+                    elif risk_score >= 60:
+                        risk_lvl = "CAUTIOUS"
+                    elif risk_score >= 40:
+                        risk_lvl = "ELEVATED"
+                    else:
+                        risk_lvl = "NORMAL"
+                    exp_pct = max(0.0, min(1.0, 1.0 - risk_score / 200))
+                    # 오케스트레이터 상태도 업데이트 (다음 조회시 캐시 활용)
+                    if self.orchestrator and hasattr(self.orchestrator, 'state'):
+                        self.orchestrator.state.current_regime = regime
+                        self.orchestrator.state.global_risk_level = risk_lvl
+                except Exception as hmm_err:
+                    regime = 'UNKNOWN'
+
+            # ── 3순위: HMM도 실패했으면 SPY 가격 기반으로 간단하게 추론 ──
+            if not regime or regime == 'UNKNOWN':
+                try:
+                    import yfinance as yf
+                    import numpy as np
+                    df = yf.download('SPY', period='60d', interval='1d', progress=False)
+                    if df is not None and len(df) >= 20:
+                        close = df['Close']
+                        curr = float(close.iloc[-1])
+                        sma20 = float(close.rolling(20).mean().iloc[-1])
+                        sma50 = float(close.rolling(50).mean().iloc[-1]) if len(df) >= 50 else sma20
+                        ret5 = float(close.pct_change(5).iloc[-1])
+                        if curr > sma20 and curr > sma50 and ret5 > 0:
+                            regime = 'BULL_NORMAL'
+                            risk_lvl = 'NORMAL'
+                            exp_pct = 1.0
+                        elif curr > sma20 and ret5 > -0.02:
+                            regime = 'CHOPPY'
+                            risk_lvl = 'ELEVATED'
+                            exp_pct = 0.7
+                        else:
+                            regime = 'BEAR_NORMAL'
+                            risk_lvl = 'CAUTIOUS'
+                            exp_pct = 0.5
+                    else:
+                        regime = 'BULL_NORMAL'
+                except Exception:
+                    regime = 'BULL_NORMAL'
+
+            # ── 레짐별 이모지 & 설명 매핑 ──
+            REGIME_META = {
+                'BULL_NORMAL':   ('🚀', '상승 추세 안정 국면', '주도주 35% 집중 투자 & +9% 분할익절 가동 중'),
+                'BULL_VOLATILE': ('⚡', '상승 추세 고변동 국면', '롱 유지하되 포지션 크기 20% 축소 & 익절 빠르게'),
+                'BEAR_NORMAL':   ('🐻', '하락 추세 진입 국면', '현금 비중 최대 확대 & 신규 진입 전면 중단'),
+                'BEAR_PANIC':    ('🚨', '패닉 하락 비상 국면', '긴급 현금화 실행 & 인버스 ETF 감시 가동'),
+                'CHOPPY':        ('🌀', '횡보/박스권 국면',   '거래량 폭발 신호 대기 & 스탑로스 타이트 제어'),
+            }
+            regime_clean = regime.upper().strip()
+            emoji, phase_name, strategy_desc = REGIME_META.get(
+                regime_clean,
+                ('❓', f'감지 레짐: {regime_clean}', '추가 데이터 수집 중...')
+            )
+
+            risk_emoji = {'NORMAL': '🟢', 'ELEVATED': '🟡', 'CAUTIOUS': '⚠️', 'CRITICAL': '🚨'}.get(risk_lvl, '🟢')
+
+            # ── HMM 확률 분포 추가 조회 (가능하면) ──
+            prob_line = ""
+            try:
+                from hidden_markov_regime import HiddenMarkovRegime
+                cached = HiddenMarkovRegime().analyze()
+                probs = cached.get('state_probabilities', {})
+                conf = cached.get('confidence', 0.0)
+                if probs:
+                    prob_line = (
+                        f"\n📐 <b>HMM 상태 확률</b>: 상승 {probs.get('BULL',0):.1%} | "
+                        f"하락 {probs.get('BEAR',0):.1%} | 횡보 {probs.get('CHOP',0):.1%}"
+                        f"\n🎯 <b>모델 신뢰도</b>: {conf:.1%}"
+                    )
+            except Exception:
+                pass
+
+            lines = [
+                "🌐 <b>실시간 시장 국면(Market Regime) 퀀트 분석</b>",
+                "━" * 18,
+                f"{emoji} <b>현재 감지 레짐: {regime_clean}</b>  ({phase_name})",
+                f"{risk_emoji} 매크로 리스크 상태: <b>{risk_lvl}</b>",
+                f"📊 최대 자산 베팅 한도: <b>{exp_pct:.0%}</b>",
+                prob_line,
+                "━" * 18,
+                f"💡 <b>퀀트 전략</b>: {strategy_desc}",
+            ]
+            self._send_reply("\n".join(l for l in lines if l))
         except Exception as e:
             self._send_reply(f"⚠️ 레짐 분석 조회 실패: {e}")
+
+
 
     def _handle_risk(self):
         """리스크 & 서킷브레이커 상태 조회"""
