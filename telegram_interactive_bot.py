@@ -123,12 +123,12 @@ class TelegramInteractiveBot:
                     {"text": "📊 CBOE 옵션 풋/콜 비율", "callback_data": "cmd_cboe_options"}
                 ],
                 [
-                    {"text": "🏛️ 미국 의원 주식 매매", "callback_data": "cmd_congress_trades"},
-                    {"text": "📰 AI 뉴스 센티멘트", "callback_data": "cmd_news_sentiment"}
+                    {"text": "🧲 마켓메이커 GEX 감마", "callback_data": "cmd_gex_radar"},
+                    {"text": "🏛️ 미국 의원 주식 매매", "callback_data": "cmd_congress_trades"}
                 ],
                 [
-                    {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"},
-                    {"text": "🧬 퀀트 알파 상태", "callback_data": "cmd_quant_status"}
+                    {"text": "📰 AI 뉴스 센티멘트", "callback_data": "cmd_news_sentiment"},
+                    {"text": "📡 스마트머니 수급", "callback_data": "cmd_smart_money"}
                 ],
                 [
                     {"text": "📊 봇 상태 요약", "callback_data": "cmd_status"},
@@ -233,6 +233,9 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_cboe_options":
                                     self._answer_callback(cb_id, "📊 CBOE 옵션 풋/콜 비율을 조회합니다.")
                                     _run_async(self._handle_cboe_options)
+                                elif cb_data == "cmd_gex_radar":
+                                    self._answer_callback(cb_id, "🧲 마켓메이커 GEX 감마 레이더를 조회합니다.")
+                                    _run_async(self._handle_gex_radar)
                                 elif cb_data == "cmd_congress_trades":
                                     self._answer_callback(cb_id, "🏛️ 미국 의원 주식 매매 현황을 조회합니다.")
                                     _run_async(self._handle_congress_trades)
@@ -356,6 +359,8 @@ class TelegramInteractiveBot:
                                     self._handle_dark_pool()
                                 elif any(cmd.startswith(c) for c in ["/풋콜", "풋콜비율", "/cboe", "옵션비율", "풋콜"]):
                                     self._handle_cboe_options()
+                                elif any(cmd.startswith(c) for c in ["/gex", "감마", "/gamma", "감마스퀴즈", "gex"]):
+                                    self._handle_gex_radar()
                                 elif any(cmd.startswith(c) for c in ["/의원매매", "의원매매", "/congress", "정치인매매"]):
                                     self._handle_congress_trades()
                                 elif any(cmd.startswith(c) for c in ["/뉴스", "뉴스", "/sentiment", "뉴스감성", "애널리스트"]):
@@ -1087,6 +1092,17 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed cboe options handler: {}", e)
             self._send_reply(f"⚠️ CBOE 옵션 센티넬 조회 실패: {e}")
+
+    def _handle_gex_radar(self):
+        """마켓메이커 감마 노출도 (GEX) 레이더 조회"""
+        try:
+            from dealer_gex_radar import get_dealer_gex_radar
+            positions = self._get_positions_dict()
+            card = get_dealer_gex_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed GEX radar handler: {}", e)
+            self._send_reply(f"⚠️ GEX 감마 레이더 조회 실패: {e}")
 
     def _handle_congress_trades(self):
         """미국 의회 의원 실시간 주식 매매 레이더 조회"""

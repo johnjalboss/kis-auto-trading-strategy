@@ -41,6 +41,7 @@ class TestTelegramHandlers(unittest.TestCase):
             ("economic_surprise", self.bot._handle_economic_surprise),
             ("dark_pool", self.bot._handle_dark_pool),
             ("cboe_options", self.bot._handle_cboe_options),
+            ("gex_radar", self.bot._handle_gex_radar),
             ("congress_trades", self.bot._handle_congress_trades),
             ("news_sentiment", self.bot._handle_news_sentiment),
             ("smart_money", self.bot._handle_smart_money),

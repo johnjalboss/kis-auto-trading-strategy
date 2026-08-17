@@ -89,5 +89,38 @@ class DealerGEXRadar:
         _gex_cache[symbol] = {'ts': now, 'data': res}
         return res
 
+    def format_telegram_card(self, symbols: list = None) -> str:
+        syms = symbols or ["VTOL", "MDT", "MRK", "STRC"]
+        lines = [
+            "🧲 <b>마켓메이커 감마 노출도 (GEX) 레이더</b>",
+            "━━━━━━━━━━━━━━━━━━━",
+            "💡 <i>옵션 마켓메이커의 델타 헤징 방향과 감마 스퀴즈(Gamma Squeeze) 지지벽을 실시간 추적합니다.</i>",
+            ""
+        ]
+        for s in syms:
+            res = self.analyze(s)
+            gex_val = res.get('net_gex', 0.0)
+            pcr_val = res.get('put_call_ratio', 1.0)
+            score_adj = res.get('score_adj', 0)
+            reason = res.get('reason', '정상 옵션 수급 분포')
+
+            tag = "🚀 <b>감마 스퀴즈</b>" if score_adj >= 10 else ("🟢 <b>양의 감마 지지</b>" if score_adj > 0 else "⚪ <b>중립</b>")
+            lines.append(
+                f"• <b>{s}</b>: {tag} (가산점: <b>+{score_adj}pt</b>)\n"
+                f"  - 넷 GEX: <b>${gex_val:.1f}B</b> | 풋/콜 비율: <b>{pcr_val:.2f}</b>\n"
+                f"  - 진단: <i>{reason}</i>\n"
+            )
+
+        lines.append("⚡ <i>마켓메이커의 강제 매수세(Short Gamma Squeeze)가 유입되는 종목에 스퀴즈 돌파 가산점을 부여합니다.</i>")
+        return "\n".join(lines)
+
+
+# Singleton
+_dealer_gex_instance = None
+
 def get_dealer_gex_radar() -> DealerGEXRadar:
-    return DealerGEXRadar()
+    global _dealer_gex_instance
+    if _dealer_gex_instance is None:
+        _dealer_gex_instance = DealerGEXRadar()
+    return _dealer_gex_instance
+
