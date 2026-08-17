@@ -38,14 +38,16 @@ class TelegramInteractiveBot:
         t.start()
         logger.info("🤖 TelegramInteractiveBot daemon started (One-Click Interactive Remote Active)")
 
-    def _send_reply(self, text: str, reply_markup: dict = None, target_chat_id: str = None):
+    def _send_reply(self, text: str, reply_markup: dict = None, target_chat_id: str = None, add_menu_button: bool = True):
         try:
             dest_chat = target_chat_id or self.chat_id
             if not dest_chat or not self.bot_token:
                 logger.warning("Telegram send_reply skipped: missing chat_id or token")
                 return
 
-            if reply_markup is None:
+            # Only attach default menu button if caller did not provide their own markup
+            # and add_menu_button is True (default)
+            if reply_markup is None and add_menu_button:
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "📋 메인 제어판 메뉴 열기", "callback_data": "cmd_main_menu"}]
@@ -56,19 +58,30 @@ class TelegramInteractiveBot:
             payload = {
                 "chat_id": dest_chat,
                 "text": text,
-                "parse_mode": "HTML"
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
             }
             if reply_markup:
                 payload["reply_markup"] = reply_markup
+
             resp = requests.post(url, json=payload, timeout=10)
+
+            # [BUG FIX] HTML 실패 시 동일 채팅에 두 번째 메시지를 보내지 않고,
+            # HTML 태그만 제거한 뒤 parse_mode 없이 단 1회만 재시도.
             if not resp.ok:
-                # Fallback: Strip HTML tags and re-send cleanly if Telegram rejected HTML entities
                 import re
                 clean_text = re.sub(r'<[^>]+>', '', text)
-                payload["text"] = clean_text
-                payload.pop("parse_mode", None)
-                resp = requests.post(url, json=payload, timeout=10)
-            logger.info("📤 Telegram message sent to chat {} | status: {}", dest_chat, resp.status_code)
+                fallback_payload = {
+                    "chat_id": dest_chat,
+                    "text": clean_text,
+                    "disable_web_page_preview": True
+                }
+                if reply_markup:
+                    fallback_payload["reply_markup"] = reply_markup
+                resp = requests.post(url, json=fallback_payload, timeout=10)
+                logger.debug("📤 Telegram fallback plain text sent | status: {}", resp.status_code)
+            else:
+                logger.info("📤 Telegram message sent to chat {} | status: {}", dest_chat, resp.status_code)
         except Exception as e:
             logger.error("Telegram reply error: {}", e)
 
