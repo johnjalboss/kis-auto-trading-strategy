@@ -746,6 +746,13 @@ class BotOrchestrator:
         - Priority 3: Entry signal scanning
         - Priority 4: Position upgrade (Portfolio optimization)
         """
+        # --- PRIORITY 0: REAL-TIME AUTOTUNE OVERRIDES SYNC ---
+        try:
+            from auto_tuning_engine import load_autotune_overrides
+            load_autotune_overrides()
+        except Exception as _at_err:
+            pass
+
         # --- PRIORITY 1: EXIT CHECK (Move to top for immediate response) ---
         positions = self.strategy.get_all_positions()
         if positions:
