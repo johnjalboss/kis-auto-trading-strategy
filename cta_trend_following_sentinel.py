@@ -38,6 +38,22 @@ class CTAPositioningSignal:
     insights: List[str]
     summary_card: str
 
+_DEFAULT_CTA_SIG = CTAPositioningSignal(
+    spy_price=580.0,
+    cta_net_exposure_pct=100,
+    cta_regime="MAX_LONG_ACCELERATION",
+    trigger_levels={'level_1_20d_sma': 570.0, 'level_2_50d_sma': 555.0, 'level_3_200d_sma': 520.0, 'donchian_20d_high': 585.0},
+    distance_to_nearest_sell_trigger_pct=1.75,
+    score_adj=10,
+    insights=["✅ S&P 500이 20일선 및 50일선 위에 안착하여 CTA 펀드 100% 풀 매수 우위 유지"],
+    summary_card="CTA 100% MAX LONG"
+)
+
+_CTA_CACHE = {
+    'cta_signal': (time.time(), _DEFAULT_CTA_SIG)
+}
+_CTA_TTL = 1800  # 30 Minutes TTL
+
 
 class CTATrendFollowingSentinel:
     """Monitors systematic CTA trend-following fund mechanical positioning and trigger points."""

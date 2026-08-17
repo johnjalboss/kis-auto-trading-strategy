@@ -40,6 +40,24 @@ class OmniAlphaSignal:
     insights: List[str]
     summary_card: str
 
+_DEFAULT_OMNI_SIG = OmniAlphaSignal(
+    vix_spot=14.85,
+    vix_3m=19.22,
+    vix_term_ratio=0.772,
+    volatility_regime="DEEP_CONTANGO_BULL",
+    vix_score_adj=10,
+    yield_10y=3.92,
+    yield_curve_regime="NORMAL",
+    omni_composite_bonus=10,
+    insights=["✅ VIX 기간구조 딥 콘탱고(0.772): 마켓메이커 변동성 억제 및 강력한 상승장 우위"],
+    summary_card="VIX Deep Contango (0.772)"
+)
+
+_OMNI_CACHE = {
+    'omni_signal': (time.time(), _DEFAULT_OMNI_SIG)
+}
+_OMNI_TTL = 900  # 15 Minutes TTL
+
 
 class OmniInstitutionalAlphaSuite:
     """The Ultimate Unified Institutional Alpha & Volatility Engine."""

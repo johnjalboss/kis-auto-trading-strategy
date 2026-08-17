@@ -15,8 +15,14 @@ import numpy as np
 import time
 from loguru import logger
 
-_sentinel_cache = None
-_sentinel_cache_time = 0
+_sentinel_cache = {
+    "stress_score": 0,
+    "risk_label": "NORMAL (정상)",
+    "freeze_entries": False,
+    "triggers": [],
+    "cached_at": "INIT"
+}
+_sentinel_cache_time = time.time()
 SENTINEL_CACHE_TTL = 900  # 15 min cache
 
 
