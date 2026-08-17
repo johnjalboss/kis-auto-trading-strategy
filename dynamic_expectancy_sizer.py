@@ -23,16 +23,17 @@ class DynamicExpectancySizer:
 
     def get_sizing_multiplier(self) -> Dict[str, Any]:
         """
-        Calculates position sizing multiplier based on recent 20 settled trades.
+        Calculates position sizing multiplier based on recent settled trades since 2026-08-14 clean slate.
         """
         res = {
             "multiplier": 1.0,
-            "win_rate": 0.55,
-            "avg_win": 0.05,
-            "avg_loss": 0.03,
-            "expectancy": 0.02,
+            "win_rate": 0.58,
+            "avg_win": 0.065,
+            "avg_loss": 0.032,
+            "expectancy": 0.025,
             "sample_trades": 0,
-            "label": "NORMAL_EXPECTANCY"
+            "is_baseline": True,
+            "label": "NEW_CYCLE_BASELINE (8/14 리셋 초기 기준선)"
         }
 
         if not os.path.exists(self.db_path):
@@ -42,13 +43,14 @@ class DynamicExpectancySizer:
             conn = sqlite3.connect(self.db_path)
             query = """
                 SELECT pnl_pct FROM trades 
-                WHERE exit_time IS NOT NULL AND pnl_pct != 0
-                ORDER BY exit_time DESC LIMIT 20
+                WHERE (date(created_at) >= '2026-08-14' OR date(exit_time) >= '2026-08-14')
+                  AND side = 'SELL' AND pnl_pct IS NOT NULL AND pnl_pct != 0
+                ORDER BY created_at DESC LIMIT 20
             """
             df = pd.read_sql_query(query, conn)
             conn.close()
 
-            if df.empty or len(df) < 5:
+            if df.empty or len(df) < 3:
                 return res
 
             pnl_series = df['pnl_pct'].values / 100.0

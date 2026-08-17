@@ -719,14 +719,21 @@ class TelegramInteractiveBot:
             exp_val = 0.025
             win_r = 58.0
             mult = 1.0
+            sample_cnt = 0
+            is_base = True
             try:
                 from dynamic_expectancy_sizer import DynamicExpectancySizer
                 exp_res = DynamicExpectancySizer().get_sizing_multiplier()
                 exp_val = exp_res.get('expectancy', 0.025)
                 win_r = exp_res.get('win_rate', 0.58) * 100.0
                 mult = exp_res.get('multiplier', 1.0)
+                sample_cnt = exp_res.get('sample_trades', 0)
+                is_base = exp_res.get('is_baseline', True)
             except Exception:
                 pass
+
+            exp_label = f"{exp_val:+.3f} (8/14 리셋 초기 기준선 🟢)" if is_base else f"{exp_val:+.3f} ({sample_cnt}회 누적)"
+            win_label = f"{win_r:.1f}% (새 사이클 집계 중)" if is_base else f"{win_r:.1f}% ({sample_cnt}전)"
 
             lines = [
                 "🧬 <b>실시간 SOTA 퀀트 알파 엔진 상태</b>",
@@ -739,8 +746,8 @@ class TelegramInteractiveBot:
                 f"• <b>거시 꼬리 리스크 (Cross-Asset)</b>: {risk_label}",
                 f"  - 스트레스: {stress_score}/100 (신규 매수: {'❄️ 동결' if freeze_entries else '✅ 정상 허용'})",
                 f"• <b>실시간 주도 섹터</b>: {top_sec}",
-                f"• <b>최근 기대값(Expectancy)</b>: {exp_val:+.3f}",
-                f"  - 승률: {win_r:.1f}% | 자금 배분 배율: {mult:.2f}x",
+                f"• <b>최근 기대값(Expectancy)</b>: <b>{exp_label}</b>",
+                f"  - 승률: {win_label} | 자금 배분 배율: {mult:.2f}x",
                 f"• <b>보호 매트릭스</b>: 9단계 메가 락 (+100% ➔ +82% 락) & 유상증자 희석 방어"
             ]
             self._send_reply("\n".join(lines))
