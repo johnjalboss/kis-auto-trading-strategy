@@ -37,7 +37,15 @@ class MacroEventHorizon:
     """Calculates macro D-Day countdowns and evaluates portfolio exposure risks."""
 
     def __init__(self, holdings: List[str] = None):
-        self.holdings = holdings or ["VTOL", "MDT", "MRK", "STRC"]
+        if holdings:
+            self.holdings = holdings
+        else:
+            try:
+                from trader import Trader
+                pos = Trader().get_positions()
+                self.holdings = [p.symbol for p in pos] if pos else []
+            except Exception:
+                self.holdings = []
 
     def get_upcoming_macro_events(self, lookahead_days: int = 21) -> List[Dict[str, Any]]:
         """Returns upcoming macro events within the lookahead window."""
@@ -65,7 +73,12 @@ class MacroEventHorizon:
 
     def get_holding_earnings_dates(self, symbols: List[str] = None) -> List[Dict[str, Any]]:
         """Queries estimated earnings dates for current portfolio holdings."""
-        syms = symbols or self.holdings
+        if symbols is not None:
+            syms = symbols
+        elif self.holdings:
+            syms = self.holdings
+        else:
+            syms = ["NVDA", "AAPL", "MSFT", "TSLA"]
         today = datetime.now().date()
         earnings_list = []
 

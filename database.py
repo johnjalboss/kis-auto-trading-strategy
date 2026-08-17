@@ -149,9 +149,15 @@ class TradeDatabase:
                 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
             """)
             
-            # positions 테이블의 트레일링 스탑 상태 컬럼 마이그레이션 (재시작 시 상태 손실 방지)
+            # positions 테이블의 컬럼 호환성 및 트레일링 스탑 상태 컬럼 마이그레이션
             try:
                 existing_cols = [x[1] for x in conn.execute("PRAGMA table_info(positions)").fetchall()]
+                if "avg_price" not in existing_cols and "entry_price" in existing_cols:
+                    conn.execute("ALTER TABLE positions ADD COLUMN avg_price REAL DEFAULT 0.0")
+                    conn.execute("UPDATE positions SET avg_price = entry_price WHERE avg_price = 0.0 OR avg_price IS NULL")
+                if "entry_price" not in existing_cols and "avg_price" in existing_cols:
+                    conn.execute("ALTER TABLE positions ADD COLUMN entry_price REAL DEFAULT 0.0")
+                    conn.execute("UPDATE positions SET entry_price = avg_price WHERE entry_price = 0.0 OR entry_price IS NULL")
                 if "high_since_entry" not in existing_cols:
                     conn.execute("ALTER TABLE positions ADD COLUMN high_since_entry REAL DEFAULT 0.0")
                 if "stop_price" not in existing_cols:
