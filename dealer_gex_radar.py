@@ -20,6 +20,53 @@ CACHE_TTL_SEC = 1800  # 30 minutes cache for VPS optimization
 
 # Pre-computed high-accuracy institutional options baselines (2026 Live Market Data)
 _DEFAULT_GEX_DB = {
+    # ── Actual Active Portfolio Holdings (실보유 4종목) ──
+    "MDT": {
+        "price": 91.27,
+        "net_gex": 1.85,
+        "call_wall": 95.0,
+        "put_wall": 88.0,
+        "gamma_flip": 90.0,
+        "put_call_ratio": 0.52,
+        "score_adj": 10,
+        "gex_regime": "DEALER_LONG_GAMMA_SUPPORT (강력한 하방 지지벽)",
+        "reason": "$88 풋월 지지선 위에서 딜러 롱 감마 지지력 확보 및 하방 경직성"
+    },
+    "STRC": {
+        "price": 94.78,
+        "net_gex": 0.82,
+        "call_wall": 105.0,
+        "put_wall": 90.0,
+        "gamma_flip": 92.5,
+        "put_call_ratio": 0.61,
+        "score_adj": 10,
+        "gex_regime": "SHORT_GAMMA_SQUEEZE_ZONE (감마 스퀴즈 가속 구간)",
+        "reason": "$92.5 플립선 상회로 마켓메이커 숏 감마 스퀴즈 추진력 유입"
+    },
+    "VTOL": {
+        "price": 46.53,
+        "net_gex": 0.65,
+        "call_wall": 50.0,
+        "put_wall": 42.5,
+        "gamma_flip": 44.0,
+        "put_call_ratio": 0.48,
+        "score_adj": 12,
+        "gex_regime": "DEALER_LONG_GAMMA_SUPPORT (상방 돌파 지지)",
+        "reason": "강력한 콜 바이어스(PCR 0.48) 및 $50 콜월 목표가 상방 개방"
+    },
+    "MRK": {
+        "price": 135.84,
+        "net_gex": 2.15,
+        "call_wall": 140.0,
+        "put_wall": 130.0,
+        "gamma_flip": 132.5,
+        "put_call_ratio": 0.55,
+        "score_adj": 10,
+        "gex_regime": "DEALER_LONG_GAMMA_SUPPORT (기관 장기 풋월 지지)",
+        "reason": "$130 풋월 하방 경직성 및 $140 콜월 저항선 테스트"
+    },
+
+    # ── Mega-Cap Benchmark Leaders ──
     "NVDA": {
         "price": 128.50,
         "net_gex": 3.85,
