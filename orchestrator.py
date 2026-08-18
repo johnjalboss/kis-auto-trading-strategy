@@ -258,15 +258,13 @@ class BotOrchestrator:
         self.strategy.sync_positions(api_positions)
 
         # 11. Telegram Interactive Bot
-        def _commander():
-            try:
-                from telegram_interactive_bot import TelegramInteractiveBot
-                self._interactive_bot = TelegramInteractiveBot(orchestrator_ref=self)
-                self._interactive_bot.start()
-                logger.info("  -> telegram_interactive_bot.py: Bi-directional Telegram daemon active (/status, /pause, /resume, /close_all)")
-            except Exception as _tb_err:
-                logger.debug("TelegramInteractiveBot startup failed: {}", _tb_err)
-        self._safe_import("telegram_interactive_bot", _commander)
+        # [BUG FIX] telegram_interactive_bot.py already runs as a STANDALONE process
+        # (managed by watchdog / systemd). Launching it again here causes TWO bot
+        # instances to poll Telegram simultaneously → every button click sends 2 messages.
+        # We only store a reference stub so other modules can call self._interactive_bot
+        # without actually spawning a second polling loop.
+        self._interactive_bot = None
+        logger.info("  -> telegram_interactive_bot.py: Running as standalone daemon (not duplicating).")
 
         # 12. Real-Time Web Dashboard Server
         def _dash():
