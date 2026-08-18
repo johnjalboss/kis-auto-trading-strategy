@@ -609,24 +609,44 @@ class TelegramInteractiveBot:
             import pandas as pd
 
             def _fetch_price_and_atr(sym: str, entry_fallback: float):
-                """yfinance로 최신 가격 및 ATR 계산. fast_info → history 순 fallback."""
+                """yfinance로 최신 가격 및 ATR 계산.
+                우선순위: fast_info.last_price → 1d 1m prepost → 60d daily fallback
+                """
                 curr_p = entry_fallback
                 atr = 0.0
+                price_label = ""   # 빈 문자열이면 정규장 가격
                 try:
                     ticker = yf.Ticker(sym)
-                    # 1순위: fast_info.last_price (장중/장후 실시간 포함)
+
+                    # 1순위: fast_info.last_price (프리/애프터/정규장 모두 커버)
                     fi = ticker.fast_info
                     lp = getattr(fi, 'last_price', None)
                     if lp and float(lp) > 0:
                         curr_p = float(lp)
-                    # ATR 계산용 히스토리 (5d 1m 대신 60d daily로 안정적으로)
+                        # 현재 시각 기준 장 세션 판별 (ET 기준)
+                        from datetime import datetime, timezone, timedelta
+                        et = datetime.now(timezone(timedelta(hours=-5)))  # ET (겨울) 근사
+                        hm = et.hour * 60 + et.minute
+                        if hm < 9 * 60 + 30:
+                            price_label = " 🌅<i>[프리장]</i>"
+                        elif hm >= 16 * 60:
+                            price_label = " 🌙<i>[애프터장]</i>"
+
+                    # ATR 계산용: 60일 일봉 (prepost 불필요)
                     hist = ticker.history(period="60d", auto_adjust=True)
                     if hist is not None and not hist.empty:
                         if isinstance(hist.columns, pd.MultiIndex):
                             hist.columns = hist.columns.get_level_values(0)
-                        # 현재가가 fast_info에서 못 받아왔으면 히스토리 종가 사용
+                        # fast_info가 실패했을 때 최후 종가 사용
                         if curr_p == entry_fallback:
-                            curr_p = float(hist['Close'].iloc[-1])
+                            # 프리/애프터장 최신 1분봉 시도
+                            try:
+                                intra = ticker.history(period="1d", interval="1m", prepost=True)
+                                if intra is not None and not intra.empty:
+                                    curr_p = float(intra['Close'].iloc[-1])
+                                    price_label = " 🌅<i>[프리/애프터]</i>"
+                            except Exception:
+                                curr_p = float(hist['Close'].iloc[-1])
                         tr1 = hist['High'] - hist['Low']
                         tr2 = (hist['High'] - hist['Close'].shift(1)).abs()
                         tr3 = (hist['Low'] - hist['Close'].shift(1)).abs()
@@ -634,12 +654,12 @@ class TelegramInteractiveBot:
                         atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
                 except Exception as fe:
                     logger.debug("Price fetch error for {}: {}", sym, fe)
-                return curr_p, atr
+                return curr_p, atr, price_label
 
             for sym, pos in positions.items():
                 entry_p = float(getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0)))
                 qty = int(getattr(pos, 'quantity', 0))
-                curr_p, atr = _fetch_price_and_atr(sym, entry_p)
+                curr_p, atr, price_label = _fetch_price_and_atr(sym, entry_p)
 
                 if atr > 0:
                     dyn_stop = round(entry_p - (2.0 * atr), 2)
@@ -664,7 +684,7 @@ class TelegramInteractiveBot:
 
                 block = (
                     f"{emoji} <b>{sym}{name_label}</b> | <code>{qty}주</code>\n"
-                    f"  • 매수가: <code>${entry_p:.2f}</code> ➔ 현재가: <b>${curr_p:.2f}</b>\n"
+                    f"  • 매수가: <code>${entry_p:.2f}</code> ➔ 현재가: <b>${curr_p:.2f}</b>{price_label}\n"
                     f"  • 수익률: <b>{sign_p}{pnl_pct:.2f}%</b> ({sign_u}${pnl_usd:.2f} USD)\n"
                     f"  • 🛡️ <b>안전 스탑선</b>: <code>${dyn_stop:.2f}</code> ({stop_pct:+.1f}%)\n"
                     f"  • 🎯 <b>예상 익절선</b>: 1차 <code>${tp1:.2f}</code> (+{tp1_pct:.1f}%) | 2차 <code>${tp2:.2f}</code> (+{tp2_pct:.1f}%)"
