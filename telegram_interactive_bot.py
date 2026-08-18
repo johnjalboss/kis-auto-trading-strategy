@@ -608,25 +608,38 @@ class TelegramInteractiveBot:
             import yfinance as yf
             import pandas as pd
 
+            def _fetch_price_and_atr(sym: str, entry_fallback: float):
+                """yfinance로 최신 가격 및 ATR 계산. fast_info → history 순 fallback."""
+                curr_p = entry_fallback
+                atr = 0.0
+                try:
+                    ticker = yf.Ticker(sym)
+                    # 1순위: fast_info.last_price (장중/장후 실시간 포함)
+                    fi = ticker.fast_info
+                    lp = getattr(fi, 'last_price', None)
+                    if lp and float(lp) > 0:
+                        curr_p = float(lp)
+                    # ATR 계산용 히스토리 (5d 1m 대신 60d daily로 안정적으로)
+                    hist = ticker.history(period="60d", auto_adjust=True)
+                    if hist is not None and not hist.empty:
+                        if isinstance(hist.columns, pd.MultiIndex):
+                            hist.columns = hist.columns.get_level_values(0)
+                        # 현재가가 fast_info에서 못 받아왔으면 히스토리 종가 사용
+                        if curr_p == entry_fallback:
+                            curr_p = float(hist['Close'].iloc[-1])
+                        tr1 = hist['High'] - hist['Low']
+                        tr2 = (hist['High'] - hist['Close'].shift(1)).abs()
+                        tr3 = (hist['Low'] - hist['Close'].shift(1)).abs()
+                        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                        atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
+                except Exception as fe:
+                    logger.debug("Price fetch error for {}: {}", sym, fe)
+                return curr_p, atr
+
             for sym, pos in positions.items():
                 entry_p = float(getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0)))
                 qty = int(getattr(pos, 'quantity', 0))
-                curr_p = entry_p
-                atr = 0.0
-
-                try:
-                    df = yf.download(sym, period="60d", progress=False)
-                    if df is not None and not df.empty:
-                        if isinstance(df.columns, pd.MultiIndex):
-                            df.columns = df.columns.get_level_values(0)
-                        curr_p = float(df['Close'].iloc[-1])
-                        tr1 = df['High'] - df['Low']
-                        tr2 = (df['High'] - df['Close'].shift(1)).abs()
-                        tr3 = (df['Low'] - df['Close'].shift(1)).abs()
-                        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-                        atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
-                except Exception:
-                    pass
+                curr_p, atr = _fetch_price_and_atr(sym, entry_p)
 
                 if atr > 0:
                     dyn_stop = round(entry_p - (2.0 * atr), 2)
