@@ -40,24 +40,29 @@ class HiddenMarkovRegime:
                 logger.warning("HiddenMarkovRegime: Insufficient data to build model.")
                 return result
                 
-            returns = df['Close'].pct_change().dropna()
+            close_s = df['Close']
+            if isinstance(close_s, pd.DataFrame):
+                close_s = close_s.iloc[:, 0]
+            close_s = pd.Series(close_s.values.flatten(), index=df.index, dtype=float).dropna()
+
+            returns = close_s.pct_change().dropna()
             
             # Simple mathematically simulated proxy for HMM state probabilities
             # (A real hmmlearn model takes too long to train in the intraday loop;
             # this proxy calculates expanding volatility and mean clustering)
             
-            short_vol = returns.tail(10).std() * np.sqrt(252)
-            long_vol = returns.tail(60).std() * np.sqrt(252)
+            short_vol = float(returns.tail(10).std() * np.sqrt(252))
+            long_vol = float(returns.tail(60).std() * np.sqrt(252))
             
-            short_trend = returns.tail(10).mean() * 252
-            long_trend = returns.tail(60).mean() * 252
+            short_trend = float(returns.tail(10).mean() * 252)
+            long_trend = float(returns.tail(60).mean() * 252)
             
             vol_ratio = short_vol / (long_vol if long_vol > 0 else 0.01)
             
             # 200-day SMA를 구하여 장기 추세 필터링
-            sma200 = df['Close'].rolling(200).mean().iloc[-1] if len(df) >= 200 else df['Close'].mean()
-            curr_price = float(df['Close'].iloc[-1])
-            is_above_200ma = curr_price > sma200
+            sma200 = float(close_s.rolling(200).mean().iloc[-1]) if len(close_s) >= 200 else float(close_s.mean())
+            curr_price = float(close_s.iloc[-1])
+            is_above_200ma = bool(curr_price > sma200)
 
             # State mapping matrix logic
             if short_trend > 0:
