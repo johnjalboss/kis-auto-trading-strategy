@@ -1319,6 +1319,17 @@ class TelegramInteractiveBot:
             logger.error("Failed monte carlo handler: {}", e)
             self._send_reply(f"⚠️ 몬테카를로 시뮬레이션 실패: {e}")
 
+if __name__ == "__main__":
+    logger.info("Starting TelegramInteractiveBot standalone service...")
+    bot = TelegramInteractiveBot()
+    bot.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        bot._running = False
+        logger.info("TelegramInteractiveBot stopped.")
+
 
 
 
