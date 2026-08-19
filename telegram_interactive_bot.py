@@ -157,7 +157,7 @@ class TelegramInteractiveBot:
                 ],
                 [
                     {"text": "⚙️ AI 파라미터 자가 튜닝", "callback_data": "cmd_auto_tuning"},
-                    {"text": "📈 보유 포지션 수익률/스탑선", "callback_data": "cmd_positions"}
+                    {"text": "🎲 10,000회 몬테카를로 파산확률", "callback_data": "cmd_monte_carlo"}
                 ],
                 [
                     {"text": "📜 주간 AI 보고서 즉시조회", "callback_data": "cmd_weekly_ai_report"},
@@ -255,6 +255,9 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_news_sentiment":
                                     self._answer_callback(cb_id, "📰 AI 뉴스 센티멘트를 분석합니다.")
                                     _run_async(self._handle_news_sentiment)
+                                elif cb_data == "cmd_rotation":
+                                    self._answer_callback(cb_id, "🔄 테마 순환매 레이더를 조회합니다.")
+                                    _run_async(self._handle_rotation)
                                 elif cb_data == "cmd_shadow_paper":
                                     self._answer_callback(cb_id, "👥 섀도우 모의매매 성과를 조회합니다.")
                                     _run_async(self._handle_shadow_paper)
@@ -335,9 +338,11 @@ class TelegramInteractiveBot:
                             elif "message" in update:
                                 msg = update["message"]
                                 text = msg.get("text", "").strip()
-                                sender_id = str(msg.get("chat", {}).get("id", ""))
+                                chat_id = str(msg.get("chat", {}).get("id", ""))
+                                from_id = str(msg.get("from", {}).get("id", ""))
 
-                                if sender_id != str(self.chat_id):
+                                if self.chat_id and str(self.chat_id) not in (chat_id, from_id):
+                                    logger.warning("Unauthorized text msg from chat: {} (from: {})", chat_id, from_id)
                                     continue
 
                                 cmd = text.lower().strip().replace(" ", "")
@@ -354,6 +359,8 @@ class TelegramInteractiveBot:
                                     self._handle_pnl("monthly")
                                 elif any(cmd.startswith(c) for c in ["/전체수익", "전체수익", "/total"]):
                                     self._handle_pnl("total")
+                                elif any(cmd.startswith(c) for c in ["/튜닝", "튜닝", "/자가튜닝", "자가튜닝", "/autotuning"]):
+                                    self._handle_auto_tuning()
                                 elif any(cmd.startswith(c) for c in ["/퀀트", "퀀트", "퀀트알파", "/alpha", "알파상태"]):
                                     self._handle_quant_status()
                                 elif any(cmd.startswith(c) for c in ["/모의매매", "모의매매", "섀도우", "/shadow"]):
@@ -362,7 +369,7 @@ class TelegramInteractiveBot:
                                     self._handle_weekly_ai_report()
                                 elif any(cmd.startswith(c) for c in ["/후보", "후보", "탑픽", "/toppicks"]):
                                     self._handle_top_picks()
-                                elif any(cmd.startswith(c) for c in ["/몬테카를로", "몬테카를로", "시뮬레이션"]):
+                                elif any(cmd.startswith(c) for c in ["/몬테카를로", "몬테카를로", "시뮬레이션", "/montecarlo"]):
                                     self._handle_monte_carlo()
                                 elif any(cmd.startswith(c) for c in ["/dday", "디데이", "실적dday"]):
                                     self._handle_macro_dday()
@@ -404,7 +411,7 @@ class TelegramInteractiveBot:
                                     self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 루프를 재가동합니다.")
                                 elif any(cmd.startswith(c) for c in ["/close_all", "/전량청산", "/청산", "전량청산", "청산"]):
                                     self._handle_close_all()
-                                elif any(cmd.startswith(c) for c in ["/help", "/도움말", "/start", "도움말", "help", "메뉴"]):
+                                elif any(cmd.startswith(c) for c in ["/help", "/도움말", "/start", "도움말", "help", "메뉴", "/menu"]):
                                     self._send_one_click_menu()
 
             except Exception as e:
