@@ -98,10 +98,12 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.debug("Telegram photo send error: {}", e)
 
-    def _answer_callback(self, callback_query_id: str, text: str):
+    def _answer_callback(self, callback_query_id: str, text: str = None):
         try:
             url = f"https://api.telegram.org/bot{self.bot_token}/answerCallbackQuery"
-            payload = {"callback_query_id": callback_query_id, "text": text}
+            payload = {"callback_query_id": callback_query_id}
+            if text:
+                payload["text"] = text
             requests.post(url, json=payload, timeout=5)
         except Exception as e:
             logger.debug("Answer callback error: {}", e)
@@ -222,99 +224,70 @@ class TelegramInteractiveBot:
                                 def _run_async(target_func, *args):
                                     threading.Thread(target=target_func, args=args, daemon=True).start()
 
+                                self._answer_callback(cb_id)
+
                                 if cb_data == "cmd_auto_tuning":
-                                    self._answer_callback(cb_id, "⚙️ AI 퀀트 자가 튜닝 리포트를 조회합니다.")
                                     _run_async(self._handle_auto_tuning)
                                 elif cb_data == "cmd_macro_dday":
-                                    self._answer_callback(cb_id, "🔮 매크로 & 실적 D-Day를 조회합니다.")
                                     _run_async(self._handle_macro_dday)
                                 elif cb_data == "cmd_smart_money":
-                                    self._answer_callback(cb_id, "📡 스마트머니 수급을 조회합니다.")
                                     _run_async(self._handle_smart_money)
                                 elif cb_data == "cmd_monte_carlo":
-                                    self._answer_callback(cb_id, "🎲 10,000회 몬테카를로 시뮬레이션을 실행합니다.")
                                     _run_async(self._handle_monte_carlo)
                                 elif cb_data == "cmd_weekly_ai_report":
-                                    self._answer_callback(cb_id, "📜 주간 AI 운용 보고서를 생성합니다.")
                                     _run_async(self._handle_weekly_ai_report)
                                 elif cb_data == "cmd_economic_surprise":
-                                    self._answer_callback(cb_id, "🏛️ 경제지표 서프라이즈 반응을 조회합니다.")
                                     _run_async(self._handle_economic_surprise)
                                 elif cb_data == "cmd_dark_pool":
-                                    self._answer_callback(cb_id, "🕶️ 다크풀 장외 매집 현황을 조회합니다.")
                                     _run_async(self._handle_dark_pool)
                                 elif cb_data == "cmd_cboe_options":
-                                    self._answer_callback(cb_id, "📊 CBOE 옵션 풋/콜 비율을 조회합니다.")
                                     _run_async(self._handle_cboe_options)
                                 elif cb_data == "cmd_gex_radar":
-                                    self._answer_callback(cb_id, "🧲 마켓메이커 GEX 감마 레이더를 조회합니다.")
                                     _run_async(self._handle_gex_radar)
                                 elif cb_data == "cmd_congress_trades":
-                                    self._answer_callback(cb_id, "🏛️ 미국 의원 주식 매매 현황을 조회합니다.")
                                     _run_async(self._handle_congress_trades)
                                 elif cb_data == "cmd_news_sentiment":
-                                    self._answer_callback(cb_id, "📰 AI 뉴스 센티멘트를 분석합니다.")
                                     _run_async(self._handle_news_sentiment)
                                 elif cb_data == "cmd_rotation":
-                                    self._answer_callback(cb_id, "🔄 테마 순환매 레이더를 조회합니다.")
                                     _run_async(self._handle_rotation)
                                 elif cb_data == "cmd_shadow_paper":
-                                    self._answer_callback(cb_id, "👥 섀도우 모의매매 성과를 조회합니다.")
                                     _run_async(self._handle_shadow_paper)
                                 elif cb_data == "cmd_stock_charts_menu":
-                                    self._answer_callback(cb_id, "📊 보유 종목 차트 메뉴를 엽니다.")
                                     _run_async(self._handle_stock_charts_menu)
                                 elif cb_data.startswith("cmd_chart_sym_"):
                                     sym = cb_data.replace("cmd_chart_sym_", "").upper()
-                                    self._answer_callback(cb_id, f"📊 {sym} 캔들 차트를 렌더링합니다.")
                                     _run_async(self._handle_single_stock_chart, sym)
                                 elif cb_data == "cmd_main_menu":
-                                    self._answer_callback(cb_id, "📋 메인 제어판으로 이동합니다.")
                                     _run_async(self._send_one_click_menu)
                                 elif cb_data == "cmd_status":
-                                    self._answer_callback(cb_id, "📊 계좌 상태를 조회합니다.")
                                     _run_async(self._handle_status)
                                 elif cb_data == "cmd_positions":
-                                    self._answer_callback(cb_id, "📈 보유 포지션을 조회합니다.")
                                     _run_async(self._handle_positions)
                                 elif cb_data == "cmd_today_pnl":
-                                    self._answer_callback(cb_id, "💰 오늘 실현손익을 조회합니다.")
                                     _run_async(self._handle_pnl, "today")
                                 elif cb_data == "cmd_weekly_pnl":
-                                    self._answer_callback(cb_id, "📅 7일 누적성과를 조회합니다.")
                                     _run_async(self._handle_pnl, "weekly")
                                 elif cb_data == "cmd_monthly_pnl":
-                                    self._answer_callback(cb_id, "📅 30일 월간성과를 조회합니다.")
                                     _run_async(self._handle_pnl, "monthly")
                                 elif cb_data == "cmd_total_pnl":
-                                    self._answer_callback(cb_id, "🏆 전체 누적성과를 조회합니다.")
                                     _run_async(self._handle_pnl, "total")
                                 elif cb_data == "cmd_quant_status":
-                                    self._answer_callback(cb_id, "🧬 퀀트 알파 상태를 조회합니다.")
                                     _run_async(self._handle_quant_status)
                                 elif cb_data == "cmd_top_picks":
-                                    self._answer_callback(cb_id, "🚀 실시간 후보 Top 5를 조회합니다.")
                                     _run_async(self._handle_top_picks)
                                 elif cb_data == "cmd_theme":
-                                    self._answer_callback(cb_id, "🔥 테마 1등주를 조회합니다.")
                                     _run_async(self._handle_theme)
                                 elif cb_data == "cmd_screener":
-                                    self._answer_callback(cb_id, "🎯 스크리너 픽을 조회합니다.")
                                     _run_async(self._handle_screener)
                                 elif cb_data == "cmd_regime":
-                                    self._answer_callback(cb_id, "🌐 시장 레짐을 조회합니다.")
                                     _run_async(self._handle_regime)
                                 elif cb_data == "cmd_risk":
-                                    self._answer_callback(cb_id, "🛡️ 리스크 현황을 조회합니다.")
                                     _run_async(self._handle_risk)
                                 elif cb_data == "cmd_chart30":
-                                    self._answer_callback(cb_id, "📊 30일 차트를 생성합니다.")
                                     _run_async(self._handle_chart, 30)
                                 elif cb_data == "cmd_chart90":
-                                    self._answer_callback(cb_id, "📊 90일 차트를 생성합니다.")
                                     _run_async(self._handle_chart, 90)
                                 elif cb_data == "cmd_chart180":
-                                    self._answer_callback(cb_id, "📊 180일 차트를 생성합니다.")
                                     _run_async(self._handle_chart, 180)
                                 elif cb_data == "cmd_chart365":
                                     self._answer_callback(cb_id, "📊 1년 차트를 생성합니다.")
