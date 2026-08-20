@@ -73,63 +73,63 @@ class WinRateOptimizer:
         
         # 1. Trend Alignment
         if price_above_sma20 and sma20_above_sma50:
-            trend_score = 100
+            trend_score = 90
         elif price_above_sma20:
             trend_score = 60
         elif sma20_above_sma50:
             trend_score = 40
         else:
-            trend_score = 0
+            trend_score = 10
             reasons.append("AGAINST_TREND")
         
         # 2. Momentum Confirmation
         if macd_bullish and rsi_favorable:
-            momentum_score = 100
+            momentum_score = 88
         elif macd_bullish or rsi_favorable:
             momentum_score = 50
         else:
-            momentum_score = 0
+            momentum_score = 15
             reasons.append("NO_MOMENTUM")
         
         # 3. Volume Confirmation
-        volume_score = 100 if volume_above_avg else 30
+        volume_score = 85 if volume_above_avg else 30
         if not volume_above_avg:
             reasons.append("LOW_VOLUME")
         
         # 4. Regime Match
-        regime_score = 100 if regime_aligned else 20
+        regime_score = 90 if regime_aligned else 25
         if not regime_aligned:
             reasons.append("REGIME_MISMATCH")
         
         # 5. Risk/Reward
-        if risk_reward_ratio >= 3:
-            rr_score = 100
-        elif risk_reward_ratio >= 2:
+        if risk_reward_ratio >= 3.0:
+            rr_score = 95
+        elif risk_reward_ratio >= 2.0:
             rr_score = 80
         elif risk_reward_ratio >= 1.5:
-            rr_score = 50
+            rr_score = 55
         else:
-            rr_score = 0
+            rr_score = 10
             reasons.append(f"BAD_RR:{risk_reward_ratio:.1f}")
         
         # 6. Timing Quality
         if not_at_resistance and not_overextended:
-            timing_score = 100
+            timing_score = 88
         elif not_at_resistance or not_overextended:
             timing_score = 50
         else:
-            timing_score = 0
+            timing_score = 10
             reasons.append("BAD_TIMING")
         
         # Calculate weighted total
-        total = (
+        total = int((
             trend_score * self.WEIGHTS['trend'] +
             momentum_score * self.WEIGHTS['momentum'] +
             volume_score * self.WEIGHTS['volume'] +
             regime_score * self.WEIGHTS['regime'] +
             rr_score * self.WEIGHTS['risk_reward'] +
             timing_score * self.WEIGHTS['timing']
-        ) // 100
+        ) / 100)
         
         passed = total >= self.threshold
         

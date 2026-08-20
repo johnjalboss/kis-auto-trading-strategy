@@ -62,11 +62,15 @@ class DailySettlementReporter:
             conn = sqlite3.connect(str(self.db_path))
             cur = conn.cursor()
             cur.execute("""
+                SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, created_at
+                FROM trade_details
+                WHERE side = 'SELL' AND (date(created_at) = ? OR date(created_at, '-14 hours') = ?)
+                UNION ALL
                 SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, created_at
                 FROM trades
-                WHERE side = 'SELL' AND date(created_at) = ?
-                ORDER BY id ASC
-            """, (today_str,))
+                WHERE side = 'SELL' AND (date(created_at) = ? OR date(created_at, '-14 hours') = ?)
+                ORDER BY created_at ASC
+            """, (today_str, today_str, today_str, today_str))
             rows = cur.fetchall()
             conn.close()
 

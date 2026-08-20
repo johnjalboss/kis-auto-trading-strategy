@@ -105,69 +105,189 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     if end_date < start_date:
         end_date = start_date
 
-    # 1. Fetch Open Positions Unrealized P&L
-    unrealized_pnl = 0.0
+    # 1. Fetch Baseline / Current Positions and All Trades since 2026-08-14
+    initial_positions = {}
+    current_trader_positions = {}
     try:
         from trader import Trader
         t = Trader()
         open_pos = t.get_positions()
         for p in open_pos:
+            sym = getattr(p, 'symbol', '')
             qty = getattr(p, 'quantity', 0)
             avg_p = getattr(p, 'avg_price', 0)
             curr_p = getattr(p, 'current_price', avg_p)
-            if qty > 0 and avg_p > 0 and curr_p > 0:
-                unrealized_pnl += (curr_p - avg_p) * qty
-    except Exception:
-        unrealized_pnl = 9.12
+            if sym and qty > 0 and avg_p > 0:
+                current_trader_positions[sym] = {
+                    'symbol': sym,
+                    'quantity': qty,
+                    'avg_price': avg_p,
+                    'current_price': curr_p
+                }
+    except Exception as pos_e:
+        logger.debug("Failed to fetch open positions from trader: {}", pos_e)
 
-    # 2. Fetch Closed Trades strictly on/after 2026-08-14 (Ignore all pre-08-14 test noise)
-    pnl_by_date = {}
+    # 2. Reconstruct Point-in-Time Positions from DB
+    all_trades_since_baseline = []
+    all_symbols_set = set(current_trader_positions.keys())
+
     if os.path.exists(db_path):
         try:
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
+
+            # True Day 1 Baseline Holdings on 2026-08-14 start:
+            # VTOL (6 shares @ $45.92), STRC (1 share @ $95.26), MDT (2 shares @ $88.75)
+            initial_positions = {
+                'VTOL': {'symbol': 'VTOL', 'quantity': 6, 'avg_price': 45.9246},
+                'STRC': {'symbol': 'STRC', 'quantity': 1, 'avg_price': 95.258},
+                'MDT': {'symbol': 'MDT', 'quantity': 2, 'avg_price': 88.7533}
+            }
+            for sym in initial_positions:
+                all_symbols_set.add(sym)
+
+            # Fetch all trades strictly on/after 2026-08-14 in chronological order from trade_details and trades
             cur.execute("""
-                SELECT date(created_at) as trade_date, SUM(pnl) as net_pnl
-                FROM trades
-                WHERE side = 'SELL' AND date(created_at) >= '2026-08-14'
-                GROUP BY date(created_at)
+                SELECT id, symbol, side, quantity, price, pnl, pnl_pct, date(created_at, '-14 hours') as trade_date, created_at
+                FROM (
+                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trade_details WHERE date(created_at) >= '2026-08-14'
+                    UNION ALL
+                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trades WHERE date(created_at) >= '2026-08-14'
+                )
+                ORDER BY created_at ASC, id ASC
             """)
             for r in cur.fetchall():
-                pnl_by_date[r['trade_date']] = float(r['net_pnl'] or 0.0)
+                trade_dict = dict(r)
+                all_trades_since_baseline.append(trade_dict)
+                if trade_dict['symbol']:
+                    all_symbols_set.add(trade_dict['symbol'])
+
             conn.close()
         except Exception as db_err:
             logger.debug("DB query error: {}", db_err)
 
-    # 3. Construct Day 1 Timeline (strictly starting 2026-08-14)
-    # If today is Day 1 (start_date == end_date == 2026-08-14):
-    # Construct a 2-point progression: [08-14 (Open), 08-14 (Close)]
-    if start_date == end_date:
-        date_labels = ["08-14 (Open)", "08-14 (Close)"]
-        daily_bars = [0.0, unrealized_pnl]
-        cum_pnls = [0.0, unrealized_pnl]
+    # 3. Construct Date Series (strictly starting 2026-08-14)
+    date_strs = []
+    date_labels = []
+    cur_d = start_date
+    while cur_d <= end_date:
+        date_strs.append(cur_d.strftime('%Y-%m-%d'))
+        date_labels.append(cur_d.strftime('%m-%d'))
+        cur_d += timedelta(days=1)
+
+    # If only 1 day, create 2 points for visual clarity
+    if len(date_strs) == 1:
+        date_labels = [f"{date_labels[0]} (Open)", f"{date_labels[0]} (Close)"]
+
+    # 4. Fetch Historical Daily Close for ALL Tracked Symbols
+    hist_prices = {}
+    all_symbols_list = list(all_symbols_set)
+    if all_symbols_list:
+        try:
+            start_fetch = start_date - timedelta(days=7)
+            end_fetch = end_date + timedelta(days=2)
+            df_hist = yf.download(all_symbols_list, start=start_fetch.strftime('%Y-%m-%d'),
+                                  end=end_fetch.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)
+            if df_hist is not None and not df_hist.empty:
+                for sym in all_symbols_list:
+                    try:
+                        if isinstance(df_hist.columns, pd.MultiIndex):
+                            c_s = df_hist['Close'][sym] if ('Close' in df_hist and sym in df_hist['Close']) else None
+                        elif len(all_symbols_list) == 1 and 'Close' in df_hist.columns:
+                            c_s = df_hist['Close']
+                        else:
+                            c_s = None
+
+                        if c_s is not None and not c_s.empty:
+                            c_s.index = pd.to_datetime(c_s.index).tz_localize(None).normalize()
+                            c_s = c_s.sort_index().ffill()
+                            hist_prices[sym] = c_s
+                    except Exception as sym_err:
+                        logger.debug("Error parsing hist price for {}: {}", sym, sym_err)
+        except Exception as hist_e:
+            logger.debug("Failed to fetch historical prices for symbols: {}", hist_e)
+
+    # 5. Point-in-Time Daily Portfolio Replay (Mark-to-Market)
+    # Replays trades day-by-day to determine exact held positions on EACH date
+    cum_pnls = []
+    daily_bars = []
+    prev_total_pnl = 0.0
+
+    # Running inventory state
+    running_positions = {k: v.copy() for k, v in initial_positions.items()}
+    cum_realized_pnl = 0.0
+    trade_cursor = 0
+
+    for i, d_str in enumerate(date_strs):
+        d_dt = pd.to_datetime(d_str).normalize()
+        is_latest_day = (i == len(date_strs) - 1)
+
+        # Process all trades executed on or before this date
+        while trade_cursor < len(all_trades_since_baseline):
+            tr = all_trades_since_baseline[trade_cursor]
+            if tr['trade_date'] > d_str:
+                break
+
+            sym = tr['symbol']
+            side = tr['side']
+            qty = float(tr['quantity'] or 0)
+            px = float(tr['price'] or 0)
+            pnl_val = float(tr['pnl'] or 0)
+
+            if side == 'BUY':
+                if sym in running_positions:
+                    old_qty = running_positions[sym]['quantity']
+                    old_avg = running_positions[sym]['avg_price']
+                    new_qty = old_qty + qty
+                    new_avg = ((old_avg * old_qty) + (px * qty)) / new_qty if new_qty > 0 else px
+                    running_positions[sym] = {'symbol': sym, 'quantity': new_qty, 'avg_price': new_avg}
+                else:
+                    running_positions[sym] = {'symbol': sym, 'quantity': qty, 'avg_price': px}
+            elif side == 'SELL':
+                cum_realized_pnl += pnl_val
+                if sym in running_positions:
+                    rem_qty = running_positions[sym]['quantity'] - qty
+                    if rem_qty <= 0.0001:
+                        running_positions.pop(sym, None)
+                    else:
+                        running_positions[sym]['quantity'] = rem_qty
+
+            trade_cursor += 1
+
+        # Calculate Point-in-Time Unrealized P&L on date d_str
+        d_unrealized = 0.0
+        for sym, pos_info in running_positions.items():
+            qty = pos_info['quantity']
+            avg_p = pos_info['avg_price']
+            if qty <= 0 or avg_p <= 0:
+                continue
+
+            if is_latest_day and sym in current_trader_positions:
+                price_on_day = current_trader_positions[sym].get('current_price', avg_p)
+            else:
+                price_on_day = avg_p
+                if sym in hist_prices:
+                    series = hist_prices[sym]
+                    match = series[series.index <= d_dt]
+                    if not match.empty:
+                        price_on_day = float(match.iloc[-1])
+
+            d_unrealized += (price_on_day - avg_p) * qty
+
+        total_pnl_on_day = cum_realized_pnl + d_unrealized
+        cum_pnls.append(round(total_pnl_on_day, 2))
+
+        daily_change = total_pnl_on_day - prev_total_pnl if i > 0 else total_pnl_on_day
+        daily_bars.append(round(daily_change, 2))
+        prev_total_pnl = total_pnl_on_day
+
+    # Handle 1-day edge case (Open -> Close)
+    if len(date_strs) == 1:
+        cum_pnls = [0.0, cum_pnls[0]]
+        daily_bars = [0.0, daily_bars[0]]
         qqq_dollars = _fetch_qqq_returns_since_baseline(start_date, end_date, base_capital, date_labels)
     else:
-        date_strs = []
-        date_labels = []
-        cur_d = start_date
-        while cur_d <= end_date:
-            date_strs.append(cur_d.strftime('%Y-%m-%d'))
-            date_labels.append(cur_d.strftime('%m-%d'))
-            cur_d += timedelta(days=1)
-
-        daily_bars = []
-        cum_pnls = []
-        running_pnl = 0.0
-
-        for i, d_str in enumerate(date_strs):
-            day_realized = pnl_by_date.get(d_str, 0.0)
-            running_pnl += day_realized
-            is_today = (i == len(date_strs) - 1)
-            total_pnl_point = running_pnl + (unrealized_pnl if is_today else 0.0)
-            daily_bars.append(day_realized if day_realized != 0 else (unrealized_pnl if is_today else 0.0))
-            cum_pnls.append(total_pnl_point)
-
         qqq_dollars = _fetch_qqq_returns_since_baseline(start_date, end_date, base_capital, date_strs)
 
     # Calculate Alpha (Excess Return vs QQQ)
@@ -254,6 +374,10 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
 
     # 5. Format Structured Caption Text
     total_equity = base_capital + final_bot
+    current_held_symbols = list(current_trader_positions.keys())
+    held_symbols_str = ", ".join(current_held_symbols) if current_held_symbols else "없음"
+    current_unrealized = sum((p.get('current_price', p['avg_price']) - p['avg_price']) * p['quantity'] for p in current_trader_positions.values())
+
     caption_text = (
         f"📊 <b>[AI 퀀트 봇 vs QQQ 벤치마크 Day 1 성과 리포트]</b>\n"
         f"📅 <b>출발 기준일</b>: <b>2026-08-14 (Day 1 시작)</b>\n"
@@ -263,7 +387,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
         f"📈 <b>QQQ 벤치마크 자산</b>: <b>${(base_capital + final_qqq):,.2f} USD</b> (<b>{qqq_pct:+.2f}%</b>)\n"
         f"🔥 <b>QQQ 대비 초과 수익 (Alpha)</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 <i>보유 4종목(VTOL, MDT, MRK, STRC) 미실현 손익: ${unrealized_pnl:+,.2f} USD 반영 완료</i>"
+        f"💡 <i>현재 보유 종목({held_symbols_str}) 미실현 손익: ${current_unrealized:+,.2f} USD 반영 완료</i>"
     )
 
     return out_path, caption_text

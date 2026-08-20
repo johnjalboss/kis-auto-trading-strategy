@@ -27,17 +27,32 @@ class PreMarketGapSentinel:
     def get_held_symbols(self) -> list:
         """Fetch actual live positions from Broker API, Database, and Strategy."""
         symbols = []
+        # 1. Try TradeDatabase / Database
         try:
-            from database import Database
-            db = Database(self.db_path)
+            from database import TradeDatabase, get_database
+            db = get_database()
             pos_dict = db.get_positions()
             if pos_dict:
-                symbols = list(pos_dict.keys())
+                symbols = [s for s, p in pos_dict.items() if p.get('quantity', 0) > 0]
                 if symbols:
                     return symbols
         except Exception as _db_err:
             logger.debug("Database get_positions skipped: {}", _db_err)
 
+        # 2. Direct SQLite query fallback
+        try:
+            if os.path.exists(self.db_path):
+                conn = sqlite3.connect(self.db_path)
+                cur = conn.cursor()
+                cur.execute("SELECT symbol FROM positions WHERE quantity > 0")
+                rows = cur.fetchall()
+                conn.close()
+                if rows:
+                    return [r[0] for r in rows]
+        except Exception as _sql_err:
+            logger.debug("Direct SQL positions query skipped: {}", _sql_err)
+
+        # 3. Live broker / Trader fallback
         try:
             from trader import get_trader
             tr = get_trader()
@@ -49,8 +64,6 @@ class PreMarketGapSentinel:
         except Exception as _tr_err:
             logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
 
-        if not symbols:
-            symbols = ["MDT", "STRC", "VTOL", "MRK"]
         return symbols
 
     def get_dynamic_watchlist(self) -> list:
@@ -65,22 +78,10 @@ class PreMarketGapSentinel:
         benchmarks = ["QQQ", "SPY", "SMH", "IWM"]
         candidates.extend(benchmarks)
 
-        # 2. Try loading active screener candidates
-        try:
-            from screener import DynamicScreener
-            from macro import MarketRegime
-            res = DynamicScreener().screen(regime=MarketRegime.RISK_ON)
-            if res and res.tickers:
-                for t in res.tickers[:12]:
-                    if t not in candidates:
-                        candidates.append(t)
-        except Exception as e:
-            logger.debug("Screener candidates fetch skipped: {}", e)
-
-        # 3. High-Momentum Growth & Breakout Leaders (Dynamic Universe Pool)
+        # 2. High-Momentum Growth & Breakout Leaders (Dynamic Universe Pool)
         growth_leaders = ["NVDA", "PLTR", "LLY", "VRT", "CRWD", "APP", "AXON", "GEV", "TSLA", "AMD"]
         for sym in growth_leaders:
-            if len(candidates) >= 16:
+            if len(candidates) >= 14:
                 break
             if sym not in candidates:
                 candidates.append(sym)
@@ -88,7 +89,7 @@ class PreMarketGapSentinel:
         return candidates
 
     def scan_gaps(self, threshold_pct: float = 3.0) -> dict:
-        """Scan held positions and top universe stocks for pre-market gaps."""
+        """Scan held positions and top universe stocks for pre-market gaps with prepost=True."""
         held = self.get_held_symbols()
         watchlist = self.get_dynamic_watchlist()
         all_symbols = list(dict.fromkeys(held + watchlist))
@@ -99,17 +100,37 @@ class PreMarketGapSentinel:
         for sym in all_symbols:
             try:
                 t = yf.Ticker(sym)
-                fast = t.fast_info
-                last_price = float(fast.get("last_price", 0.0) or 0.0)
-                prev_close = float(fast.get("previous_close", 0.0) or 0.0)
+                last_price = 0.0
+                prev_close = 0.0
 
+                # 1. Try 1m intraday with prepost=True for true extended hours live quotes
+                try:
+                    df_intra = t.history(period="1d", interval="1m", prepost=True)
+                    if df_intra is not None and not df_intra.empty:
+                        last_price = float(df_intra['Close'].iloc[-1])
+                except Exception:
+                    pass
+
+                # 2. Daily history for previous close
+                try:
+                    df_daily = t.history(period="5d")
+                    if df_daily is not None and not df_daily.empty:
+                        if len(df_daily) >= 2:
+                            prev_close = float(df_daily['Close'].iloc[-2])
+                        else:
+                            prev_close = float(df_daily['Close'].iloc[-1])
+                        if last_price <= 0:
+                            last_price = float(df_daily['Close'].iloc[-1])
+                except Exception:
+                    pass
+
+                # 3. Fallback to fast_info if still zero
                 if last_price <= 0 or prev_close <= 0:
-                    df = yf.download(sym, period="5d", progress=False)
-                    if not df.empty:
-                        if isinstance(df.columns, pd.MultiIndex):
-                            df.columns = df.columns.get_level_values(0)
-                        last_price = float(df['Close'].iloc[-1])
-                        prev_close = float(df['Close'].iloc[-2]) if len(df) >= 2 else last_price
+                    fast = t.fast_info
+                    if last_price <= 0:
+                        last_price = float(fast.get("last_price", 0.0) or 0.0)
+                    if prev_close <= 0:
+                        prev_close = float(fast.get("previous_close", 0.0) or 0.0)
 
                 if prev_close > 0 and last_price > 0:
                     gap_pct = ((last_price - prev_close) / prev_close) * 100.0

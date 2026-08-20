@@ -162,6 +162,14 @@ class TelegramInteractiveBot:
                     {"text": "🎲 10,000회 몬테카를로 파산확률", "callback_data": "cmd_monte_carlo"}
                 ],
                 [
+                    {"text": "🏛️ 연준 순유동성", "callback_data": "cmd_fed_liquidity"},
+                    {"text": "🧮 옵션 GEX 감마", "callback_data": "cmd_options_gex"}
+                ],
+                [
+                    {"text": "👥 내부자 순매수 레이더", "callback_data": "cmd_insider_radar"},
+                    {"text": "⏰ 거시 지표 쉴드", "callback_data": "cmd_macro_shield"}
+                ],
+                [
                     {"text": "📜 주간 AI 보고서 즉시조회", "callback_data": "cmd_weekly_ai_report"},
                     {"text": "👥 섀도우 모의매매 현황", "callback_data": "cmd_shadow_paper"}
                 ],
@@ -252,6 +260,14 @@ class TelegramInteractiveBot:
                                     _run_async(self._handle_rotation)
                                 elif cb_data == "cmd_shadow_paper":
                                     _run_async(self._handle_shadow_paper)
+                                elif cb_data == "cmd_fed_liquidity":
+                                    _run_async(self._handle_fed_liquidity)
+                                elif cb_data == "cmd_options_gex":
+                                    _run_async(self._handle_options_gex)
+                                elif cb_data == "cmd_insider_radar":
+                                    _run_async(self._handle_insider_radar)
+                                elif cb_data == "cmd_macro_shield":
+                                    _run_async(self._handle_macro_shock_shield)
                                 elif cb_data == "cmd_stock_charts_menu":
                                     _run_async(self._handle_stock_charts_menu)
                                 elif cb_data.startswith("cmd_chart_sym_"):
@@ -338,6 +354,14 @@ class TelegramInteractiveBot:
                                     self._handle_quant_status()
                                 elif any(cmd.startswith(c) for c in ["/모의매매", "모의매매", "섀도우", "/shadow"]):
                                     self._handle_shadow_paper()
+                                elif any(cmd.startswith(c) for c in ["/유동성", "유동성", "/liquidity", "/fed"]):
+                                    self._handle_fed_liquidity()
+                                elif any(cmd.startswith(c) for c in ["/옵션감마", "옵션감마", "/gex", "/gamma", "감마"]):
+                                    self._handle_options_gex()
+                                elif any(cmd.startswith(c) for c in ["/내부자", "내부자", "/insider", "임원매수"]):
+                                    self._handle_insider_radar()
+                                elif any(cmd.startswith(c) for c in ["/거시일정", "거시일정", "/shield", "/거시쉴드", "cpi", "fomc"]):
+                                    self._handle_macro_shock_shield()
                                 elif any(cmd.startswith(c) for c in ["/보고서", "보고서", "주간보고서", "/report"]):
                                     self._handle_weekly_ai_report()
                                 elif any(cmd.startswith(c) for c in ["/후보", "후보", "탑픽", "/toppicks"]):
@@ -425,7 +449,17 @@ class TelegramInteractiveBot:
                     result = {}
                     for p in k_pos:
                         avg_p = getattr(p, 'avg_price', getattr(p, 'entry_price', 0.0))
-                        curr_p = getattr(p, 'current_price', avg_p)
+                        curr_p = getattr(p, 'current_price', 0.0)
+                        # KIS 잔고 API가 장외 시간에 현재가를 평단가와 동일하게 주거나 0으로 주면 실시간 시세 직접 조회
+                        if curr_p <= 0 or abs(curr_p - avg_p) < 0.001:
+                            try:
+                                live_p = trader_obj.get_price(p.symbol)
+                                if live_p and live_p > 0:
+                                    curr_p = live_p
+                            except Exception:
+                                pass
+                        if curr_p <= 0:
+                            curr_p = avg_p
                         result[p.symbol] = _PosDummy(p.quantity, avg_p, curr_p)
                     logger.debug("Live KIS API positions: {} symbols", len(result))
                     return result
@@ -479,41 +513,80 @@ class TelegramInteractiveBot:
             positions = self._get_positions_dict()
 
             # 1. KIS 브로커 실시간 주문가능 현금 조회
-            if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
-                try:
+            try:
+                if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
                     bp = self.orchestrator.trader.get_buying_power()
-                except Exception as e:
-                    logger.debug("Status handler get_buying_power failed: {}", e)
-            else:
-                # Trader direct fallback
-                try:
+                else:
                     from trader import Trader
                     t = Trader()
                     bp = t.get_buying_power()
-                except Exception:
-                    bp = 0.0
+            except Exception as e:
+                logger.debug("Status handler get_buying_power failed: {}", e)
+                bp = 0.0
 
             try:
                 bp = float(bp) if isinstance(bp, (int, float)) else 0.0
             except Exception:
                 bp = 0.0
 
-            # Calculate total equity
+            # Trader instance for price lookup
+            trader_instance = None
+            try:
+                if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
+                    trader_instance = self.orchestrator.trader
+                else:
+                    from trader import Trader
+                    trader_instance = Trader()
+            except Exception:
+                trader_instance = None
+
+            # Calculate total equity and gather live prices
             pos_val = 0.0
+            pos_details = []
             for sym, pos in positions.items():
                 entry_p = getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0))
                 try: entry_p = float(entry_p)
                 except Exception: entry_p = 0.0
-                price = entry_p
-                if self.orchestrator and hasattr(self.orchestrator, 'trader'):
+
+                curr_p = getattr(pos, 'current_price', 0.0)
+                try: curr_p = float(curr_p)
+                except Exception: curr_p = 0.0
+
+                # Always fetch true real-time price
+                try:
+                    if trader_instance:
+                        lp = trader_instance.get_price(sym)
+                        if lp and float(lp) > 0:
+                            curr_p = float(lp)
+                except Exception:
+                    pass
+
+                if curr_p <= 0 or abs(curr_p - entry_p) < 0.001:
                     try:
-                        lp = self.orchestrator.trader.get_price(sym)
-                        if lp and float(lp) > 0: price = float(lp)
-                    except Exception: pass
+                        import yfinance as yf
+                        tk = yf.Ticker(sym)
+                        yf_p = getattr(tk.fast_info, 'last_price', None)
+                        if yf_p and float(yf_p) > 0:
+                            curr_p = float(yf_p)
+                    except Exception:
+                        pass
+
+                if curr_p <= 0:
+                    curr_p = entry_p
+
                 qty = getattr(pos, 'quantity', 0)
                 try: qty = float(qty)
                 except Exception: qty = 0.0
-                pos_val += (price * qty)
+
+                pos_val += (curr_p * qty)
+                pnl_p = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+                pos_details.append({
+                    "symbol": sym,
+                    "quantity": int(qty),
+                    "entry_price": entry_p,
+                    "current_price": curr_p,
+                    "pnl_pct": pnl_p
+                })
             
             total_eq = bp + pos_val
             if total_eq <= 0:
@@ -528,20 +601,12 @@ class TelegramInteractiveBot:
                 f"🌐 <b>실시간 웹 대시보드</b>: https://dee-merger-endorsed-sas.trycloudflare.com\n\n"
             )
 
-            if positions:
+            if pos_details:
                 msg += "<b>[현재 보유 포지션 목록]</b>\n"
-                for sym, pos in positions.items():
-                    entry_p = getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0))
-                    curr_p = entry_p
-                    if self.orchestrator and hasattr(self.orchestrator, 'trader'):
-                        try:
-                            lp = self.orchestrator.trader.get_price(sym)
-                            if lp > 0: curr_p = lp
-                        except Exception: pass
-
-                    pnl_p = ((curr_p - entry_p) / entry_p) * 100.0 if entry_p > 0 else 0
+                for p in pos_details:
+                    pnl_p = p["pnl_pct"]
                     sign = "🟢" if pnl_p >= 0 else "🔴"
-                    msg += f"{sign} <b>{sym}</b>: {pos.quantity}주 | 평단가: ${entry_p:.2f} | 현재가: ${curr_p:.2f} ({pnl_p:+.2f}%)\n"
+                    msg += f"{sign} <b>{p['symbol']}</b>: {p['quantity']}주 | 평단가: ${p['entry_price']:.2f} | 현재가: ${p['current_price']:.2f} ({pnl_p:+.2f}%)\n"
             else:
                 msg += "ℹ️ 현재 보유 중인 포지션이 없습니다.\n"
 
@@ -698,11 +763,11 @@ class TelegramInteractiveBot:
                 start_d = end_d - timedelta(days=30)
                 title = "📅 <b>최근 30일(월간) 누적 매매 성과</b>"
                 empty_msg = "📭 최근 30일간 청산(SELL) 완료된 매매가 없습니다."
-            else:  # total
-                start_d = date(2020, 1, 1)
+            else:  # total - strictly starting 2026-08-14 Day 1
+                start_d = date(2026, 8, 14)
                 end_d = date(2030, 12, 31)
-                title = "🏆 <b>AI 스윙 봇 전체 누적 매매 성과 (All-Time)</b>"
-                empty_msg = "📭 아직 전체 누적 매매 청산 기록이 없습니다."
+                title = "🏆 <b>AI 스윙 봇 전체 누적 매매 성과 (Day 1: 2026-08-14 기준)</b>"
+                empty_msg = "📭 8월 14일 이후 아직 전체 누적 매매 청산 기록이 없습니다."
             trades = db.get_trades_range(start_d, end_d)
             sells = [t for t in (trades or []) if t.side == "SELL"]
             if not sells:
@@ -718,7 +783,7 @@ class TelegramInteractiveBot:
                         if qty > 0 and avg_p > 0 and curr_p > 0:
                             unrealized_pnl += (curr_p - avg_p) * qty
                 except Exception:
-                    unrealized_pnl = 7.07
+                    unrealized_pnl = 0.0
 
                 base_cap = 766.49
                 total_eq = base_cap + unrealized_pnl
@@ -726,21 +791,32 @@ class TelegramInteractiveBot:
                 lines = [
                     title,
                     "━" * 18,
-                    "📅 <b>출발 상태</b>: 오늘(2026-08-14) Day 1 베이스라인 100% 적용 완료",
-                    "• <b>총 청산 거래</b>: 0건 (오늘 실거래 대기 중)",
+                    "📅 <b>출발 상태</b>: 2026-08-14 Day 1 베이스라인 적용",
+                    "• <b>총 청산 거래</b>: 0건",
                     "• <b>청산 실현 손익</b>: $0.00 USD",
-                    f"• <b>보유 포지션 미실현 손익</b>: <b>+${unrealized_pnl:,.2f} (+{unreal_pct:.2f}%)</b>",
+                    f"• <b>보유 포지션 미실현 손익</b>: <b>{'+' if unrealized_pnl>=0 else ''}${unrealized_pnl:,.2f} ({unreal_pct:+.2f}%)</b>",
                     f"• <b>계좌 총자산</b>: <b>${total_eq:,.2f} USD</b>"
                 ]
                 self._send_reply("\n".join(lines))
                 return
             total_pnl = sum(t.pnl for t in sells)
             wins = sum(1 for t in sells if t.pnl > 0)
+            losses = len(sells) - wins
             wr = (wins / len(sells) * 100) if sells else 0.0
-            lines = [title, "━" * 18]
-            lines.append(f"총 청산 건수: <b>{len(sells)}건</b> ({wins}승 / {len(sells)-wins}패)")
-            lines.append(f"승률: <b>{wr:.1f}%</b>")
-            lines.append(f"순손익: <b>${total_pnl:+,.2f}</b>")
+            lines = [
+                title,
+                "━" * 18,
+                f"• 🎯 <b>매매 전적</b>: <b>{len(sells)}전 {wins}승 {losses}패</b> (승률 <b>{wr:.1f}%</b>)",
+                f"• 💰 <b>누적 실현 순손익</b>: <b>{'+' if total_pnl >= 0 else ''}${total_pnl:,.2f} USD</b>",
+                "━" * 18,
+                "<b>[세부 청산 기록]</b>"
+            ]
+            for t in sells[:10]:
+                pnl_sign = "+" if t.pnl >= 0 else ""
+                emoji = "🟢" if t.pnl >= 0 else "🔴"
+                pct_str = f" ({pnl_sign}{t.pnl_pct*100:.1f}%)" if abs(t.pnl_pct) <= 1.0 else f" ({pnl_sign}{t.pnl_pct:.1f}%)"
+                date_str = str(t.exit_time)[:10] if t.exit_time else ""
+                lines.append(f"{emoji} <b>{t.symbol}</b> ({date_str}): <b>{pnl_sign}${t.pnl:,.2f}</b>{pct_str} | {t.reason[:25]}")
             self._send_reply("\n".join(lines))
         except Exception as e:
             self._send_reply(f"⚠️ 손익 조회 실패: {e}")
@@ -880,7 +956,7 @@ class TelegramInteractiveBot:
             if not recs:
                 self._send_reply("📭 현재 활성화된 테마 레이더 TRUE_SIGNAL 추천주가 없습니다.")
                 return
-            lines = ["🔥 <b>테마 레이더 100점 수식 검증 추천주</b>", "━" * 18]
+            lines = ["🔥 <b>테마 레이더 퀀트 모멘텀 추천주</b>", "━" * 18]
             for sym, data in list(recs.items())[:6]:
                 pick = data.get("pick_type", "LEADER")
                 theme = data.get("theme_name", "미상")
@@ -1298,6 +1374,48 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed monte carlo handler: {}", e)
             self._send_reply(f"⚠️ 몬테카를로 시뮬레이션 실패: {e}")
+
+    def _handle_fed_liquidity(self):
+        """연준 실시간 순유동성(Fed Net Liquidity) 리포트 조회"""
+        try:
+            from fed_net_liquidity_engine import FedNetLiquidityEngine
+            card = FedNetLiquidityEngine().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed fed liquidity handler: {}", e)
+            self._send_reply(f"⚠️ 연준 순유동성 조회 실패: {e}")
+
+    def _handle_options_gex(self):
+        """옵션 감마 익스포저(GEX) & Call/Put Wall 리포트 조회"""
+        try:
+            from options_gamma_engine import OptionsGammaEngine
+            card = OptionsGammaEngine().format_telegram_card("SPY")
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed options GEX handler: {}", e)
+            self._send_reply(f"⚠️ 옵션 GEX 조회 실패: {e}")
+
+    def _handle_insider_radar(self):
+        """SEC Form 4 내부자 순매수 클러스터 레이더 조회"""
+        try:
+            from sec_form4_insider_radar import SECForm4InsiderRadar
+            positions = self._get_positions_dict()
+            sample_sym = list(positions.keys())[0] if positions else "NVDA"
+            card = SECForm4InsiderRadar().format_telegram_card(sample_sym)
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed insider radar handler: {}", e)
+            self._send_reply(f"⚠️ 내부자 레이더 조회 실패: {e}")
+
+    def _handle_macro_shock_shield(self):
+        """거시경제 지표 발표 분단위 충격 방어 쉴드 리포트 조회"""
+        try:
+            from macro_event_shock_shield import MacroEventShockShield
+            card = MacroEventShockShield().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed macro shock shield handler: {}", e)
+            self._send_reply(f"⚠️ 거시경제 쉴드 조회 실패: {e}")
 
 if __name__ == "__main__":
     logger.info("Starting TelegramInteractiveBot standalone service...")

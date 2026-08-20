@@ -509,6 +509,17 @@ class DynamicScreener:
                 except Exception:
                     pass
 
+                # [SEC Form 4 Insider Cluster Buying Bonus]
+                try:
+                    from sec_form4_insider_radar import SECForm4InsiderRadar
+                    ins_res = SECForm4InsiderRadar().analyze_insider_activity(sym)
+                    if ins_res.get('is_cluster_buying'):
+                        rs_score += 6.0  # Cluster insider buying conviction bonus
+                    elif ins_res.get('purchase_count', 0) > 0:
+                        rs_score += 2.0
+                except Exception:
+                    pass
+
                 # [보너스] 52주 고점 대비 5% 이내 신고가 돌파 종목에 +5.0 RS 모멘텀 보너스
                 if dist_from_high <= 5.0:
                     rs_score += 5.0

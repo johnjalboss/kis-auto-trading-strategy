@@ -276,9 +276,13 @@ try:
         try:
             DAY_ZERO_STR = "2026-08-14"
             row = cur.execute("""
-                SELECT SUM(pnl) as net_pnl, COUNT(DISTINCT date(created_at)) as trading_days
-                FROM trades WHERE side = 'SELL' AND date(created_at) >= ? AND pnl IS NOT NULL
-            """, (DAY_ZERO_STR,)).fetchone()
+                SELECT SUM(pnl) as net_pnl
+                FROM (
+                    SELECT pnl FROM trade_details WHERE side = 'SELL' AND date(created_at) >= ? AND pnl IS NOT NULL
+                    UNION ALL
+                    SELECT pnl FROM trades WHERE side = 'SELL' AND date(created_at) >= ? AND pnl IS NOT NULL
+                )
+            """, (DAY_ZERO_STR, DAY_ZERO_STR)).fetchone()
             
             realized_pnl = float(row["net_pnl"] or 0.0) if row else 0.0
             
@@ -308,16 +312,20 @@ try:
             data["avg_daily_pnl_pct"] = 0.0
             data["cagr_error"] = str(e)
             
-        # Get daily stats dynamically from trades table
+        # Get daily stats dynamically from trade_details and trades tables
         cur.execute("""
             SELECT 
-                date(exit_time, '-14 hours') as date, 
+                date(created_at, '-14 hours') as date, 
                 SUM(pnl) as net_pnl, 
                 SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins, 
                 SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END) as losses 
-            FROM trades 
-            WHERE side = 'SELL' AND date(exit_time, '-14 hours') IS NOT NULL
-            GROUP BY date(exit_time, '-14 hours')
+            FROM (
+                SELECT pnl, created_at FROM trade_details WHERE side = 'SELL' AND created_at IS NOT NULL
+                UNION ALL
+                SELECT pnl, COALESCE(exit_time, created_at) as created_at FROM trades WHERE side = 'SELL' AND created_at IS NOT NULL
+            )
+            WHERE date(created_at, '-14 hours') IS NOT NULL
+            GROUP BY date(created_at, '-14 hours')
             ORDER BY date DESC
         """)
         db_history = {row["date"]: {k: row[k] for k in row.keys()} for row in cur.fetchall()}

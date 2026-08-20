@@ -390,7 +390,7 @@ class CompositeSignalEngine:
             stop_loss=stop_loss,
             take_profit=take_profit,
             risk_reward=risk_reward,
-            bullish_signals=bullish,
+                    bullish_signals=bullish,
             bearish_signals=bearish,
             warnings=warnings,
             summary=summary
@@ -405,6 +405,19 @@ class CompositeSignalEngine:
         async_score, async_signals = self._run_analyzers_async('macro', df, symbol=symbol, **kwargs)
         score += async_score
         signals.extend(async_signals)
+
+        # [FED NET LIQUIDITY INTEGRATION]
+        try:
+            from fed_net_liquidity_engine import FedNetLiquidityEngine
+            liq = FedNetLiquidityEngine().get_liquidity_summary()
+            if liq.get("regime") == "LIQUIDITY_EXPANSION":
+                score += 20
+                signals.append("FED_LIQUIDITY_EXPANSION")
+            elif liq.get("regime") == "LIQUIDITY_CONTRACTION":
+                score -= 20
+                signals.append("FED_LIQUIDITY_CONTRACTION")
+        except Exception:
+            pass
             
         return CategoryScore("MACRO", min(100, max(-100, score)), self.WEIGHTS['macro'], signals)
     
@@ -458,17 +471,14 @@ class CompositeSignalEngine:
         if float(sma20) > 0:
             dist_from_sma20 = (current - float(sma20)) / float(sma20)
             if dist_from_sma20 > 0.15:
-                score -= 30
-                signals.append(f"OVEREXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
-            elif dist_from_sma20 > 0.10:
-                score -= 15
-                signals.append(f"EXTENDED:{dist_from_sma20:.1%}_vs_SMA20")
-
+                score -= 20
+                signals.append("OVEREXTENDED_SMA20")
+        
         return CategoryScore("TECHNICAL", max(-100, min(100, score)),
                             self.WEIGHTS['technical'], signals)
     
     def _calculate_fundamental_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
-        """Calculate fundamental score"""
+        """Calculate fundamental quality score"""
         signals = []
         score = 0
         
@@ -476,27 +486,16 @@ class CompositeSignalEngine:
         score += async_score
         signals.extend(async_signals)
         
-        # Use price momentum as a proxy for earnings momentum
-        close_20 = df['Close'].iloc[-20]
-        ret_20d = (df['Close'].iloc[-1] / close_20 - 1) * 100 if close_20 > 0 else 0
+        # Returns-based quality proxy
+        returns = df['Close'].pct_change()
+        sharpe_proxy = returns.mean() / (returns.std() + 1e-9) * np.sqrt(252)
         
-        if ret_20d > 5:
+        if sharpe_proxy > 1.5:
             score += 20
-            signals.append("POSITIVE_MOMENTUM")
-        elif ret_20d < -5:
+            signals.append("HIGH_QUALITY_RETURNS")
+        elif sharpe_proxy < 0:
             score -= 20
-            signals.append("NEGATIVE_MOMENTUM")
-        
-        # Short-term Surge Penalty
-        # Fade parabolic moves, but allow strong momentum
-        close_5 = df['Close'].iloc[-5]
-        ret_5d = (df['Close'].iloc[-1] / close_5 - 1) * 100 if (len(df) >= 5 and close_5 > 0) else 0
-        if ret_5d > 20:
-            score -= 25
-            signals.append(f"PARABOLIC_5D:{ret_5d:.1f}%")
-        elif ret_5d > 15:
-            score -= 10
-            signals.append(f"SURGE_5D:{ret_5d:.1f}%")
+            signals.append("POOR_RISK_ADJUSTED")
 
         return CategoryScore("FUNDAMENTAL", max(-100, min(100, score)),
                             self.WEIGHTS['fundamental'], signals)
@@ -510,6 +509,32 @@ class CompositeSignalEngine:
         async_score, async_signals = self._run_analyzers_async('smart_money', df, symbol=symbol, **kwargs)
         score += async_score
         signals.extend(async_signals)
+
+        # [SEC Form 4 Insider Radar Integration]
+        try:
+            from sec_form4_insider_radar import SECForm4InsiderRadar
+            ins = SECForm4InsiderRadar().analyze_insider_activity(symbol)
+            if ins.get("is_cluster_buying"):
+                score += 25
+                signals.append("INSIDER_CLUSTER_BUY")
+            elif ins.get("is_whale_buying"):
+                score += 15
+                signals.append("INSIDER_WHALE_BUY")
+        except Exception:
+            pass
+
+        # [Options GEX Integration]
+        try:
+            from options_gamma_engine import OptionsGammaEngine
+            gex = OptionsGammaEngine().analyze_gex(symbol)
+            if gex.get("gex_regime") == "POSITIVE_GAMMA":
+                score += 15
+                signals.append("POSITIVE_GEX_STABILITY")
+            elif gex.get("gex_regime") == "NEGATIVE_GAMMA":
+                score -= 15
+                signals.append("NEGATIVE_GEX_VOLATILITY")
+        except Exception:
+            pass
         
         # Volume analysis as proxy
         volume = df['Volume']

@@ -561,17 +561,40 @@ class Trader:
                     data = resp.json()
                     
                     if data.get("rt_cd") == "0":
-                        raw_price = data.get("output", {}).get("last", "")
-                        if raw_price is not None and str(raw_price).strip():
-                            # Cache the successful exchange if it was probed
+                        out = data.get("output", {})
+                        # 1) Regular market last price
+                        last_p = out.get("last", "")
+                        # 2) Extended hours / pre-market price (t_xprc)
+                        ext_p = out.get("t_xprc", "")
+                        
+                        resolved_price = 0.0
+                        # If extended hours price exists and differs from zero, check time or value
+                        if ext_p and float(ext_p or 0) > 0:
+                            resolved_price = float(ext_p)
+                        elif last_p and float(last_p or 0) > 0:
+                            resolved_price = float(last_p)
+                        elif out.get("base") and float(out.get("base") or 0) > 0:
+                            resolved_price = float(out.get("base"))
+
+                        if resolved_price > 0:
                             if exchange is None and symbol.upper() not in self._exchange_mapper.SYMBOL_EXCHANGE:
                                 order_excd = "NYSE" if excd == "NYS" else ("AMEX" if excd == "AMS" else "NASD")
                                 self._exchange_mapper.SYMBOL_EXCHANGE[symbol.upper()] = order_excd
-                                logger.info("Dynamically resolved exchange for {} to {}", symbol, order_excd)
-                            return float(raw_price)
+                                logger.debug("Dynamically resolved exchange for {} to {}", symbol, order_excd)
+                            return resolved_price
                 except Exception as e:
-                    logger.error("Price query failed for {} on {}: {}", symbol, excd, e)
+                    logger.debug("Price query failed for {} on {}: {}", symbol, excd, e)
                 
+        # 3) Fallback to yfinance fast_info for pre-market / after-hours or indices
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            fast_p = getattr(ticker.fast_info, 'last_price', None)
+            if fast_p and float(fast_p) > 0:
+                return float(fast_p)
+        except Exception:
+            pass
+
         return 0.0
 
     def get_order_book(self, symbol: str, exchange: str = None) -> dict:

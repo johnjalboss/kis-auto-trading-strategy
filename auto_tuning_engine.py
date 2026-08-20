@@ -67,11 +67,15 @@ class AutoTuningEngine:
         since_date = max(RESET_DATE, (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d"))
 
         cur.execute("""
+            SELECT symbol, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at 
+            FROM trade_details 
+            WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
+            UNION ALL
             SELECT symbol, quantity, price, pnl, pnl_pct, reason, regime, created_at 
             FROM trades 
-            WHERE side = 'SELL' AND pnl < 0 AND created_at >= ?
-            ORDER BY id ASC
-        """, (since_date,))
+            WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
+            ORDER BY created_at ASC
+        """, (since_date, since_date))
         losses = cur.fetchall()
         conn.close()
 
@@ -80,6 +84,7 @@ class AutoTuningEngine:
             "OVERBOUGHT_CLIMAX": 0,
             "MARKET_SHOCK": 0,
             "WHIPSAW_STOP": 0,
+            "DEAD_MONEY": 0,
             "OTHER": 0
         }
 
@@ -90,6 +95,8 @@ class AutoTuningEngine:
 
             if "BEAR" in regime or "RISK_OFF" in regime or "PANIC" in reason:
                 causes["MARKET_SHOCK"] += 1
+            elif "DEAD_MONEY" in reason or "STAGNANT" in reason:
+                causes["DEAD_MONEY"] += 1
             elif "STOP" in reason and abs(pnl_pct) <= 0.035:
                 causes["WHIPSAW_STOP"] += 1
             elif "OVERBOUGHT" in reason or "RSI" in reason:
@@ -115,11 +122,15 @@ class AutoTuningEngine:
         since_date = max(RESET_DATE, (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d"))
         
         cur.execute("""
+            SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at 
+            FROM trade_details 
+            WHERE side = 'SELL' AND date(created_at) >= ?
+            UNION ALL
             SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, regime, created_at 
             FROM trades 
-            WHERE side = 'SELL' AND created_at >= ?
-            ORDER BY id ASC
-        """, (since_date,))
+            WHERE side = 'SELL' AND date(created_at) >= ?
+            ORDER BY created_at ASC
+        """, (since_date, since_date))
         rows = cur.fetchall()
         conn.close()
         

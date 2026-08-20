@@ -1993,15 +1993,24 @@ class StrategyEngine:
             
         trailing_stop = pos.high_since_entry - (atr * dynamic_atr_mult)
         
-        # Wall Street SOTA Mathematical Volatility Z-Score Profit Lock:
+        # Wall Street SOTA Mathematical Multi-Factor Dynamic Trailing Stop Engine:
         try:
-            from mathematical_dynamic_stop import MathematicalDynamicStop
-            mds_res = MathematicalDynamicStop().calculate_optimal_stop(df=None, entry_price=pos.entry_price, current_price=price)
+            from mathematical_dynamic_stop import get_math_dynamic_stop
+            df = self._data_cache.get(pos.symbol)
+            mds_res = get_math_dynamic_stop().calculate_optimal_stop(
+                df=df,
+                entry_price=pos.entry_price,
+                current_price=price,
+                high_since_entry=pos.high_since_entry,
+                atr_at_entry=pos.atr_at_entry,
+                half_sold=pos.half_sold
+            )
             if mds_res and mds_res.get('stop_price', 0) > trailing_stop:
                 trailing_stop = mds_res['stop_price']
-                logger.debug("📐 [MATH_Z_STOP] Raised trailing stop to ${:.2f} (Z={:.2f}σ)", trailing_stop, mds_res.get('z_score', 0.0))
+                logger.debug("📐 [MATH_SOTA_STOP] Raised trailing stop for {} to ${:.2f} (Lock: +{:.2f}%, {})",
+                             pos.symbol, trailing_stop, mds_res.get('locked_profit_pct', 0.0), mds_res.get('reason', ''))
         except Exception as _mds_e:
-            pass
+            logger.debug("Mathematical Dynamic Stop evaluation error: {}", _mds_e)
 
         if pnl_pct_high >= 0.08:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.050)  # Lock +5.0% profit minimum
@@ -2186,9 +2195,25 @@ class StrategyEngine:
     
     def mark_half_sold(self, symbol: str):
         if symbol in self._positions:
-            self._positions[symbol].half_sold = True
-            if self._positions[symbol].quantity > 1:
-                self._positions[symbol].quantity //= 2
+            pos = self._positions[symbol]
+            pos.half_sold = True
+            if pos.quantity > 1:
+                pos.quantity //= 2
+            else:
+                # 1주 보유 시: 정교한 확정 익절 스탑선(Profit-Lock) 상향 설정
+                # 진입가 대비 최소 +2.5% 또는 진입가 + (0.75 * ATR) 중 높은 가격으로 스탑로스 즉시 락
+                min_profit_lock = pos.entry_price * 1.025
+                atr_profit_lock = pos.entry_price + (pos.atr_at_entry * 0.75) if pos.atr_at_entry > 0 else min_profit_lock
+                new_stop = max(pos.stop_price, min_profit_lock, atr_profit_lock)
+                pos.stop_price = new_stop
+                pos.trailing_stop = max(pos.trailing_stop, new_stop)
+                logger.info("🛡️ [SINGLE_SHARE_PROFIT_LOCK] Locked guaranteed profit stop for {} at ${:.2f} (+{:.2f}%)",
+                            symbol, new_stop, (new_stop - pos.entry_price) / pos.entry_price * 100.0)
+                try:
+                    from database import get_database
+                    get_database().update_position_tracking(symbol, pos.entry_price, new_stop)
+                except Exception as de:
+                    logger.debug("DB stop update failed for {}: {}", symbol, de)
     
     def remove_position(self, symbol: str):
         if symbol in self._positions:

@@ -241,28 +241,59 @@ def get_current_price(symbol: str, exchange: str = None) -> Optional[Dict]:
                 output = data["output"]
                 # 유효한 데이터인지 확인 (last가 0이면 해당 거래소에 없음)
                 last_price = output.get("last", "0")
-                if last_price and float(last_price) > 0:
+                t_xprc = output.get("t_xprc", "0")
+                base_price = output.get("base", "0")
+                effective_price = float(t_xprc or 0) if float(t_xprc or 0) > 0 else (float(last_price or 0) if float(last_price or 0) > 0 else float(base_price or 0))
+                
+                if effective_price > 0:
                     return {
                         "symbol": symbol,
                         "exchange": excd,
-                        "last": float(output.get("last", 0)),
-                        "open": float(output.get("open", 0)),
-                        "high": float(output.get("high", 0)),
-                        "low": float(output.get("low", 0)),
-                        "base": float(output.get("base", 0)),  # 전일종가
-                        "tvol": int(output.get("tvol", 0)),     # 거래량
-                        "pvol": int(output.get("pvol", 0)),     # 전일거래량
-                        "diff": float(output.get("diff", 0)),   # 전일대비
-                        "rate": float(output.get("rate", 0)),   # 등락율
+                        "last": float(output.get("last", 0) or effective_price),
+                        "open": float(output.get("open", 0) or effective_price),
+                        "high": float(output.get("high", 0) or effective_price),
+                        "low": float(output.get("low", 0) or effective_price),
+                        "base": float(output.get("base", 0) or effective_price),  # 전일종가
+                        "tvol": int(output.get("tvol", 0) or 0),     # 거래량
+                        "pvol": int(output.get("pvol", 0) or 0),     # 전일거래량
+                        "diff": float(output.get("diff", 0) or 0),   # 전일대비
+                        "rate": float(output.get("rate", 0) or 0),   # 등락율
                         "ordy": output.get("ordy", ""),         # 매수가능여부  
-                        "t_xprc": float(output.get("t_xprc", 0)),  # 시간외 현재가
-                        "t_rate": float(output.get("t_rate", 0)),   # 시간외 등락률
+                        "t_xprc": float(output.get("t_xprc", 0) or effective_price),  # 시간외 현재가
+                        "t_rate": float(output.get("t_rate", 0) or 0),   # 시간외 등락률
                     }
             # If rt_cd != 0 or last is 0, try next exchange
         except Exception as e:
             logger.debug("Price fetch error for {}@{}: {}", symbol, excd, e)
             continue
     
+    # Fallback to yfinance if all KIS attempts returned 0
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        fast_p = getattr(t.fast_info, 'last_price', 0.0)
+        if fast_p and float(fast_p) > 0:
+            p = float(fast_p)
+            prev_close = getattr(t.fast_info, 'previous_close', p) or p
+            return {
+                "symbol": symbol,
+                "exchange": "AUTO",
+                "last": p,
+                "open": p,
+                "high": p,
+                "low": p,
+                "base": float(prev_close),
+                "tvol": int(getattr(t.fast_info, 'last_volume', 0) or 0),
+                "pvol": int(getattr(t.fast_info, 'last_volume', 0) or 0),
+                "diff": p - float(prev_close),
+                "rate": ((p - float(prev_close)) / float(prev_close) * 100) if prev_close else 0.0,
+                "ordy": "Y",
+                "t_xprc": p,
+                "t_rate": 0.0
+            }
+    except Exception:
+        pass
+
     logger.warning("Could not fetch price for {} on any exchange", symbol)
     return None
 
@@ -1216,6 +1247,53 @@ class Ticker:
             else:
                 self._info = {"symbol": self.symbol}
         return self._info
+
+    @property
+    def fast_info(self):
+        """fast_info proxy supporting both dict and attribute access"""
+        info = self.info
+        curr_price = float(info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose') or 0.0)
+        prev_close = float(info.get('previousClose') or info.get('regularMarketPreviousClose') or curr_price)
+        open_price = float(info.get('regularMarketOpen') or info.get('open') or prev_close)
+        day_high = float(info.get('dayHigh') or curr_price)
+        day_low = float(info.get('dayLow') or curr_price)
+
+        class FastInfoProxy(dict):
+            def __getattr__(self, name):
+                if name in self:
+                    return self[name]
+                mapping = {
+                    'last_price': 'regularMarketPrice',
+                    'previous_close': 'regularMarketPreviousClose',
+                    'open': 'regularMarketOpen',
+                    'day_high': 'dayHigh',
+                    'day_low': 'dayLow',
+                    'last_volume': 'regularMarketVolume',
+                    'market_cap': 'marketCap',
+                }
+                if name in mapping and mapping[name] in self:
+                    return self[mapping[name]]
+                for k, v in mapping.items():
+                    if v == name and k in self:
+                        return self[k]
+                return None
+
+        data = {
+            'last_price': curr_price,
+            'regularMarketPrice': curr_price,
+            'previous_close': prev_close,
+            'regularMarketPreviousClose': prev_close,
+            'open': open_price,
+            'regularMarketOpen': open_price,
+            'day_high': day_high,
+            'dayHigh': day_high,
+            'day_low': day_low,
+            'dayLow': day_low,
+            'market_cap': info.get('marketCap', 0),
+            'currency': 'USD',
+            'timezone': 'America/New_York'
+        }
+        return FastInfoProxy(data)
     
     def history(self, period: str = "1mo", interval: str = "1d", **kwargs) -> pd.DataFrame:
         """종목 히스토리 (yfinance.Ticker.history 호환)"""

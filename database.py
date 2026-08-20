@@ -260,28 +260,51 @@ class TradeDatabase:
         except Exception:
             today = target_date.isoformat() if target_date else date.today().isoformat()
             
-        with self._get_conn() as conn:
-            # Shift KST entry_time by 14 hours backwards to align with US Eastern Date
-            # 23:30 KST - 14h = 09:30 US Date, 06:00 KST - 14h = 16:00 US Date
-            rows = conn.execute("""
-                SELECT * FROM trades 
-                WHERE DATE(entry_time, '-14 hours') = ? OR DATE(exit_time, '-14 hours') = ?
-                ORDER BY created_at DESC
-            """, (today, today)).fetchall()
-        
-        return [self._row_to_trade(row) for row in rows]
+        return self.get_trades_range(date.fromisoformat(today), date.fromisoformat(today))
     
     def get_trades_range(self, start: date, end: date) -> List[TradeRecord]:
-        """Get trades in date range"""
+        """Get trades in date range from both trade_details and trades tables"""
+        trades_list = []
         with self._get_conn() as conn:
-            rows = conn.execute("""
-                SELECT * FROM trades 
-                WHERE (entry_time IS NOT NULL AND DATE(entry_time) BETWEEN ? AND ?)
-                   OR (exit_time IS NOT NULL AND DATE(exit_time) BETWEEN ? AND ?)
-                ORDER BY created_at DESC
-            """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
+            # 1. Fetch from trade_details (Modern 2026 format)
+            try:
+                td_rows = conn.execute("""
+                    SELECT id, symbol, side, quantity, price, 
+                           (quantity * price) as total,
+                           created_at as entry_time,
+                           created_at as exit_time,
+                           pnl, pnl_pct, 
+                           setup_reason as reason, 
+                           regime, created_at
+                    FROM trade_details
+                    WHERE DATE(created_at, '-14 hours') BETWEEN ? AND ? 
+                       OR DATE(created_at) BETWEEN ? AND ?
+                    ORDER BY created_at ASC
+                """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
+                for r in td_rows:
+                    trades_list.append(self._row_to_trade(r))
+            except Exception as td_err:
+                logger.debug("trade_details query in get_trades_range skipped: {}", td_err)
+
+            # 2. Fetch from trades table (Legacy format)
+            try:
+                rows = conn.execute("""
+                    SELECT * FROM trades 
+                    WHERE (entry_time IS NOT NULL AND DATE(entry_time, '-14 hours') BETWEEN ? AND ?)
+                       OR (exit_time IS NOT NULL AND DATE(exit_time, '-14 hours') BETWEEN ? AND ?)
+                       OR (created_at IS NOT NULL AND DATE(created_at, '-14 hours') BETWEEN ? AND ?)
+                       OR (created_at IS NOT NULL AND DATE(created_at) BETWEEN ? AND ?)
+                    ORDER BY created_at ASC
+                """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
+                for r in rows:
+                    tr_rec = self._row_to_trade(r)
+                    # Deduplicate if already present in trade_details
+                    if not any(t.symbol == tr_rec.symbol and t.side == tr_rec.side and str(t.exit_time)[:13] == str(tr_rec.exit_time)[:13] for t in trades_list):
+                        trades_list.append(tr_rec)
+            except Exception as tr_err:
+                logger.debug("trades query in get_trades_range skipped: {}", tr_err)
         
-        return [self._row_to_trade(row) for row in rows]
+        return trades_list
     
     def _row_to_trade(self, row) -> TradeRecord:
         """Convert database row to TradeRecord"""
@@ -412,6 +435,12 @@ class TradeDatabase:
             rows = conn.execute("SELECT * FROM positions").fetchall()
         
         return [dict(row) for row in rows]
+
+    def get_positions(self) -> Dict[str, dict]:
+        """Get current open positions as a dictionary keyed by symbol"""
+        with self._get_conn() as conn:
+            rows = conn.execute("SELECT * FROM positions").fetchall()
+        return {row['symbol']: dict(row) for row in rows}
     
     def cleanup_old_data(self, days_to_keep: int = 90):
         """Remove old data to save disk space"""
@@ -537,7 +566,8 @@ class TradeDatabase:
         return None
 
 
-# Global instance
+# Global instance & Aliases
+Database = TradeDatabase
 _db = None
 
 def get_database() -> TradeDatabase:

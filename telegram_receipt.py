@@ -88,11 +88,15 @@ class TelegramReceiptGenerator:
             sl_str = f"${sl_default:.2f} (-5.0% ATR Stop)"
 
         # Format score breakdown drivers
+        # [BUG FIX] Escape HTML special chars (<, >, &) to prevent Telegram API 400 parse errors
+        def _html_escape(text: str) -> str:
+            return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
         breakdown_text = ""
         if score_breakdown and len(score_breakdown) > 0:
             filtered_drivers = [item for item in score_breakdown if item.strip()]
             for item in filtered_drivers[:5]:
-                clean_item = item.strip()
+                clean_item = _html_escape(item.strip())
                 if not clean_item.startswith("•"):
                     clean_item = f"• {clean_item}"
                 breakdown_text += f"{clean_item}\n"
@@ -103,6 +107,9 @@ class TelegramReceiptGenerator:
                 "• ⚡ 감마 레이더 Net GEX 양수 수급 유입\n"
             )
 
+        safe_setup = _html_escape(str(setup))
+        safe_regime = _html_escape(str(macro_regime))
+
         receipt = (
             f"🎟️ <b>[AI 퀀트 매수 체결 영수증]</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -111,8 +118,8 @@ class TelegramReceiptGenerator:
             f"• <b>체결단가</b>: <b>${price:,.2f}</b>\n"
             f"• <b>총 매수금액</b>: <b>${total_cost:,.2f}</b>\n"
             f"• <b>퀀트종합점수</b>: <b>{score} / 100 점</b>\n"
-            f"• <b>진입전략</b>: <code>{setup}</code>\n"
-            f"• <b>시장국면</b>: <code>{macro_regime}</code>\n"
+            f"• <b>진입전략</b>: <code>{safe_setup}</code>\n"
+            f"• <b>시장국면</b>: <code>{safe_regime}</code>\n"
             f"──────────────────────\n"
             f"📊 <b>핵심 매수 근거 (Score Drivers)</b>:\n"
             f"{breakdown_text.strip()}\n"

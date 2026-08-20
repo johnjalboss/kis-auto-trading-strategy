@@ -751,10 +751,25 @@ class BotOrchestrator:
         except Exception as _at_err:
             pass
 
+        # --- SHADOW PAPER SANDBOX REAL-TIME PRICE & TRAILING STOP UPDATE ---
+        try:
+            from shadow_paper_engine import ShadowPaperEngine
+            spe = ShadowPaperEngine()
+            if spe.state.get("positions"):
+                shadow_price_map = {}
+                for s in list(spe.state["positions"].keys()):
+                    p = self.trader.get_price(s)
+                    if p and p > 0:
+                        shadow_price_map[s] = p
+                if shadow_price_map:
+                    spe.update_prices(shadow_price_map)
+        except Exception as _spe_up_err:
+            logger.debug("Shadow paper price update skipped: {}", _spe_up_err)
+
         # --- PRIORITY 1: EXIT CHECK (Move to top for immediate response) ---
         positions = self.strategy.get_all_positions()
         if positions:
-            logger.info("??Checking exits for {} positions first...", len(positions))
+            logger.info("🔍 Checking exits for {} positions first...", len(positions))
             for sym, pos in list(positions.items()):
                 try:
                     # [v11.0.6 EXTENDED HOURS DEFENSE] Check Pre-Market & After-Hours Emergency Liquidation (-7.0% gap down / disaster news)
@@ -830,12 +845,23 @@ class BotOrchestrator:
                     if exit_sig and exit_sig.action != "HOLD":
                         logger.warning("🚨 EXIT TRIGGERED: {} -> {} ({})", sym, exit_sig.action, exit_sig.reason)
                         if exit_sig.action == "SELL_HALF":
-                            sell_qty = max(1, pos.quantity // 2)
-                            if sell_qty >= pos.quantity:
-                                logger.info("Only {} share(s) held for {}. Upgrading SELL_HALF to SELL_ALL.", pos.quantity, sym)
-                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
-                                self.strategy.remove_position(sym)
+                            if pos.quantity <= 1:
+                                # 1주 보유 시: 전량 즉시 매도 대신 스탑로스를 진입가 위(본절+알파/트레일링 락)로 상향 고정하고 추세 끝까지 홀딩
+                                logger.info("🛡️ [SINGLE_SHARE_TRAIL] Only 1 share held for {}. Locking in profit and raising trailing stop instead of immediate liquidation.", sym)
+                                self.strategy.mark_half_sold(sym)
+                                try:
+                                    from notification import get_notifier
+                                    get_notifier().send_message(
+                                        f"🎯 <b>1차 익절선 도달 & 추세 홀딩 [1주 보유]</b>\n"
+                                        f"━━━━━━━━━━━━━━━━━━━\n"
+                                        f"• 종목: <b>{sym}</b> (1주 보유)\n"
+                                        f"• 현재가: ${curr_price:.2f} ({exit_sig.reason})\n"
+                                        f"• 조치: 즉시 청산 대신 <b>익절 스탑선 상향 고정</b> 후 추세 극대화 지속!"
+                                    )
+                                except Exception:
+                                    pass
                             else:
+                                sell_qty = max(1, pos.quantity // 2)
                                 self.phase_5_execute_trade(sym, "SELL", sell_qty, exit_sig.price, exit_sig.reason)
                                 self.strategy.mark_half_sold(sym)
                         else:
@@ -1635,6 +1661,26 @@ class BotOrchestrator:
             except Exception as v_err:
                 logger.debug("VPIN check skipped: {}", v_err)
 
+            # [MACRO EVENT SHOCK SHIELD] CPI / FOMC / NFP Blackout Freeze
+            try:
+                from macro_event_shock_shield import MacroEventShockShield
+                shock_st = MacroEventShockShield().check_shock_shield_status()
+                if shock_st.get("is_blackout_active", False):
+                    logger.warning("🚨 [MACRO_SHOCK_SHIELD] Entry BLOCKED for {}: {}", symbol, shock_st.get("reason"))
+                    return
+            except Exception as _shk_err:
+                logger.debug("Macro Event Shock Shield check skipped: {}", _shk_err)
+
+            # [SPREAD & VOLATILITY SHIELD]
+            try:
+                from opening_spread_guard import get_opening_spread_guard
+                spread_check = get_opening_spread_guard().check_market_spread(symbol)
+                if not spread_check.get("allowed", True):
+                    logger.warning("🚨 [SPREAD_GUARD_BLOCK] Entry BLOCKED for {}: {}", symbol, spread_check.get("reason"))
+                    return
+            except Exception as _sp_err:
+                logger.debug("Opening spread guard check skipped: {}", _sp_err)
+
             # [NEW SOTA QUANT MODULE 4: CROSS-ASSET TAIL RISK SENTINEL]
             try:
                 from cross_asset_tail_sentinel import CrossAssetTailRiskSentinel
@@ -1666,16 +1712,6 @@ class BotOrchestrator:
             except Exception as _ev_err:
                 logger.debug("Macro event shield check skipped: {}", _ev_err)
 
-            # [NEW SOTA QUANT MODULE: OPENING SPREAD GUARD (SLIPPAGE DEFENSE)]
-            try:
-                from opening_spread_guard import OpeningSpreadGuard
-                spread_check = OpeningSpreadGuard().check_spread(symbol, trader_instance=self.trader)
-                if not spread_check.get("allowed", True):
-                    logger.warning("🚨 [SPREAD_GUARD_BLOCK] Entry BLOCKED for {}: {}", symbol, spread_check.get("reason"))
-                    return
-            except Exception as _sp_err:
-                logger.debug("Opening spread guard check skipped: {}", _sp_err)
-
         # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing)
         if action == "BUY" and not reason.startswith("REBALANCE"):
             try:
@@ -1698,10 +1734,19 @@ class BotOrchestrator:
                 except Exception as _hwm_err:
                     logger.debug("HWM sentinel check skipped: {}", _hwm_err)
 
+                # [NEW SOTA QUANT MODULE: FED NET LIQUIDITY SIZING MULTIPLIER]
+                liq_mult = 1.0
+                try:
+                    from fed_net_liquidity_engine import FedNetLiquidityEngine
+                    liq_data = FedNetLiquidityEngine().get_liquidity_summary()
+                    liq_mult = liq_data.get("sizing_multiplier", 1.0)
+                except Exception as _liq_err:
+                    logger.debug("Fed Net Liquidity sizing multiplier check skipped: {}", _liq_err)
+
                 # Get the live portfolio sizer with current total equity
                 sizer = get_position_sizer(portfolio=total_equity)
-                # Allocate dynamic target slot capital adjusted by Expectancy Multiplier and HWM Sentinel
-                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult * hwm_mult
+                # Allocate dynamic target slot capital adjusted by Expectancy, HWM, and Fed Liquidity Multipliers
+                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult * hwm_mult * liq_mult
                 raw_full_qty = int(target_slot_capital / price) if price > 0 else 0
                 max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0
 
@@ -2419,12 +2464,11 @@ class BotOrchestrator:
                                         if exit_sig and exit_sig.action != "HOLD":
                                             logger.warning(" FAST EXIT TRIGGERED: {} ({})", sym, exit_sig.reason)
                                             if exit_sig.action == "SELL_HALF":
-                                                sell_qty = max(1, pos.quantity // 2)
-                                                if sell_qty >= pos.quantity:
-                                                    logger.info("Only {} share(s) held for {}. Upgrading SELL_HALF to SELL_ALL.", pos.quantity, sym)
-                                                    self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
-                                                    self.strategy.remove_position(sym)
+                                                if pos.quantity <= 1:
+                                                    logger.info("🛡️ [FAST_EXIT] 1 share held for {}. Locking in profits and raising trailing stop.", sym)
+                                                    self.strategy.mark_half_sold(sym)
                                                 else:
+                                                    sell_qty = max(1, pos.quantity // 2)
                                                     self.phase_5_execute_trade(sym, "SELL", sell_qty, exit_sig.price, exit_sig.reason)
                                                     self.strategy.mark_half_sold(sym)
                                             else:

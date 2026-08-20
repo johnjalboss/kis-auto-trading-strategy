@@ -53,8 +53,8 @@ class ShadowPaperEngine:
             logger.debug("Failed to save shadow state: {}", e)
 
     def on_high_conviction_candidate(self, symbol: str, current_price: float, quant_score: int) -> bool:
-        """Opens a shadow position if score >= 85 and not already held."""
-        if quant_score < 85 or current_price <= 0:
+        """Opens a shadow position if score >= 75 and not already held."""
+        if quant_score < 75 or current_price <= 0:
             return False
 
         if symbol in self.state["positions"]:
@@ -62,7 +62,7 @@ class ShadowPaperEngine:
 
         # Allocate 20% of shadow cash per position (up to 5 positions)
         alloc = min(self.state["cash"] * 0.25, 250.0)
-        if alloc < 30.0 or self.state["cash"] < 30.0:
+        if alloc < 20.0 or self.state["cash"] < 20.0:
             return False
 
         qty = int(alloc / current_price)
@@ -140,21 +140,58 @@ class ShadowPaperEngine:
         if closed_any:
             self._save_state()
 
-    def get_summary(self, real_equity: float = 772.70) -> Dict[str, Any]:
+    def update_live_quotes(self):
+        """Fetches live real-time prices for all open shadow positions and updates trailing stops/take profits."""
+        if not self.state.get("positions"):
+            return
+        try:
+            import yfinance as yf
+            symbols = list(self.state["positions"].keys())
+            if symbols:
+                price_map = {}
+                for sym in symbols:
+                    try:
+                        t = yf.Ticker(sym)
+                        p = 0.0
+                        # 1. 1m intraday with prepost=True for live extended hours quote
+                        try:
+                            df_intra = t.history(period="1d", interval="1m", prepost=True)
+                            if df_intra is not None and not df_intra.empty:
+                                p = float(df_intra['Close'].iloc[-1])
+                        except Exception:
+                            pass
+                        if p <= 0:
+                            fast = t.fast_info
+                            p = float(fast.get("last_price", 0.0) or 0.0)
+                        if p > 0:
+                            price_map[sym] = p
+                    except Exception:
+                        pass
+                if price_map:
+                    self.update_prices(price_map)
+        except Exception as e:
+            logger.debug("Shadow paper live quote update error: {}", e)
+
+    def get_summary(self, real_equity: float = 772.70, fetch_live: bool = True) -> Dict[str, Any]:
         """Calculates total shadow equity and compares against real account."""
+        if fetch_live:
+            self.update_live_quotes()
+
         unrealized = 0.0
         pos_list = []
         for symbol, pos in self.state["positions"].items():
-            curr_val = pos["quantity"] * pos.get("current_price", pos["entry_price"])
+            curr_p = pos.get("current_price", pos["entry_price"])
+            curr_val = pos["quantity"] * curr_p
             cost = pos["quantity"] * pos["entry_price"]
             pnl = curr_val - cost
-            pnl_pct = pnl / cost if cost > 0 else 0.0
+            pnl_pct = (curr_p - pos["entry_price"]) / pos["entry_price"] if pos["entry_price"] > 0 else 0.0
             unrealized += pnl
             pos_list.append({
                 "symbol": symbol,
                 "qty": pos["quantity"],
                 "entry": pos["entry_price"],
-                "curr": pos.get("current_price", pos["entry_price"]),
+                "curr": curr_p,
+                "pnl": round(pnl, 2),
                 "pnl_pct": pnl_pct
             })
 
@@ -184,13 +221,15 @@ class ShadowPaperEngine:
         except Exception:
             real_equity = 772.70
 
-        summary = self.get_summary(real_equity)
+        summary = self.get_summary(real_equity, fetch_live=True)
         pnl_emoji = "🟢" if summary["shadow_return_pct"] >= 0 else "🔴"
         pnl_sign = "+" if summary["shadow_return_pct"] >= 0 else ""
 
         pos_lines = []
         for p in summary["open_positions"]:
-            pos_lines.append(f"  • <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} ({p['pnl_pct']:+.1%})")
+            pos_sign = "+" if p['pnl_pct'] >= 0 else ""
+            pos_emoji = "🟢" if p['pnl_pct'] >= 0 else "🔴"
+            pos_lines.append(f"  • {pos_emoji} <b>{p['symbol']}</b>: {p['qty']}주 @ ${p['entry']:.2f} ➔ <b>${p['curr']:.2f}</b> (<b>{pos_sign}{p['pnl_pct']*100:.2f}%</b>)")
         pos_str = "\n".join(pos_lines) if pos_lines else "  • 가상 보유 포지션 없음 (100% 현금)"
 
         card = (
@@ -199,13 +238,13 @@ class ShadowPaperEngine:
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"💵 <b>가상 기준 원금</b>: $1,000.00 USD\n"
             f"{pnl_emoji} <b>가상 총 자산</b>: <code>${summary['total_shadow_equity']:.2f} USD</code> ({pnl_sign}{summary['shadow_return_pct']}%)\n"
-            f"💰 <b>가상 실현손익</b>: ${summary['realized_pnl']:+.2f} USD\n"
+            f"💰 <b>가상 실현손익</b>: ${summary['realized_pnl']:+.2f} USD (미실현: ${summary['unrealized_pnl']:+.2f} USD)\n"
             f"🎯 <b>가상 매매 전적</b>: {summary['total_trades']}전 {summary['wins']}승 {summary['losses']}패 (승률 {summary['win_rate']}%)\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"🏦 <b>실제 계좌 자산</b>: <code>${real_equity:.2f} USD</code>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>가상 보유 포지션</b>:\n{pos_str}\n\n"
-            f"💡 <i>초고득점(Score ≥ 90) 공격적 진입 시의 가상 시뮬레이션 성과입니다.</i>"
+            f"📦 <b>가상 보유 포지션 (실시간 시세 반영)</b>:\n{pos_str}\n\n"
+            f"💡 <i>초고득점(Score ≥ 75) 공격적 진입 시의 가상 시뮬레이션 성과입니다.</i>"
         )
         return card
 
