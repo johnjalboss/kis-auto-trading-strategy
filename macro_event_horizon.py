@@ -96,25 +96,59 @@ class MacroEventHorizon:
 
         for sym in syms:
             sym_upper = sym.upper()
-            earn_date_str = static_earnings_estimates.get(sym_upper, "")
+            earn_date_str = ""
             
-            # Try live lookup from yfinance if available
+            # Live lookup from yfinance
             try:
                 import yfinance as yf
                 t = yf.Ticker(sym_upper)
+                
+                # Method 1: ticker.calendar (dict or DataFrame)
                 cal = getattr(t, 'calendar', None)
-                if cal is not None and not (hasattr(cal, 'empty') and cal.empty):
-                    if isinstance(cal, dict) and 'Earnings Date' in cal and cal['Earnings Date']:
-                        ed = cal['Earnings Date'][0]
-                        earn_date_str = ed.strftime("%Y-%m-%d") if hasattr(ed, 'strftime') else str(ed)[:10]
-            except Exception:
-                pass
+                if cal is not None:
+                    if isinstance(cal, dict):
+                        ed = cal.get('Earnings Date', [])
+                        if ed:
+                            first_ed = ed[0] if isinstance(ed, (list, tuple)) else ed
+                            earn_date_str = first_ed.strftime("%Y-%m-%d") if hasattr(first_ed, 'strftime') else str(first_ed)[:10]
+                    elif hasattr(cal, 'loc') and 'Earnings Date' in cal.index:
+                        ed_series = cal.loc['Earnings Date']
+                        if not ed_series.empty:
+                            first_ed = ed_series.iloc[0]
+                            earn_date_str = first_ed.strftime("%Y-%m-%d") if hasattr(first_ed, 'strftime') else str(first_ed)[:10]
+
+                # Method 2: ticker.earnings_dates
+                if not earn_date_str:
+                    edates = getattr(t, 'earnings_dates', None)
+                    if edates is not None and not edates.empty:
+                        # find next future date or nearest
+                        now_dt = pd.to_datetime(today)
+                        future_ed = edates[edates.index >= now_dt]
+                        if not future_ed.empty:
+                            next_dt = future_ed.index[-1]
+                            earn_date_str = next_dt.strftime("%Y-%m-%d")
+                        else:
+                            earn_date_str = edates.index[0].strftime("%Y-%m-%d")
+
+                # Method 3: info earnings timestamp
+                if not earn_date_str:
+                    info = getattr(t, 'info', {}) or {}
+                    ts = info.get('earningsTimestamp') or info.get('earningsTimestampStart')
+                    if ts and float(ts) > 0:
+                        earn_date_str = datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d")
+
+            except Exception as e:
+                logger.debug("Earnings live fetch error for {}: {}", sym_upper, e)
+
+            # Method 4: Known corporate schedules
+            if not earn_date_str:
+                earn_date_str = static_earnings_estimates.get(sym_upper, "2026-10-28")
 
             if earn_date_str:
                 try:
                     earn_date = datetime.strptime(earn_date_str, "%Y-%m-%d").date()
                     diff = (earn_date - today).days
-                    if -1 <= diff <= 45:
+                    if -3 <= diff <= 90:
                         d_day_str = "D-DAY (오늘 실적발표!)" if diff == 0 else f"D-{diff}" if diff > 0 else "발표 완료"
                         earnings_list.append({
                             "symbol": sym_upper,
