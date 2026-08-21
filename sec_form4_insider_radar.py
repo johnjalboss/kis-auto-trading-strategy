@@ -182,7 +182,7 @@ class SECForm4InsiderRadar:
                 pass
 
         if not sym_list:
-            sym_list = ["ADP", "CART", "LYFT", "MDT"]
+            sym_list = ["ADP", "CART", "LYFT"]
 
         lines = [
             "👥 <b>[SEC Form 4 내부자 순매수 클러스터 레이더]</b>",

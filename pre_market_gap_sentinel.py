@@ -25,21 +25,20 @@ class PreMarketGapSentinel:
         self.chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
 
     def get_held_symbols(self) -> list:
-        """Fetch actual live positions from Broker API, Database, and Strategy."""
-        symbols = []
-        # 1. Try TradeDatabase / Database
+        """Fetch actual live positions strictly from Broker API, Database, and Strategy."""
+        # 1. Live broker / Trader prioritized first
         try:
-            from database import TradeDatabase, get_database
-            db = get_database()
-            pos_dict = db.get_positions()
-            if pos_dict:
-                symbols = [s for s, p in pos_dict.items() if p.get('quantity', 0) > 0]
+            from trader import get_trader
+            tr = get_trader()
+            pos_list = tr.get_positions()
+            if pos_list:
+                symbols = [p.symbol for p in pos_list if getattr(p, 'quantity', 0) > 0]
                 if symbols:
                     return symbols
-        except Exception as _db_err:
-            logger.debug("Database get_positions skipped: {}", _db_err)
+        except Exception as _tr_err:
+            logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
 
-        # 2. Direct SQLite query fallback
+        # 2. Direct SQLite query with active quantity > 0
         try:
             if os.path.exists(self.db_path):
                 conn = sqlite3.connect(self.db_path)
@@ -52,19 +51,19 @@ class PreMarketGapSentinel:
         except Exception as _sql_err:
             logger.debug("Direct SQL positions query skipped: {}", _sql_err)
 
-        # 3. Live broker / Trader fallback
+        # 3. Try TradeDatabase
         try:
-            from trader import get_trader
-            tr = get_trader()
-            pos_list = tr.get_positions()
-            if pos_list:
-                symbols = [p.symbol for p in pos_list if getattr(p, 'quantity', 0) > 0]
+            from database import TradeDatabase, get_database
+            db = get_database()
+            pos_dict = db.get_positions()
+            if pos_dict:
+                symbols = [s for s, p in pos_dict.items() if p.get('quantity', 0) > 0]
                 if symbols:
                     return symbols
-        except Exception as _tr_err:
-            logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
+        except Exception as _db_err:
+            logger.debug("Database get_positions skipped: {}", _db_err)
 
-        return symbols
+        return []
 
     def get_dynamic_watchlist(self) -> list:
         """Dynamically builds 2nd priority watch candidates from:
