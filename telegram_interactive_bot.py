@@ -507,44 +507,70 @@ class TelegramInteractiveBot:
         return {}
 
     # ───────────────────────────────────────────────
+    # ───────────────────────────────────────────────
     # Handler Methods
     # ───────────────────────────────────────────────
 
-    def _handle_status(self):
-        """봇 상태 요약 조회 (실증 데이터 우선, 가짜 하드코딩 0%)"""
+    @staticmethod
+    def _fetch_live_ticker_price(sym: str, entry_fallback: float = 0.0) -> tuple[float, float, str]:
+        """
+        통합 실시간 시세 및 ATR 조회기:
+        프리마켓/정규장/애프터마켓의 실시간 호가/체결가를 100% 동일하게 가져옵니다.
+        우선순위:
+        1. yfinance Ticker.fast_info.last_price (프리/애프터/정규장 실시간 1초 갱신)
+        2. yfinance 1d 1m prepost tick
+        3. 60d daily fallback
+        4. entry_fallback
+        """
+        import yfinance as yf
+        import pandas as pd
+        curr_p = entry_fallback
+        atr = 0.0
+        price_label = ""
         try:
-            bp = 0.0
+            ticker = yf.Ticker(sym)
+            fi = ticker.fast_info
+            lp = getattr(fi, 'last_price', None)
+            if lp and float(lp) > 0:
+                curr_p = float(lp)
+                import pytz
+                et = datetime.now(pytz.timezone('US/Eastern'))
+                hm = et.hour * 60 + et.minute
+                if hm < 9 * 60 + 30:
+                    price_label = " 🌅<i>[프리장]</i>"
+                elif hm >= 16 * 60:
+                    price_label = " 🌙<i>[애프터장]</i>"
+
+            hist = ticker.history(period="60d", auto_adjust=True)
+            if hist is not None and not hist.empty:
+                if isinstance(hist.columns, pd.MultiIndex):
+                    hist.columns = hist.columns.get_level_values(0)
+                if curr_p == entry_fallback:
+                    try:
+                        intra = ticker.history(period="1d", interval="1m", prepost=True)
+                        if intra is not None and not intra.empty:
+                            curr_p = float(intra['Close'].iloc[-1])
+                            price_label = " 🌅<i>[프리/애프터]</i>"
+                    except Exception:
+                        curr_p = float(hist['Close'].iloc[-1])
+                tr1 = hist['High'] - hist['Low']
+                tr2 = (hist['High'] - hist['Close'].shift(1)).abs()
+                tr3 = (hist['Low'] - hist['Close'].shift(1)).abs()
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
+        except Exception as fe:
+            logger.debug("Price fetch error for {}: {}", sym, fe)
+            if curr_p <= 0:
+                curr_p = entry_fallback
+        return curr_p, atr, price_label
+
+    def _handle_status(self):
+        """실시간 계좌 및 포지션 상세 리포트 전송"""
+        try:
+            bp = self._get_buying_power()
             positions = self._get_positions_dict()
 
-            # 1. KIS 브로커 실시간 주문가능 현금 조회
-            try:
-                if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
-                    bp = self.orchestrator.trader.get_buying_power()
-                else:
-                    from trader import Trader
-                    t = Trader()
-                    bp = t.get_buying_power()
-            except Exception as e:
-                logger.debug("Status handler get_buying_power failed: {}", e)
-                bp = 0.0
-
-            try:
-                bp = float(bp) if isinstance(bp, (int, float)) else 0.0
-            except Exception:
-                bp = 0.0
-
-            # Trader instance for price lookup
-            trader_instance = None
-            try:
-                if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
-                    trader_instance = self.orchestrator.trader
-                else:
-                    from trader import Trader
-                    trader_instance = Trader()
-            except Exception:
-                trader_instance = None
-
-            # Calculate total equity and gather live prices
+            # Calculate total equity and gather live prices using unified fetcher
             pos_val = 0.0
             pos_details = []
             for sym, pos in positions.items():
@@ -552,31 +578,7 @@ class TelegramInteractiveBot:
                 try: entry_p = float(entry_p)
                 except Exception: entry_p = 0.0
 
-                curr_p = getattr(pos, 'current_price', 0.0)
-                try: curr_p = float(curr_p)
-                except Exception: curr_p = 0.0
-
-                # Always fetch true real-time price
-                try:
-                    if trader_instance:
-                        lp = trader_instance.get_price(sym)
-                        if lp and float(lp) > 0:
-                            curr_p = float(lp)
-                except Exception:
-                    pass
-
-                if curr_p <= 0 or abs(curr_p - entry_p) < 0.001:
-                    try:
-                        import yfinance as yf
-                        tk = yf.Ticker(sym)
-                        yf_p = getattr(tk.fast_info, 'last_price', None)
-                        if yf_p and float(yf_p) > 0:
-                            curr_p = float(yf_p)
-                    except Exception:
-                        pass
-
-                if curr_p <= 0:
-                    curr_p = entry_p
+                curr_p, _, price_label = self._fetch_live_ticker_price(sym, entry_p)
 
                 qty = getattr(pos, 'quantity', 0)
                 try: qty = float(qty)
@@ -589,6 +591,7 @@ class TelegramInteractiveBot:
                     "quantity": int(qty),
                     "entry_price": entry_p,
                     "current_price": curr_p,
+                    "price_label": price_label,
                     "pnl_pct": pnl_p
                 })
             
@@ -610,7 +613,8 @@ class TelegramInteractiveBot:
                 for p in pos_details:
                     pnl_p = p["pnl_pct"]
                     sign = "🟢" if pnl_p >= 0 else "🔴"
-                    msg += f"{sign} <b>{p['symbol']}</b>: {p['quantity']}주 | 평단가: ${p['entry_price']:.2f} | 현재가: ${p['current_price']:.2f} ({pnl_p:+.2f}%)\n"
+                    pl = p.get("price_label", "")
+                    msg += f"{sign} <b>{p['symbol']}</b>: {p['quantity']}주 | 평단가: ${p['entry_price']:.2f} | 현재가: ${p['current_price']:.2f}{pl} ({pnl_p:+.2f}%)\n"
             else:
                 msg += "ℹ️ 현재 보유 중인 포지션이 없습니다.\n"
 
@@ -654,61 +658,10 @@ class TelegramInteractiveBot:
                 "━━━━━━━━━━━━━━━━━━━"
             ]
 
-            import yfinance as yf
-            import pandas as pd
-
-            def _fetch_price_and_atr(sym: str, entry_fallback: float):
-                """yfinance로 최신 가격 및 ATR 계산.
-                우선순위: fast_info.last_price → 1d 1m prepost → 60d daily fallback
-                """
-                curr_p = entry_fallback
-                atr = 0.0
-                price_label = ""   # 빈 문자열이면 정규장 가격
-                try:
-                    ticker = yf.Ticker(sym)
-
-                    # 1순위: fast_info.last_price (프리/애프터/정규장 모두 커버)
-                    fi = ticker.fast_info
-                    lp = getattr(fi, 'last_price', None)
-                    if lp and float(lp) > 0:
-                        curr_p = float(lp)
-                        # 현재 시각 기준 장 세션 판별 (US/Eastern EDT/EST 자동 처리)
-                        import pytz
-                        et = datetime.now(pytz.timezone('US/Eastern'))
-                        hm = et.hour * 60 + et.minute
-                        if hm < 9 * 60 + 30:
-                            price_label = " 🌅<i>[프리장]</i>"
-                        elif hm >= 16 * 60:
-                            price_label = " 🌙<i>[애프터장]</i>"
-
-                    # ATR 계산용: 60일 일봉 (prepost 불필요)
-                    hist = ticker.history(period="60d", auto_adjust=True)
-                    if hist is not None and not hist.empty:
-                        if isinstance(hist.columns, pd.MultiIndex):
-                            hist.columns = hist.columns.get_level_values(0)
-                        # fast_info가 실패했을 때 최후 종가 사용
-                        if curr_p == entry_fallback:
-                            # 프리/애프터장 최신 1분봉 시도
-                            try:
-                                intra = ticker.history(period="1d", interval="1m", prepost=True)
-                                if intra is not None and not intra.empty:
-                                    curr_p = float(intra['Close'].iloc[-1])
-                                    price_label = " 🌅<i>[프리/애프터]</i>"
-                            except Exception:
-                                curr_p = float(hist['Close'].iloc[-1])
-                        tr1 = hist['High'] - hist['Low']
-                        tr2 = (hist['High'] - hist['Close'].shift(1)).abs()
-                        tr3 = (hist['Low'] - hist['Close'].shift(1)).abs()
-                        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-                        atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
-                except Exception as fe:
-                    logger.debug("Price fetch error for {}: {}", sym, fe)
-                return curr_p, atr, price_label
-
             for sym, pos in positions.items():
                 entry_p = float(getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0)))
                 qty = int(getattr(pos, 'quantity', 0))
-                curr_p, atr, price_label = _fetch_price_and_atr(sym, entry_p)
+                curr_p, atr, price_label = self._fetch_live_ticker_price(sym, entry_p)
 
                 if atr > 0:
                     dyn_stop = round(entry_p - (2.0 * atr), 2)
