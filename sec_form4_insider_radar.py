@@ -209,7 +209,7 @@ class SECForm4InsiderRadar:
                     lines.append(f"     • {p['name']} ({p['role']}): {p['shares']:,.0f}주 (${p['value_usd']:,.0f})")
 
         lines.append("\n🏛️ <b>[월가 주요 주도주 내부자 매집 레이더]</b>")
-        market_leaders = ["NVDA", "AAPL", "MSFT", "MRK"]
+        market_leaders = ["NVDA", "AAPL", "MSFT", "PLTR"]
         for ml in market_leaders:
             if ml not in sym_list:
                 m_data = self.analyze_insider_activity(ml)
@@ -223,4 +223,4 @@ class SECForm4InsiderRadar:
 
 if __name__ == "__main__":
     radar = SECForm4InsiderRadar()
-    print(radar.format_telegram_card(["ADP", "CART", "LYFT", "MDT"]))
+    print(radar.format_telegram_card(["ADP", "CART", "LYFT"]))
