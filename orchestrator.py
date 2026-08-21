@@ -2485,14 +2485,33 @@ class BotOrchestrator:
                         sleep_elapsed += 60
                 else:
                     was_closed = True  # Track for next open
-                    # Market closed ??run post-market once
+                    # Market closed -- run post-market once
                     if not ran_post_market_today:
                         self.phase_6_post_market()
                         ran_post_market_today = True
                     
-                    # Sleep 5 minutes then re-check
-                    logger.debug("Market closed. Next check in 300s")
-                    time.sleep(300)
+                    # ── 24/7 EXTENDED-HOURS EMERGENCY STOP SENTINEL ──
+                    # Automatically checks stop loss during Pre-market and After-hours every 60s
+                    # and fires immediate limit exit orders if hard stop is breached (자동감시주문 연동)
+                    if scheduler.is_premarket() or scheduler.is_afterhours():
+                        try:
+                            positions = self.strategy.get_all_positions()
+                            if positions:
+                                for sym, pos in list(positions.items()):
+                                    curr_price = self.trader.get_price(sym)
+                                    if curr_price > 0:
+                                        exit_sig = self.strategy.check_exit(sym, curr_price)
+                                        if exit_sig and exit_sig.action != "HOLD":
+                                            logger.warning("🚨 [EXTENDED-HOURS EMERGENCY STOP] {} triggered @ ${:.2f} ({})", sym, curr_price, exit_sig.reason)
+                                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_STOP: {exit_sig.reason}")
+                                            self.strategy.remove_position(sym)
+                        except Exception as eh_err:
+                            logger.debug("Extended hours stop check error: {}", eh_err)
+
+                    # Sleep 60s during extended hours, or 300s during deep overnight
+                    sleep_sec = 60 if (scheduler.is_premarket() or scheduler.is_afterhours()) else 300
+                    logger.debug("Market closed (Extended Check). Next loop in {}s", sleep_sec)
+                    time.sleep(sleep_sec)
                     
         except KeyboardInterrupt:
             logger.info("Interrupted. Running final Phase 6...")

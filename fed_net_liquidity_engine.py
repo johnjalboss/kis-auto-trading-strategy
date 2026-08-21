@@ -155,8 +155,17 @@ class FedNetLiquidityEngine:
         )
         return card
 
+# Singleton helper
+_fed_liquidity_instance = None
+
+def get_fed_net_liquidity_engine() -> FedNetLiquidityEngine:
+    global _fed_liquidity_instance
+    if _fed_liquidity_instance is None:
+        _fed_liquidity_instance = FedNetLiquidityEngine()
+    return _fed_liquidity_instance
+
+
 if __name__ == "__main__":
-    engine = FedNetLiquidityEngine()
-    data = engine.fetch_net_liquidity_data()
-    print("Fed Net Liquidity Engine Result:\n", json.dumps(data, indent=2, ensure_ascii=False))
-    print("\nTelegram Card:\n", engine.format_telegram_card())
+    engine = get_fed_net_liquidity_engine()
+    print(json.dumps(engine.fetch_net_liquidity_data(), indent=2, ensure_ascii=False))
+    print("\n" + engine.format_telegram_card())

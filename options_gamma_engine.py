@@ -136,9 +136,15 @@ class OptionsGammaEngine:
             call_gex_by_strike = {}
             put_gex_by_strike = {}
 
+            # Filter strikes near current price (+/- 12%) for accurate institutional walls
+            lower_k = current_price * 0.88
+            upper_k = current_price * 1.12
+
             if not df_calls.empty:
                 for _, row in df_calls.iterrows():
                     k = float(row['strike'])
+                    if not (lower_k <= k <= upper_k):
+                        continue
                     oi = float(row['openInterest'])
                     sigma = float(row['impliedVolatility'])
                     t = float(row['T'])
@@ -149,6 +155,8 @@ class OptionsGammaEngine:
             if not df_puts.empty:
                 for _, row in df_puts.iterrows():
                     k = float(row['strike'])
+                    if not (lower_k <= k <= upper_k):
+                        continue
                     oi = float(row['openInterest'])
                     sigma = float(row['impliedVolatility'])
                     t = float(row['T'])
@@ -158,8 +166,8 @@ class OptionsGammaEngine:
                     put_gex_by_strike[k] = put_gex_by_strike.get(k, 0.0) - dollar_g
 
             # Compute Call Wall (Highest Call GEX/OI) and Put Wall (Highest Put GEX/OI)
-            call_wall = max(call_gex_by_strike, key=call_gex_by_strike.get) if call_gex_by_strike else round(current_price * 1.05, 2)
-            put_wall = min(put_gex_by_strike, key=put_gex_by_strike.get) if put_gex_by_strike else round(current_price * 0.95, 2)
+            call_wall = max(call_gex_by_strike, key=call_gex_by_strike.get) if call_gex_by_strike else round(current_price * 1.03, 2)
+            put_wall = min(put_gex_by_strike, key=put_gex_by_strike.get) if put_gex_by_strike else round(current_price * 0.97, 2)
 
             total_call_gex = sum(call_gex_by_strike.values())
             total_put_gex = sum(put_gex_by_strike.values())
@@ -236,8 +244,17 @@ class OptionsGammaEngine:
         )
         return card
 
+# Singleton helper
+_options_gamma_instance = None
+
+def get_options_gamma_engine() -> OptionsGammaEngine:
+    global _options_gamma_instance
+    if _options_gamma_instance is None:
+        _options_gamma_instance = OptionsGammaEngine()
+    return _options_gamma_instance
+
+
 if __name__ == "__main__":
-    gex_eng = OptionsGammaEngine()
-    res = gex_eng.analyze_gex("SPY")
-    print("Options GEX Analysis Result:\n", json.dumps(res, indent=2))
-    print("\nTelegram Card:\n", gex_eng.format_telegram_card("SPY"))
+    engine = get_options_gamma_engine()
+    print(json.dumps(engine.analyze_gex("SPY"), indent=2, ensure_ascii=False))
+    print("\nTelegram Card:\n", engine.format_telegram_card("SPY"))
