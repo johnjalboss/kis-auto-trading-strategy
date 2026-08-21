@@ -49,28 +49,50 @@ class WeeklyAIReportGenerator:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            # Query closed trades in the last 7 days
+            # Query closed trades in the last 7 days from BOTH trade_details and trades
             cursor.execute("""
-                SELECT symbol, side, price, quantity, pnl, pnl_pct, reason, created_at
-                FROM trades
-                WHERE side = 'SELL' AND created_at >= ?
+                SELECT symbol, side, price, quantity, pnl, pnl_pct, 
+                       COALESCE(diagnostic_notes, setup_reason, '') as reason, 
+                       created_at
+                FROM (
+                    SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason, diagnostic_notes, created_at
+                    FROM trade_details
+                    WHERE side = 'SELL' AND date(created_at) >= date('now', '-7 days')
+                    UNION ALL
+                    SELECT symbol, side, price, quantity, pnl, pnl_pct, reason as setup_reason, reason as diagnostic_notes, created_at
+                    FROM trades
+                    WHERE side = 'SELL' AND date(created_at) >= date('now', '-7 days')
+                )
                 ORDER BY created_at DESC
-            """, (start_date,))
+            """)
             rows = cursor.fetchall()
 
             gains = 0.0
             losses_val = 0.0
             trades = []
+            seen_trades = set()
 
             for r in rows:
+                sym = r["symbol"]
                 pnl = float(r["pnl"] or 0.0)
                 pnl_pct = float(r["pnl_pct"] or 0.0)
+                d_str = str(r["created_at"])[:10]
+                
+                # Deduplication key
+                t_key = (sym, round(pnl, 2), d_str)
+                if t_key in seen_trades:
+                    continue
+                seen_trades.add(t_key)
+
+                if abs(pnl_pct) < 1.0 and pnl_pct != 0.0:
+                    pnl_pct = pnl_pct * 100.0
+
                 trades.append({
-                    "symbol": r["symbol"],
+                    "symbol": sym,
                     "pnl": pnl,
-                    "pnl_pct": pnl_pct,
+                    "pnl_pct": round(pnl_pct, 2),
                     "reason": r["reason"] or "N/A",
-                    "date": r["created_at"][:10]
+                    "date": d_str
                 })
                 if pnl > 0:
                     stats["wins"] += 1

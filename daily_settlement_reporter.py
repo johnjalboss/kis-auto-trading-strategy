@@ -74,22 +74,37 @@ class DailySettlementReporter:
             rows = cur.fetchall()
             conn.close()
 
-            if not rows:
+            seen_trades = set()
+            clean_trades = []
+            for r in rows:
+                sym, side, qty, price, pnl, pnl_pct, reason, created_at = r
+                pnl_val = float(pnl or 0.0)
+                qty_val = int(qty or 0)
+                t_key = (sym, round(pnl_val, 2), qty_val)
+                if t_key in seen_trades:
+                    continue
+                seen_trades.add(t_key)
+                clean_trades.append(r)
+
+            if not clean_trades:
                 res["telegram_msg"] = f"📊 [{today_str} 일일 마감 결산]\n당일 실현 매매가 없습니다. (보유 포지션 유지 중)"
                 return res
 
-            res["trades_count"] = len(rows)
-            for r in rows:
+            res["trades_count"] = len(clean_trades)
+            for r in clean_trades:
                 sym, side, qty, price, pnl, pnl_pct, reason, created_at = r
                 pnl = float(pnl or 0.0)
                 pnl_pct = float(pnl_pct or 0.0)
+                if abs(pnl_pct) < 1.0 and pnl_pct != 0.0:
+                    pnl_pct = pnl_pct * 100.0
+
                 if pnl > 0:
                     res["wins"] += 1
                 elif pnl < 0:
                     res["losses"] += 1
                 res["realized_pnl_usd"] += pnl
                 res["closed_trades"].append({
-                    "symbol": sym, "qty": qty, "price": price, "pnl": pnl, "pnl_pct": pnl_pct, "reason": reason
+                    "symbol": sym, "qty": qty, "price": price, "pnl": pnl, "pnl_pct": pnl_pct, "reason": reason or "N/A"
                 })
 
             res["win_rate"] = round((res["wins"] / res["trades_count"] * 100.0), 1) if res["trades_count"] > 0 else 0.0
@@ -107,9 +122,10 @@ class DailySettlementReporter:
                 f"<b>[세부 청산 내역]</b>\n"
             )
 
-            for t in res["closed_trades"][:6]:
+            for t in res["closed_trades"][:8]:
                 t_sign = "+" if t['pnl'] >= 0 else ""
-                msg += f"• <b>{t['symbol']}</b>: {t_sign}${t['pnl']:+,.2f} ({t_sign}{t['pnl_pct']:+.2f}%) | {t['reason'][:20]}\n"
+                r_clean = str(t['reason']).replace('\n', ' ')
+                msg += f"• <b>{t['symbol']}</b>: {t_sign}${t['pnl']:+,.2f} ({t_sign}{t['pnl_pct']:+.2f}%) | <i>{r_clean[:40]}</i>\n"
 
             res["telegram_msg"] = msg
             return res

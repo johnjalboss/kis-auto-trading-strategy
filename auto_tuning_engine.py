@@ -76,8 +76,18 @@ class AutoTuningEngine:
             WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
             ORDER BY created_at ASC
         """, (since_date, since_date))
-        losses = cur.fetchall()
+        raw_losses = cur.fetchall()
         conn.close()
+
+        seen_loss = set()
+        losses = []
+        for l in raw_losses:
+            pnl_v = float(l['pnl'] or 0.0)
+            t_key = (l['symbol'], round(pnl_v, 2), str(l['created_at'])[:10])
+            if t_key in seen_loss:
+                continue
+            seen_loss.add(t_key)
+            losses.append(l)
 
         causes = {
             "FALSE_BREAKOUT": 0,
@@ -131,9 +141,19 @@ class AutoTuningEngine:
             WHERE side = 'SELL' AND date(created_at) >= ?
             ORDER BY created_at ASC
         """, (since_date, since_date))
-        rows = cur.fetchall()
+        raw_rows = cur.fetchall()
         conn.close()
         
+        seen_keys = set()
+        rows = []
+        for r in raw_rows:
+            pnl_v = float(r['pnl'] or 0.0)
+            t_key = (r['symbol'], round(pnl_v, 2), str(r['created_at'])[:10])
+            if t_key in seen_keys:
+                continue
+            seen_keys.add(t_key)
+            rows.append(r)
+
         if not rows:
             return {
                 "total_trades": 0, "wins": 0, "losses": 0,

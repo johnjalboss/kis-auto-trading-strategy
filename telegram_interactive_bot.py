@@ -1400,8 +1400,7 @@ class TelegramInteractiveBot:
         try:
             from sec_form4_insider_radar import SECForm4InsiderRadar
             positions = self._get_positions_dict()
-            sample_sym = list(positions.keys())[0] if positions else "NVDA"
-            card = SECForm4InsiderRadar().format_telegram_card(sample_sym)
+            card = SECForm4InsiderRadar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed insider radar handler: {}", e)

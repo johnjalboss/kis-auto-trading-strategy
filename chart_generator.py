@@ -147,7 +147,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
             for sym in initial_positions:
                 all_symbols_set.add(sym)
 
-            # Fetch all trades strictly on/after 2026-08-14 in chronological order from trade_details and trades
+            # Fetch all trades strictly on/after 2026-08-14 in chronological order with strict deduplication
             cur.execute("""
                 SELECT id, symbol, side, quantity, price, pnl, pnl_pct, date(created_at, '-14 hours') as trade_date, created_at
                 FROM (
@@ -157,8 +157,23 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
                 )
                 ORDER BY created_at ASC, id ASC
             """)
+            
+            seen_trade_keys = set()
             for r in cur.fetchall():
                 trade_dict = dict(r)
+                sym = trade_dict['symbol']
+                side = trade_dict['side']
+                qty = int(trade_dict['quantity'] or 0)
+                px = round(float(trade_dict['price'] or 0), 2)
+                pnl = round(float(trade_dict['pnl'] or 0), 2)
+                t_date = trade_dict['trade_date']
+
+                # Deduplication key across trades and trade_details
+                t_key = (sym, side, qty, px, pnl, t_date)
+                if t_key in seen_trade_keys:
+                    continue
+                seen_trade_keys.add(t_key)
+
                 all_trades_since_baseline.append(trade_dict)
                 if trade_dict['symbol']:
                     all_symbols_set.add(trade_dict['symbol'])

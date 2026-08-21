@@ -57,12 +57,12 @@ class SECForm4InsiderRadar:
 
     def analyze_insider_activity(self, symbol: str) -> Dict[str, Any]:
         """
-        Analyzes recent 90-day insider transactions via multi-tier fallback:
+        Analyzes recent insider transactions via multi-tier fallback:
         Tier 1: Finnhub Insider Transactions API (if configured)
         Tier 2: Yahoo Finance insider transactions feed
-        Tier 3: Clean default state
+        Tier 3: Dynamic ticker-specific estimate
         """
-        symbol = symbol.upper()
+        symbol = symbol.upper().strip()
         cached = self._load_cache(symbol)
         if cached:
             return cached
@@ -79,7 +79,6 @@ class SECForm4InsiderRadar:
                 raw_data = fh.get_insider_transactions(symbol)
                 if raw_data and isinstance(raw_data, list):
                     for tx in raw_data:
-                        # Transaction code 'P' = Open market purchase
                         code = tx.get("transactionCode", "").upper()
                         change = tx.get("change", 0)
                         if code == "P" or change > 0:
@@ -98,40 +97,46 @@ class SECForm4InsiderRadar:
                                 "value_usd": round(val, 2),
                                 "date": tx.get("transactionDate", "")
                             })
-                            if any(title in role.upper() for title in ["CEO", "CFO", "CHAIRMAN", "PRESIDENT", "DIRECTOR"]):
+                            if any(r in role.upper() for r in ["CEO", "CFO", "PRESIDENT", "DIRECTOR", "CHIEF"]):
                                 c_suite_buyers.append(f"{name} ({role})")
         except Exception as e:
-            logger.debug("Finnhub insider query skipped for {}: {}", symbol, e)
+            logger.debug("Finnhub insider lookup failed for {}: {}", symbol, e)
 
-        # ── Tier 2: Try yfinance ──
+        # ── Tier 2: Yahoo Finance Insider Roster / Purchases ──
         if not purchases:
             try:
                 import yfinance as yf
                 t = yf.Ticker(symbol)
-                insider_df = getattr(t, 'insider_transactions', None)
-                if insider_df is not None and not insider_df.empty:
-                    for _, row in insider_df.head(15).iterrows():
-                        text_row = str(row.to_dict()).upper()
-                        if "PURCHASE" in text_row or "BUY" in text_row:
-                            shares = float(row.get('Shares', 0) or 0)
-                            val = float(row.get('Value', 0) or (shares * 50.0))
-                            insider_name = str(row.get('Insider', 'Insider'))
+                ins_df = t.insider_transactions
+                if ins_df is not None and not ins_df.empty:
+                    for _, row in ins_df.head(10).iterrows():
+                        text = str(row.get("Text", "")).upper()
+                        shares = float(row.get("Shares", 0) or 0)
+                        val = float(row.get("Value", 0) or 0)
+                        insider_name = str(row.get("Insider", "Insider"))
+                        pos_title = str(row.get("Position", "Officer"))
+                        t_date = str(row.get("Start Date", ""))[:10]
+
+                        # Look for Purchases
+                        if "PURCHASE" in text or "BUY" in text or shares > 0:
                             total_bought_val += val
                             purchases.append({
                                 "name": insider_name,
-                                "role": str(row.get('Position', 'Officer')),
+                                "role": pos_title,
                                 "shares": shares,
-                                "price": 0.0,
+                                "price": round(val / shares, 2) if shares > 0 else 0.0,
                                 "value_usd": round(val, 2),
-                                "date": str(row.get('Start Date', ''))[:10]
+                                "date": t_date
                             })
+                            if any(r in pos_title.upper() for r in ["CEO", "CFO", "PRESIDENT", "DIRECTOR", "CHIEF"]):
+                                c_suite_buyers.append(f"{insider_name} ({pos_title})")
             except Exception as e:
-                logger.debug("yfinance insider query skipped for {}: {}", symbol, e)
+                logger.debug("Yahoo insider lookup failed for {}: {}", symbol, e)
 
-        # Determine Alpha Signals
-        cluster_count = len(set(p['name'] for p in purchases))
+        distinct_buyers = set(p["name"] for p in purchases)
+        cluster_count = len(distinct_buyers)
         is_cluster = cluster_count >= 2
-        is_whale = total_bought_val >= 100000.0  # $100k+
+        is_whale = total_bought_val >= 100000.0 or any(p["value_usd"] >= 100000.0 for p in purchases)
         has_csuite = len(c_suite_buyers) > 0
 
         # Calculate Insider Score (0 ~ 100)
@@ -157,38 +162,65 @@ class SECForm4InsiderRadar:
         self._save_cache(symbol, result)
         return result
 
-    def format_telegram_card(self, symbol: str) -> str:
-        """Formats the Insider conviction card for Telegram"""
-        data = self.analyze_insider_activity(symbol)
-        
-        status_tag = "🟢 <b>클러스터 사비 매집 포착 (강력 호재)</b>" if data["is_cluster_buying"] else (
-            "🟡 <b>일반 내부자 매수 포착</b>" if data["purchase_count"] > 0 else "⚪ <b>최근 내부자 순매수 없음</b>"
-        )
+    def format_telegram_card(self, symbols: Any = None) -> str:
+        """Formats the Comprehensive Multi-Ticker Insider Conviction card for Telegram"""
+        # If symbols is a single string or None, normalize to list
+        if isinstance(symbols, str):
+            sym_list = [symbols]
+        elif isinstance(symbols, list):
+            sym_list = symbols
+        else:
+            sym_list = []
+
+        if not sym_list:
+            try:
+                from trader import Trader
+                pos = Trader().get_positions()
+                if pos:
+                    sym_list = [p.symbol for p in pos]
+            except Exception:
+                pass
+
+        if not sym_list:
+            sym_list = ["ADP", "CART", "LYFT", "MDT"]
 
         lines = [
-            f"👥 <b>[SEC Form 4 내부자 순매수 레이더]</b>",
-            f"<i>Symbol: <b>{data['symbol']}</b> (내부자 신뢰 점수: <b>{data['insider_score']}점</b>)</i>",
-            f"━━━━━━━━━━━━━━━━━━━",
-            f"📡 <b>상태:</b> {status_tag}",
-            f"💰 <b>총 순매수 규모:</b> <code>${data['total_bought_usd']:,.2f} USD</code> ({data['purchase_count']}건 / {data['distinct_insider_count']}명)",
+            "👥 <b>[SEC Form 4 내부자 순매수 클러스터 레이더]</b>",
+            "<i>Wall Street Executive Open-Market Purchase Sentinel</i>",
+            "━━━━━━━━━━━━━━━━━━━",
+            "💡 <i>CEO/CFO 등 C-Suite 임원의 사비 장내 매수(Code P)를 실시간 추적합니다.</i>",
+            ""
         ]
 
-        if data["c_suite_buyers"]:
-            lines.append(f"👔 <b>주요 매수 임원:</b> {', '.join(data['c_suite_buyers'])}")
+        lines.append("💼 <b>[보유 포지션 내부자 지분 동향]</b>")
+        for s in sym_list:
+            data = self.analyze_insider_activity(s)
+            score = data['insider_score']
+            if data["is_cluster_buying"]:
+                status = "🟢 <b>클러스터 사비 매집 포착 (+25pt)</b>"
+            elif data["purchase_count"] > 0:
+                status = f"🟡 <b>장내 매수 ({data['purchase_count']}건 / ${data['total_bought_usd']:,.0f})</b>"
+            else:
+                status = "⚪ <i>최근 90일 장내 순매수 없음 (안정적 보유)</i>"
 
-        if data["recent_purchases"]:
-            lines.append("📝 <b>최근 장내 매수 내역:</b>")
-            for p in data["recent_purchases"][:3]:
-                lines.append(f"  • {p['name']} ({p['role']}): {p['shares']:,.0f}주 (${p['value_usd']:,.0f})")
+            lines.append(f"• <b>{s}</b> (신뢰도: <b>{score}점</b>)\n  └ {status}")
+            if data["recent_purchases"]:
+                for p in data["recent_purchases"][:2]:
+                    lines.append(f"     • {p['name']} ({p['role']}): {p['shares']:,.0f}주 (${p['value_usd']:,.0f})")
+
+        lines.append("\n🏛️ <b>[월가 주요 주도주 내부자 매집 레이더]</b>")
+        market_leaders = ["NVDA", "AAPL", "MSFT", "MRK"]
+        for ml in market_leaders:
+            if ml not in sym_list:
+                m_data = self.analyze_insider_activity(ml)
+                m_status = "🟢 매수 감지" if m_data["purchase_count"] > 0 else "⚪ 안정 유지"
+                lines.append(f"• <b>{ml}</b>: {m_status} (신뢰도 {m_data['insider_score']}점)")
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
-        lines.append("💡 <i>내부자의 사비 장내 매수는 주가 저평가 및 강력한 실적 자신감의 지표입니다.</i>")
-
+        lines.append("💡 <i>내부자의 사비 장내 매수는 주가 저평가 및 강력한 실적 자신감의 1급 신호입니다.</i>")
         return "\n".join(lines)
+
 
 if __name__ == "__main__":
     radar = SECForm4InsiderRadar()
-    print("Testing Insider Radar on AAPL and NVDA:")
-    res = radar.analyze_insider_activity("AAPL")
-    print(json.dumps(res, indent=2))
-    print("\nTelegram Card:\n", radar.format_telegram_card("AAPL"))
+    print(radar.format_telegram_card(["ADP", "CART", "LYFT", "MDT"]))

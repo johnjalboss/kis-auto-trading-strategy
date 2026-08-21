@@ -360,6 +360,11 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+
     def do_GET(self):
         token = self._get_token()
 
@@ -672,10 +677,10 @@ def start_dashboard_server():
     """Starts background Web Dashboard HTTP server on port 8080"""
     def _run():
         try:
-            socketserver.TCPServer.allow_reuse_address = True
-            with socketserver.TCPServer(("", PORT), DashboardRequestHandler) as httpd:
-                logger.info(f"🌐 [WEB_DASHBOARD] Password-protected dashboard at http://0.0.0.0:{PORT}")
-                httpd.serve_forever()
+            httpd = http.server.ThreadingHTTPServer(("", PORT), DashboardRequestHandler)
+            httpd.daemon_threads = True
+            logger.info(f"🌐 [WEB_DASHBOARD] Multithreaded dashboard running at http://0.0.0.0:{PORT}")
+            httpd.serve_forever()
         except Exception as e:
             logger.debug(f"Dashboard server startup error (port {PORT}): {e}")
 
@@ -686,7 +691,7 @@ def start_dashboard_server():
 if __name__ == "__main__":
     logger.info(f"🚀 Starting Standalone Web Dashboard Server on Port {PORT}...")
     print(f"🔐 Password: {DASHBOARD_PASSWORD}")
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), DashboardRequestHandler) as httpd:
-        print(f"🌐 Server running on http://0.0.0.0:{PORT}")
-        httpd.serve_forever()
+    httpd = http.server.ThreadingHTTPServer(("", PORT), DashboardRequestHandler)
+    httpd.daemon_threads = True
+    print(f"🌐 Multithreaded Server running on http://0.0.0.0:{PORT}")
+    httpd.serve_forever()
