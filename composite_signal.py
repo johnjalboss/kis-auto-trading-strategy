@@ -406,20 +406,30 @@ class CompositeSignalEngine:
         score += async_score
         signals.extend(async_signals)
 
+        # [8-Pillar Realtime Economic Surprise Reactor Integration]
+        try:
+            from realtime_economic_surprise_reactor import RealtimeEconomicSurpriseReactor
+            reactor = RealtimeEconomicSurpriseReactor().analyze()
+            macro_score_val = float(reactor.get("composite_macro_score", 0.0))
+            score += macro_score_val * 0.6  # Scale 60% from the 8-pillar FRED model
+            signals.append(f"FRED_MACRO:{macro_score_val:+.1f}pt ({reactor.get('macro_regime', '')})")
+        except Exception:
+            pass
+
         # [FED NET LIQUIDITY INTEGRATION]
         try:
             from fed_net_liquidity_engine import FedNetLiquidityEngine
             liq = FedNetLiquidityEngine().get_liquidity_summary()
             if liq.get("regime") == "LIQUIDITY_EXPANSION":
-                score += 20
+                score += 20.0
                 signals.append("FED_LIQUIDITY_EXPANSION")
             elif liq.get("regime") == "LIQUIDITY_CONTRACTION":
-                score -= 20
+                score -= 20.0
                 signals.append("FED_LIQUIDITY_CONTRACTION")
         except Exception:
             pass
             
-        return CategoryScore("MACRO", min(100, max(-100, score)), self.WEIGHTS['macro'], signals)
+        return CategoryScore("MACRO", int(np.clip(score, -100, 100)), self.WEIGHTS['macro'], signals)
     
     def _calculate_technical_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
         """Calculate technical score via continuous mathematical indicators"""
