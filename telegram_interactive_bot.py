@@ -564,6 +564,20 @@ class TelegramInteractiveBot:
                 curr_p = entry_fallback
         return curr_p, atr, price_label
 
+    def _get_buying_power(self) -> float:
+        """KIS 브로커 실시간 주문가능 현금 조회"""
+        try:
+            if self.orchestrator and hasattr(self.orchestrator, 'trader') and self.orchestrator.trader:
+                bp = self.orchestrator.trader.get_buying_power()
+            else:
+                from trader import Trader
+                t = Trader()
+                bp = t.get_buying_power()
+            return float(bp) if isinstance(bp, (int, float)) and bp > 0 else 0.0
+        except Exception as e:
+            logger.debug("Status handler get_buying_power failed: {}", e)
+            return 0.0
+
     def _handle_status(self):
         """실시간 계좌 및 포지션 상세 리포트 전송"""
         try:
