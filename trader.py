@@ -542,10 +542,26 @@ class Trader:
             
         exchanges_to_try = [exchange] if exchange else [self._exchange_mapper.get_quote_exchange(symbol)]
         
-        # If no exchange was provided and default is NAS, probe others to be safe for unknown symbols
-        if exchange is None and exchanges_to_try[0] == "NAS" and symbol.upper() not in self._exchange_mapper.SYMBOL_EXCHANGE:
-            exchanges_to_try = ["NAS", "NYS", "AMS"]
-            
+        # Check if currently in Pre-Market or After-Hours session
+        try:
+            from scheduler import TradingScheduler
+            _sch = TradingScheduler()
+            _is_ext = _sch.is_premarket() or _sch.is_afterhours()
+        except Exception:
+            _is_ext = False
+
+        # If in extended hours (Pre/After market), prioritize live yfinance tick for true real-time price
+        if _is_ext:
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(symbol)
+                fast_p = getattr(ticker.fast_info, 'last_price', None)
+                if fast_p and float(fast_p) > 0:
+                    return float(fast_p)
+            except Exception:
+                pass
+
+        # If regular market or yfinance fallback, query KIS API price
         tr_id = "HHDFS00000300"
         url = f"{self.base_url}/uapi/overseas-price/v1/quotations/price"
         
@@ -585,7 +601,7 @@ class Trader:
                 except Exception as e:
                     logger.debug("Price query failed for {} on {}: {}", symbol, excd, e)
                 
-        # 3) Fallback to yfinance fast_info for pre-market / after-hours or indices
+        # 3) Final Fallback to yfinance fast_info for pre-market / after-hours or indices
         try:
             import yfinance as yf
             ticker = yf.Ticker(symbol)

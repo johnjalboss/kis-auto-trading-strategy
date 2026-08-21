@@ -99,6 +99,17 @@ try:
                         symbol = item.get("ovrs_pdno", "")
                         avg_price = float(item.get("pchs_avg_pric", 0))
                         cur_price = float(item.get("now_pric2", 0))
+                        
+                        # Live pre/post market price enhancement
+                        try:
+                            import yfinance as yf
+                            tk = yf.Ticker(symbol)
+                            live_p = getattr(tk.fast_info, 'last_price', None)
+                            if live_p and float(live_p) > 0:
+                                cur_price = float(live_p)
+                        except Exception:
+                            pass
+
                         if cur_price <= 0:
                             cur_price = avg_price
                         
