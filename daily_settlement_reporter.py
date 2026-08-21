@@ -112,20 +112,23 @@ class DailySettlementReporter:
 
             # Build Telegram Settlement Card
             icon = "🎉" if res["realized_pnl_usd"] >= 0 else "🛡️"
-            sign = "+" if res["realized_pnl_usd"] >= 0 else ""
+            usd_str = f"+${res['realized_pnl_usd']:.2f}" if res['realized_pnl_usd'] >= 0 else f"-${abs(res['realized_pnl_usd']):.2f}"
+            krw_str = f"+{res['realized_pnl_krw']:,.0f}원" if res['realized_pnl_krw'] >= 0 else f"{res['realized_pnl_krw']:,.0f}원"
+            
             msg = (
                 f"{icon} <b>[{today_str} 퀀트 마스터 일일 결산 보고서]</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"• 💰 <b>당일 실현 손익:</b> {sign}${res['realized_pnl_usd']:+,.2f} ({sign}{res['realized_pnl_krw']:+,.0f}원)\n"
+                f"• 💰 <b>당일 실현 손익:</b> {usd_str} ({krw_str})\n"
                 f"• 🎯 <b>매매 전적:</b> {res['trades_count']}전 {res['wins']}승 {res['losses']}패 (승률 {res['win_rate']}%)\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"<b>[세부 청산 내역]</b>\n"
             )
 
             for t in res["closed_trades"][:8]:
-                t_sign = "+" if t['pnl'] >= 0 else ""
+                t_usd = f"+${t['pnl']:.2f}" if t['pnl'] >= 0 else f"-${abs(t['pnl']):.2f}"
+                t_pct = f"+{t['pnl_pct']:.2f}%" if t['pnl_pct'] >= 0 else f"{t['pnl_pct']:.2f}%"
                 r_clean = str(t['reason']).replace('\n', ' ')
-                msg += f"• <b>{t['symbol']}</b>: {t_sign}${t['pnl']:+,.2f} ({t_sign}{t['pnl_pct']:+.2f}%) | <i>{r_clean[:40]}</i>\n"
+                msg += f"• <b>{t['symbol']}</b>: {t_usd} ({t_pct}) | <i>{r_clean[:40]}</i>\n"
 
             res["telegram_msg"] = msg
             return res

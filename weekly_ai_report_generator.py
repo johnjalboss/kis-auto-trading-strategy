@@ -193,10 +193,23 @@ class WeeklyAIReportGenerator:
         
         # 1. Prepare trade breakdown text
         pnl_emoji = "🟢" if stats["gross_pnl"] >= 0 else "🔴"
-        pnl_sign = "+" if stats["gross_pnl"] >= 0 else ""
+        gross_usd = f"+${stats['gross_pnl']:.2f}" if stats["gross_pnl"] >= 0 else f"-${abs(stats['gross_pnl']):.2f}"
         
-        best_str = f"{stats['best_trade']['symbol']} ({stats['best_trade']['pnl_pct']:+.1%}, ${stats['best_trade']['pnl']:+.2f})" if stats["best_trade"] else "해당 없음 (전량 홀딩 중)"
-        worst_str = f"{stats['worst_trade']['symbol']} ({stats['worst_trade']['pnl_pct']:+.1%}, ${stats['worst_trade']['pnl']:+.2f})" if stats["worst_trade"] else "해당 없음 (손절 0건)"
+        if stats["best_trade"]:
+            bt = stats["best_trade"]
+            b_usd = f"+${bt['pnl']:.2f}" if bt['pnl'] >= 0 else f"-${abs(bt['pnl']):.2f}"
+            b_pct = f"+{bt['pnl_pct']:.2f}%" if bt['pnl_pct'] >= 0 else f"{bt['pnl_pct']:.2f}%"
+            best_str = f"<b>{bt['symbol']}</b> ({b_pct}, {b_usd})"
+        else:
+            best_str = "해당 없음 (전량 홀딩 중)"
+
+        if stats["worst_trade"]:
+            wt = stats["worst_trade"]
+            w_usd = f"+${wt['pnl']:.2f}" if wt['pnl'] >= 0 else f"-${abs(wt['pnl']):.2f}"
+            w_pct = f"+{wt['pnl_pct']:.2f}%" if wt['pnl_pct'] >= 0 else f"{wt['pnl_pct']:.2f}%"
+            worst_str = f"<b>{wt['symbol']}</b> ({w_pct}, {w_usd})"
+        else:
+            worst_str = "해당 없음 (손절 0건)"
         
         name_map = {
             "MDT": "메드트로닉",
@@ -278,7 +291,7 @@ class WeeklyAIReportGenerator:
             f"📜 <b>[주간 AI 퀀트 운용 보고서]</b>\n"
             f"<i>{stats['start_date']} ~ {stats['end_date']} (Weekly Executive Letter)</i>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"{pnl_emoji} <b>7일 총 실현손익</b>: <code>{pnl_sign}${stats['gross_pnl']:.2f} USD</code>\n"
+            f"{pnl_emoji} <b>7일 총 실현손익</b>: <code>{gross_usd} USD</code>\n"
             f"🎯 <b>매매 전적</b>: {stats['total_trades']}전 {stats['wins']}승 {stats['losses']}패\n"
             f"📊 <b>승률 (Win Rate)</b>: <b>{stats['win_rate']}%</b>\n"
             f"⚖️ <b>Profit Factor</b>: <b>{stats['profit_factor']}</b>\n"
