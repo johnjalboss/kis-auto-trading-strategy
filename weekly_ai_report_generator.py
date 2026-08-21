@@ -23,12 +23,13 @@ class WeeklyAIReportGenerator:
 
     def _get_weekly_trade_stats(self) -> Dict[str, Any]:
         """Queries the SQLite database for trades closed in the past 7 days."""
-        now = datetime.now()
-        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
+        import pytz
+        now_est = datetime.now(pytz.timezone('US/Eastern'))
+        start_date = (now_est - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
 
         stats = {
             "start_date": start_date[:10],
-            "end_date": now.strftime("%Y-%m-%d"),
+            "end_date": now_est.strftime("%Y-%m-%d"),
             "total_trades": 0,
             "wins": 0,
             "losses": 0,

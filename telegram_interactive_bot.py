@@ -672,9 +672,9 @@ class TelegramInteractiveBot:
                     lp = getattr(fi, 'last_price', None)
                     if lp and float(lp) > 0:
                         curr_p = float(lp)
-                        # 현재 시각 기준 장 세션 판별 (ET 기준)
-                        from datetime import datetime, timezone, timedelta
-                        et = datetime.now(timezone(timedelta(hours=-5)))  # ET (겨울) 근사
+                        # 현재 시각 기준 장 세션 판별 (US/Eastern EDT/EST 자동 처리)
+                        import pytz
+                        et = datetime.now(pytz.timezone('US/Eastern'))
                         hm = et.hour * 60 + et.minute
                         if hm < 9 * 60 + 30:
                             price_label = " 🌅<i>[프리장]</i>"
