@@ -101,15 +101,10 @@ class WinRateOptimizer:
         if not regime_aligned:
             reasons.append("REGIME_MISMATCH")
         
-        # 5. Risk/Reward
-        if risk_reward_ratio >= 3.0:
-            rr_score = 95
-        elif risk_reward_ratio >= 2.0:
-            rr_score = 80
-        elif risk_reward_ratio >= 1.5:
-            rr_score = 55
-        else:
-            rr_score = 10
+        # 5. Continuous Risk/Reward S-Curve
+        import math
+        rr_score = int(100.0 * math.tanh(max(0.0, risk_reward_ratio) / 2.2))
+        if risk_reward_ratio < 1.5:
             reasons.append(f"BAD_RR:{risk_reward_ratio:.1f}")
         
         # 6. Timing Quality

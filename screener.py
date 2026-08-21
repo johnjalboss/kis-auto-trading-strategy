@@ -1254,9 +1254,9 @@ class DynamicScreener:
             
             details = {}
             
-            # 1. Short Squeeze Score (25 pts)
-            # KIS API doesn't provide short data, so score based on volatility proxy
-            short_score = self._calc_short_squeeze_score(info)
+            # 1. Short Squeeze & Institutional Sponsorship Score (25 pts)
+            # Calculated via smart_money_footprint (13F institutional ownership + short interest continuous tanh model)
+            short_score = self._calc_short_squeeze_score(info, symbol=symbol)
             details['short_float'] = info.get('shortPercentOfFloat', 0)
             
             # 2. Momentum Score (25 pts)
@@ -1496,138 +1496,136 @@ class DynamicScreener:
             logger.debug("Score calculation failed for {}: {}", symbol, e)
             return None
     
-    def _calc_short_squeeze_score(self, info: dict) -> int:
-        """Trend Quality Score (0-25) - Repurposed for Swing
-        Returns 0 since short interest is unavailable in KIS API."""
-        return 0
-
+    def _calc_short_squeeze_score(self, info: dict, symbol: str = "") -> int:
+        """13F Institutional Sponsorship & Short Squeeze Pressure Score (0-25)
+        Calculated via live SEC 13F institutional ownership and short interest tanh models."""
+        if not symbol:
+            return 0
+        try:
+            import numpy as np
+            from smart_money_footprint import get_smart_money_footprint
+            sm = get_smart_money_footprint().analyze_ticker(symbol)
+            bonus = float(sm.get("bonus_points", 0.0))
+            # Scale bonus points (~0-8.0 pts) up to full 25 pt scale: S = 25 * tanh(bonus / 5.0)
+            score = float(25.0 * np.tanh(max(0.0, bonus) / 5.0))
+            return int(np.clip(score, 0, 25))
+        except Exception:
+            return 0
     
     def _calc_momentum_score(self, info: dict, hist: pd.DataFrame) -> int:
-        """Swing Momentum Score (0-25)
-        Rewards Relative Strength (RS), Trend Alignment, and steady momentum."""
-        score = 0
-        
+        """Continuous Swing Momentum Score (0-25)
+        Rewards Relative Strength (RS), Trend Alignment, and continuous return velocity via tanh."""
         if len(hist) < 50:
             return 0
             
+        import numpy as np
         close = hist['Close']
+        current = float(close.iloc[-1])
         
-        # 1. Structural Uptrend (SMA20 > SMA50)
-        sma20 = close.rolling(20).mean().iloc[-1]
-        sma50 = close.rolling(50).mean().iloc[-1]
-        if sma20 > sma50:
-            score += 10
-            
-            # Is SMA20 sloping up?
-            if sma20 > close.rolling(20).mean().iloc[-5]:
-                score += 5
-                
-        # 2. Medium-term momentum (20-day vs 50-day return)
-        ret_20d = (close.iloc[-1] / close.iloc[-20]) - 1
-        ret_50d = (close.iloc[-1] / close.iloc[-50]) - 1
+        # 1. Continuous Structural Uptrend: Distance from SMA50 (15 pts max)
+        sma20 = float(close.rolling(20).mean().iloc[-1])
+        sma50 = float(close.rolling(50).mean().iloc[-1])
+        trend_dist = (current - sma50) / sma50 if sma50 > 0 else 0.0
+        trend_score = float(12.0 * np.tanh(trend_dist / 0.05))
         
-        if ret_20d > 0.05 and ret_50d > 0.10:
-            score += 10
-        elif ret_20d > 0 and ret_50d > 0:
-            score += 5
-            
-        return min(25, score)
+        # SMA20 slope acceleration (3 pts)
+        sma20_prev = float(close.rolling(20).mean().iloc[-5])
+        slope_score = float(3.0 * np.tanh(((sma20 - sma20_prev) / sma20_prev) / 0.02)) if sma20_prev > 0 else 0.0
+        
+        # 2. Medium-term momentum (20-day vs 50-day return via tanh) (10 pts max)
+        ret_20d = (current / float(close.iloc[-20])) - 1.0 if len(close) >= 20 else 0.0
+        ret_50d = (current / float(close.iloc[-50])) - 1.0 if len(close) >= 50 else 0.0
+        mom_score = float(10.0 * np.tanh((ret_20d * 0.6 + ret_50d * 0.4) / 0.08))
+        
+        total_mom = max(0.0, trend_score + slope_score + mom_score)
+        return int(np.clip(total_mom, 0, 25))
     
     def _calc_institutional_score(self, info: dict, hist: pd.DataFrame) -> int:
-        """Institutional Accumulation Score (0-20)
-        Rewards stocks where UP days have higher volume than DOWN days."""
-        score = 0
-        
+        """Continuous Institutional Accumulation Ratio Score (0-20)
+        Calculates continuous tanh curve based on UP-day vs DOWN-day volume concentration."""
         if len(hist) < 20:
             return 5
             
-        # Accumulation / Distribution Profile over last 20 days
+        import numpy as np
         recent = hist.tail(20)
         up_days = recent[recent['Close'] > recent['Open']]
         down_days = recent[recent['Close'] < recent['Open']]
         
-        avg_up_vol = up_days['Volume'].mean() if not up_days.empty else 0
-        avg_down_vol = down_days['Volume'].mean() if not down_days.empty else 0
+        avg_up_vol = float(up_days['Volume'].mean()) if not up_days.empty else 0.0
+        avg_down_vol = float(down_days['Volume'].mean()) if not down_days.empty else 1.0
         
         if avg_down_vol > 0:
             acc_ratio = avg_up_vol / avg_down_vol
-            if acc_ratio > 1.5:
-                score += 20
-            elif acc_ratio > 1.2:
-                score += 15
-            elif acc_ratio > 1.05:
-                score += 10
-            elif acc_ratio < 0.8:
-                score -= 10 # Distribution warning
-                
-        return min(20, max(0, score))
+            # Continuous tanh curve centered at 1.0 (neutral): 10 pts baseline + 10 * tanh((acc_ratio - 1.0)/0.40)
+            score = 10.0 + float(10.0 * np.tanh((acc_ratio - 1.0) / 0.40))
+            return int(np.clip(score, 0, 20))
+            
+        return 10
     
     def _calc_options_score(self, info: dict, hist: pd.DataFrame) -> int:
-        """Volatility Contraction (VCP) Score (0-15)
-        Rewards tightening price action (decreasing ATR or BB width)."""
-        score = 0
-        
+        """Continuous Volatility Contraction Pattern (VCP) Score (0-15)
+        Calculates continuous tightening of Bollinger Band width before breakout."""
         if len(hist) < 20:
             return 0
             
+        import numpy as np
         close = hist['Close']
+        current = float(close.iloc[-1])
         
-        # [CRITICAL FIX] Only award VCP score if stock is above its 50-day SMA.
-        # This prevents awarding points for tight consolidation in a downtrend (bear flags).
+        # Only award VCP score if stock is in structural Stage 2 uptrend (> 50-day SMA)
         if len(hist) >= 50:
-            sma50 = close.rolling(50).mean().iloc[-1]
-            if close.iloc[-1] < sma50:
+            sma50 = float(close.rolling(50).mean().iloc[-1])
+            if current < sma50:
                 return 0
                 
-        sma20 = close.rolling(20).mean().iloc[-1]
-        std20 = close.rolling(20).std().iloc[-1]
+        sma20 = float(close.rolling(20).mean().iloc[-1])
+        std20 = float(close.rolling(20).std().iloc[-1])
         
         if sma20 > 0 and std20 > 0:
-            bb_width = (4 * std20) / sma20
+            bb_width = (4.0 * std20) / sma20
+            # Continuous contraction formula: 15 * max(0, 1.0 - (bb_width / 0.16))
+            score = float(15.0 * np.clip(1.0 - (bb_width / 0.16), 0.0, 1.0))
+            return int(np.clip(score, 0, 15))
             
-            # Tight BB width indicates contraction before expansion
-            if bb_width < 0.05: # Very tight (<5% range)
-                score += 15
-            elif bb_width < 0.10:
-                score += 10
-            elif bb_width < 0.15:
-                score += 5
-                
-        return min(15, score)
+        return 0
     
     def _calc_technical_score(self, hist: pd.DataFrame) -> int:
-        """Technical setup score (0-15)"""
-        score = 0
-        
+        """Continuous Technical Setup Score (0-15)
+        Combines continuous RSI momentum curve and volume expansion ratio."""
         if len(hist) < 20:
             return 0
         
+        import numpy as np
         close = hist['Close']
+        current = float(close.iloc[-1])
         
-        # Price above 20-day SMA
-        sma_20 = close.rolling(20).mean().iloc[-1]
-        if close.iloc[-1] > sma_20:
-            score += 5
+        # 1. Price above 20-day SMA (5 pts max via continuous tanh)
+        sma_20 = float(close.rolling(20).mean().iloc[-1])
+        dist_20 = (current - sma_20) / sma_20 if sma_20 > 0 else 0.0
+        sma_score = float(5.0 * np.tanh(dist_20 / 0.03)) if dist_20 > 0 else 0.0
         
-        # RSI in good range (40-70)
+        # 2. Continuous RSI Momentum Curve (40-68 sweet spot) (5 pts max)
         delta = close.diff()
         gain = delta.where(delta > 0, 0).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss.replace(0, 1)
-        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+        rsi = float((100 - (100 / (1 + rs))).iloc[-1])
         
-        if 40 <= rsi <= 65:
-            score += 5
-        elif 30 <= rsi <= 70:
-            score += 3
+        if 40.0 <= rsi <= 68.0:
+            rsi_score = float(5.0 * np.sin(((rsi - 40.0) / 28.0) * np.pi))
+        elif rsi < 32.0:
+            rsi_score = float(4.0 * (32.0 - rsi) / 12.0)
+        else:
+            rsi_score = 0.0
         
-        # Volume trend (increasing)
-        vol_sma_5 = hist['Volume'].rolling(5).mean().iloc[-1]
-        vol_sma_20 = hist['Volume'].rolling(20).mean().iloc[-1]
-        if vol_sma_5 > vol_sma_20:
-            score += 5
+        # 3. Continuous Volume Expansion (5 pts max)
+        vol_sma_5 = float(hist['Volume'].rolling(5).mean().iloc[-1])
+        vol_sma_20 = float(hist['Volume'].rolling(20).mean().iloc[-1])
+        vol_ratio = (vol_sma_5 / vol_sma_20) if vol_sma_20 > 0 else 1.0
+        vol_score = float(5.0 * np.tanh((vol_ratio - 1.0) / 0.30)) if vol_ratio > 1.0 else 0.0
         
-        return min(15, score)
+        total_tech = max(0.0, sma_score + rsi_score + vol_score)
+        return int(np.clip(total_tech, 0, 15))
     
     def _calc_mode_bonus(self, mode: ScreenMode, short_score: int, 
                          momentum_score: int, near_high: bool) -> int:
