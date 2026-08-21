@@ -340,7 +340,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     all_vals = cum_pnls + qqq_dollars + daily_bars
     max_val = max(max(all_vals), 5.0)
     min_val = min(min(all_vals), -5.0)
-    ax_main.set_ylim(min_val - 4.0, max_val + 6.0)
+    ax_main.set_ylim(min_val - 5.0, max_val + 12.0)
 
     # Summary metrics
     final_bot = cum_pnls[-1]
@@ -350,15 +350,24 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     qqq_pct = (final_qqq / base_capital) * 100
     alpha_pct = (final_alpha / base_capital) * 100
 
-    ann_text = f"Bot: ${final_bot:+,.2f} ({bot_pct:+.2f}%)\nQQQ: ${final_qqq:+,.2f} ({qqq_pct:+.2f}%)\nAlpha: ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
-    ax_main.annotate(
-        ann_text, xy=(date_labels[-1], final_bot), xytext=(-145, 25), textcoords='offset points',
-        bbox=dict(boxstyle='round,pad=0.5', fc='#161b22', ec='#2ea44f', lw=1.5),
-        color='#f0f6fc', weight='bold', fontsize=9,
-        arrowprops=dict(arrowstyle='->', color='#2ea44f', connectionstyle='arc3,rad=0.2')
+    ann_text = (
+        f"Bot P&L : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
+        f"QQQ BM  : ${final_qqq:+,.2f} ({qqq_pct:+.2f}%)\n"
+        f"Alpha   : ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
+    )
+    # Place card at upper-right with zorder=10 to guarantee NO graph line overlap
+    ax_main.text(
+        0.98, 0.94, ann_text,
+        transform=ax_main.transAxes,
+        horizontalalignment='right',
+        verticalalignment='top',
+        bbox=dict(boxstyle='round,pad=0.55', fc='#161b22', ec='#2ea44f', lw=1.6, alpha=0.96),
+        color='#f0f6fc', weight='bold', fontsize=9.5, zorder=10
     )
 
-    ax_main.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=9, labelcolor='#c9d1d9')
+    leg = ax_main.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=9, labelcolor='#c9d1d9')
+    if leg:
+        leg.set_zorder(10)
     ax_main.set_title('AI QUANT BOT vs QQQ BENCHMARK (Day 1: 2026-08-14)', color='#f0f6fc', fontsize=12, fontweight='bold', pad=12)
 
     # Bottom Panel: Alpha Excess Return Area
