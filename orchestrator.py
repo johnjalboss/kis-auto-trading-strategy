@@ -2140,8 +2140,12 @@ class BotOrchestrator:
             except Exception as _dqr_err:
                 logger.debug("DailyQuantReportCard error: {}", _dqr_err)
 
-            # [AUTO EXECUTIVE AI REPORT: Friday/Saturday EOD automatic weekly delivery]
-            if datetime.now().weekday() in (4, 5):
+            # [AUTO EXECUTIVE AI REPORT: Friday after market close (>= 16:00 EST) or Saturday delivery]
+            from scheduler import TradingScheduler
+            _sch = TradingScheduler()
+            _est_now = _sch.now_est()
+            is_post_friday = (_est_now.weekday() == 4 and _est_now.time() >= _sch.MARKET_CLOSE) or (_est_now.weekday() == 5)
+            if is_post_friday:
                 try:
                     from weekly_ai_report_generator import WeeklyAIReportGenerator
                     from notification import get_notifier
@@ -2332,7 +2336,11 @@ class BotOrchestrator:
         logger.info("=" * 60)
         
         scan_interval = self._freq_controller.get_scan_interval() * 60 if self._freq_controller else 60
-        ran_post_market_today = False
+        init_est = scheduler.now_est()
+        # If bot starts up BEFORE regular market open (00:00 - 09:30 EST), regular session hasn't traded yet today.
+        # Set ran_post_market_today = True to prevent false EOD triggers on pre-market startup.
+        was_open_today = False
+        ran_post_market_today = (init_est.time() < scheduler.MARKET_OPEN)
         was_closed = True  # Track market open transition
         
         try:
@@ -2396,7 +2404,9 @@ class BotOrchestrator:
                 
 
                 if is_open:
-                    # Market just opened ??force immediate macro + screener refresh
+                    was_open_today = True
+                    ran_post_market_today = False  # Reset so it fires when market closes today!
+                    # Market just opened -- force immediate macro + screener refresh
                     if was_closed:
                         logger.info("? Market OPEN detected! Running fresh macro + screener...")
                         self.state.max_exposure_pct = 1.0
@@ -2485,10 +2495,15 @@ class BotOrchestrator:
                         sleep_elapsed += 60
                 else:
                     was_closed = True  # Track for next open
-                    # Market closed -- run post-market once
-                    if not ran_post_market_today:
+                    # Market closed -- run post-market ONLY after trading or in official EOD window (16:00-17:30 EST)
+                    now_est = scheduler.now_est()
+                    from datetime import time as dt_time
+                    is_eod_window = scheduler.is_trading_day() and (scheduler.MARKET_CLOSE <= now_est.time() <= dt_time(17, 30))
+                    if not ran_post_market_today and (was_open_today or is_eod_window):
+                        logger.info("🏁 Market CLOSE confirmed. Running Phase 6 EOD post-market settlement...")
                         self.phase_6_post_market()
                         ran_post_market_today = True
+                        was_open_today = False
                     
                     # ── 24/7 EXTENDED-HOURS EMERGENCY STOP SENTINEL ──
                     # Automatically checks stop loss during Pre-market and After-hours every 60s
