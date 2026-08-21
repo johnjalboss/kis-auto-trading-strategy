@@ -422,161 +422,199 @@ class CompositeSignalEngine:
         return CategoryScore("MACRO", min(100, max(-100, score)), self.WEIGHTS['macro'], signals)
     
     def _calculate_technical_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
-        """Calculate technical score"""
+        """Calculate technical score via continuous mathematical indicators"""
         close = df['Close']
         signals = []
-        score = 0
+        score = 0.0
         
-        # Async run all TECHNICAL modules (alpha, squeeze, candlestick, etc.)
+        # Async run all TECHNICAL modules
         async_score, async_signals = self._run_analyzers_async('technical', df, symbol=symbol, **kwargs)
-        score += async_score
+        score += float(async_score)
         signals.extend(async_signals)
         
-        # Trend
-        sma20 = close.rolling(20).mean().iloc[-1]
-        sma50 = close.rolling(50).mean().iloc[-1]
-        current = close.iloc[-1]
+        # 1. Continuous Trend Strength (Tanh of Distance from SMA50)
+        current = float(close.iloc[-1])
+        sma20 = float(close.rolling(20).mean().iloc[-1]) if len(close) >= 20 else current
+        sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else current
         
-        if current > sma20 > sma50:
-            score += 30
-            signals.append("UPTREND")
-        elif current < sma20 < sma50:
-            score -= 30
-            signals.append("DOWNTREND")
-        
-        # RSI
+        if sma50 > 0:
+            trend_dist = (current - sma50) / sma50
+            trend_score = float(30.0 * np.tanh(trend_dist / 0.04))
+            score += trend_score
+            if current > sma20 > sma50:
+                signals.append(f"UPTREND (거리: {trend_dist*100:+.1f}%)")
+            elif current < sma20 < sma50:
+                signals.append(f"DOWNTREND (거리: {trend_dist*100:+.1f}%)")
+
+        # 2. Continuous RSI Momentum & Overbought/Oversold Curve
         rsi = self._calculate_rsi(close)
-        if rsi < 30:
-            score += 25
-            signals.append(f"RSI_OVERSOLD:{rsi:.0f}")
-        elif rsi > 70:
-            score -= 25
-            signals.append(f"RSI_OVERBOUGHT:{rsi:.0f}")
-        
-        # MACD
+        if 48.0 <= rsi <= 68.0:
+            # Optimal Institutional Momentum Sweet Spot
+            rsi_score = float(25.0 * np.sin(((rsi - 48.0) / 20.0) * (np.pi / 2.0)))
+            score += rsi_score
+            signals.append(f"RSI_BULLISH_MOMENTUM:{rsi:.1f}")
+        elif rsi < 32.0:
+            rsi_score = float(25.0 * np.clip((32.0 - rsi) / 12.0, 0.0, 1.0))
+            score += rsi_score
+            signals.append(f"RSI_OVERSOLD_BOUNCE:{rsi:.1f}")
+        elif rsi > 72.0:
+            rsi_penalty = float(-25.0 * np.clip((rsi - 72.0) / 15.0, 0.0, 1.0))
+            score += rsi_penalty
+            signals.append(f"RSI_OVERBOUGHT_DIVERGENCE:{rsi:.1f}")
+
+        # 3. MACD Momentum
         ema12 = close.ewm(span=12).mean()
         ema26 = close.ewm(span=26).mean()
         macd = ema12 - ema26
         macd_signal = macd.ewm(span=9).mean()
         
         if macd.iloc[-1] > macd_signal.iloc[-1] and macd.iloc[-2] <= macd_signal.iloc[-2]:
-            score += 20
+            score += 20.0
             signals.append("MACD_BULLISH_CROSS")
         elif macd.iloc[-1] < macd_signal.iloc[-1] and macd.iloc[-2] >= macd_signal.iloc[-2]:
-            score -= 20
+            score -= 20.0
             signals.append("MACD_BEARISH_CROSS")
         
-        # Overextension Penalty
-        # Stocks >15% above SMA20 have a higher reversal risk
-        if float(sma20) > 0:
-            dist_from_sma20 = (current - float(sma20)) / float(sma20)
-            if dist_from_sma20 > 0.15:
-                score -= 20
-                signals.append("OVEREXTENDED_SMA20")
-        
-        return CategoryScore("TECHNICAL", max(-100, min(100, score)),
+        # 4. Continuous Overextension Penalty
+        if sma20 > 0:
+            dist_from_sma20 = (current - sma20) / sma20
+            if dist_from_sma20 > 0.12:
+                ext_penalty = float(-25.0 * np.tanh((dist_from_sma20 - 0.12) / 0.08))
+                score += ext_penalty
+                signals.append(f"OVEREXTENDED_SMA20 ({dist_from_sma20*100:+.1f}%)")
+
+        return CategoryScore("TECHNICAL", int(np.clip(score, -100, 100)),
                             self.WEIGHTS['technical'], signals)
-    
+
     def _calculate_fundamental_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
-        """Calculate fundamental quality score"""
+        """Calculate fundamental quality & PEAD earnings score"""
         signals = []
-        score = 0
+        score = 0.0
         
         async_score, async_signals = self._run_analyzers_async('fundamental', df, symbol=symbol, **kwargs)
-        score += async_score
+        score += float(async_score)
         signals.extend(async_signals)
         
-        # Returns-based quality proxy
-        returns = df['Close'].pct_change()
-        sharpe_proxy = returns.mean() / (returns.std() + 1e-9) * np.sqrt(252)
-        
-        if sharpe_proxy > 1.5:
-            score += 20
-            signals.append("HIGH_QUALITY_RETURNS")
-        elif sharpe_proxy < 0:
-            score -= 20
-            signals.append("POOR_RISK_ADJUSTED")
+        # 1. Returns-based Quality (Annualized Sharpe Proxy)
+        returns = df['Close'].pct_change().dropna()
+        if len(returns) >= 20:
+            std_val = returns.std()
+            sharpe_proxy = float((returns.mean() / (std_val + 1e-9)) * np.sqrt(252))
+            sharpe_score = float(20.0 * np.tanh(sharpe_proxy / 1.5))
+            score += sharpe_score
+            if sharpe_proxy > 1.2:
+                signals.append(f"HIGH_QUALITY_RETURNS (Sharpe: {sharpe_proxy:.2f})")
+            elif sharpe_proxy < -0.5:
+                signals.append(f"POOR_RISK_ADJUSTED (Sharpe: {sharpe_proxy:.2f})")
 
-        return CategoryScore("FUNDAMENTAL", max(-100, min(100, score)),
+        # 2. PEAD Post-Earnings Announcement Drift Integration
+        try:
+            from pead_earnings_radar import PEADEarningsRadar
+            pead = PEADEarningsRadar().analyze_ticker(symbol)
+            if pead.get("is_pead_candidate"):
+                score += 25.0
+                signals.append(f"PEAD_SURPRISE_BEAT (+{pead.get('surprise_pct', 0):.1f}%)")
+        except Exception:
+            pass
+
+        return CategoryScore("FUNDAMENTAL", int(np.clip(score, -100, 100)),
                             self.WEIGHTS['fundamental'], signals)
-    
+
     def _calculate_smart_money_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
-        """Calculate smart money score"""
+        """Calculate smart money & institutional footprint score via continuous math"""
         signals = []
-        score = 0
+        score = 0.0
         
-        # Async run all SMART_MONEY modules (options_flow, institutional, etc)
+        # Async run SMART_MONEY modules
         async_score, async_signals = self._run_analyzers_async('smart_money', df, symbol=symbol, **kwargs)
-        score += async_score
+        score += float(async_score)
         signals.extend(async_signals)
 
-        # [SEC Form 4 Insider Radar Integration]
+        # 1. 13F Institutional Sponsorship & Short Squeeze Radar
+        try:
+            from smart_money_footprint import get_smart_money_footprint
+            sm = get_smart_money_footprint().analyze_ticker(symbol)
+            sm_bonus = float(sm.get("bonus_points", 0.0) * 3.5)  # Scale up to ~28 pts
+            score += sm_bonus
+            if sm.get("bonus_points", 0) > 2.0:
+                signals.append(f"13F_INSTITUTIONAL ({sm.get('summary', '')})")
+        except Exception:
+            pass
+
+        # 2. SEC Form 4 Insider Radar Integration
         try:
             from sec_form4_insider_radar import SECForm4InsiderRadar
             ins = SECForm4InsiderRadar().analyze_insider_activity(symbol)
             if ins.get("is_cluster_buying"):
-                score += 25
+                score += 25.0
                 signals.append("INSIDER_CLUSTER_BUY")
             elif ins.get("is_whale_buying"):
-                score += 15
+                score += 15.0
                 signals.append("INSIDER_WHALE_BUY")
         except Exception:
             pass
 
-        # [Options GEX Integration]
+        # 3. Market-Maker Gamma Exposure (GEX) Integration
         try:
             from options_gamma_engine import OptionsGammaEngine
             gex = OptionsGammaEngine().analyze_gex(symbol)
             if gex.get("gex_regime") == "POSITIVE_GAMMA":
-                score += 15
+                score += 15.0
                 signals.append("POSITIVE_GEX_STABILITY")
             elif gex.get("gex_regime") == "NEGATIVE_GAMMA":
-                score -= 15
+                score -= 15.0
                 signals.append("NEGATIVE_GEX_VOLATILITY")
         except Exception:
             pass
         
-        # Volume analysis as proxy
+        # 4. Volume Accumulation Ratio (OBV & Price Action)
         volume = df['Volume']
         close = df['Close']
-        
-        avg_vol = volume.tail(20).mean()
-        recent_vol = volume.tail(5).mean()
-        close_5 = close.iloc[-5]
-        price_change = close.iloc[-1] / close_5 - 1 if close_5 > 0 else 0
-        
-        # Volume + price direction
-        if recent_vol > avg_vol * 1.5 and price_change > 0:
-            score += 25
-            signals.append("SMART_ACCUMULATION")
-        elif recent_vol > avg_vol * 1.5 and price_change < 0:
-            score -= 25
-            signals.append("DISTRIBUTION")
-        
-        return CategoryScore("SMART_MONEY", max(-100, min(100, score)), 
+        if len(volume) >= 20:
+            avg_vol = float(volume.tail(20).mean())
+            recent_vol = float(volume.tail(5).mean())
+            close_5 = float(close.iloc[-5])
+            price_change = (float(close.iloc[-1]) / close_5 - 1.0) if close_5 > 0 else 0.0
+            
+            if avg_vol > 0 and recent_vol > avg_vol * 1.3:
+                vol_score = float(20.0 * np.tanh(price_change / 0.03))
+                score += vol_score
+                if price_change > 0:
+                    signals.append("SMART_ACCUMULATION")
+                else:
+                    signals.append("INSTITUTIONAL_DISTRIBUTION")
+
+        return CategoryScore("SMART_MONEY", int(np.clip(score, -100, 100)), 
                             self.WEIGHTS['smart_money'], signals)
-    
+
     def _calculate_sentiment_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
-        """Calculate sentiment score"""
+        """Calculate sentiment & Volatility Contraction Pattern (VCP) score"""
         signals = []
-        score = 0
+        score = 0.0
         
         async_score, async_signals = self._run_analyzers_async('sentiment', df, symbol=symbol, **kwargs)
-        score += async_score
+        score += float(async_score)
         signals.extend(async_signals)
         
-        # Use volatility as fear proxy
-        returns = df['Close'].pct_change()
-        vol = returns.tail(10).std() * np.sqrt(252) * 100
-        
-        if vol > 40:
-            score += 20  # High fear = contrarian buy
-            signals.append("FEAR_OPPORTUNITY")
-        elif vol < 15:
-            score -= 10  # Low vol = complacency
-            signals.append("COMPLACENCY")
-        
-        return CategoryScore("SENTIMENT", max(-100, min(100, score)), 
+        # Volatility Contraction Pattern (VCP) Detection:
+        # Minervini VCP: Volatility drying up in a base before breakout is BULLISH (+20)
+        # Wild erratic volatility without trend is BEARISH (-20)
+        returns = df['Close'].pct_change().dropna()
+        if len(returns) >= 60:
+            vol_10d = float(returns.tail(10).std() * np.sqrt(252) * 100.0)
+            vol_60d = float(returns.tail(60).std() * np.sqrt(252) * 100.0)
+            vol_ratio = (vol_10d / vol_60d) if vol_60d > 0 else 1.0
+
+            if vol_ratio < 0.65:
+                # Volatility contracting into tight base
+                score += 20.0
+                signals.append(f"VCP_VOLATILITY_CONTRACTION (변동성 축소: {vol_ratio:.2f}x)")
+            elif vol_ratio > 1.8 and returns.tail(5).mean() < 0:
+                # Volatility expanding on down days (Panic / High risk)
+                score -= 20.0
+                signals.append(f"VOLATILITY_EXPANSION_RISK (변동성 폭발: {vol_ratio:.2f}x)")
+
+        return CategoryScore("SENTIMENT", int(np.clip(score, -100, 100)), 
                             self.WEIGHTS['sentiment'], signals)
     
     def _calculate_risk_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:
