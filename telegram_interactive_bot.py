@@ -651,7 +651,11 @@ class TelegramInteractiveBot:
                 self._send_reply("📭 현재 보유 포지션이 없습니다. (100% 현금 대기 중)")
                 return
 
-            name_map = {"MDT": "메드트로닉", "STRC": "사라토가", "VTOL": "브리스토우", "MRK": "머크"}
+            name_map = {
+                "ADP": "ADP", "CART": "인스타카트", "LYFT": "리프트",
+                "MDT": "메드트로닉", "STRC": "사라토가", "VTOL": "브리스토우", "MRK": "머크",
+                "NVDA": "엔비디아", "PLTR": "팔란티어", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트"
+            }
             lines = [
                 f"💼 <b>[실계좌 보유 포지션 브리핑]</b>",
                 f"<i>총 {len(positions)}개 종목 실시간 수익률 & 퀀트 익절/손절선</i>",

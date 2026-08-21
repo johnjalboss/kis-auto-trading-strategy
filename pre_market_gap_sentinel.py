@@ -196,9 +196,9 @@ class PreMarketGapSentinel:
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
         if not is_weekend:
-            lines.append("💡 <i>23:30 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
+            lines.append("💡 <i>22:30 KST (09:30 EDT) 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
         else:
-            lines.append("💡 <i>월요일 밤 23:30 정규장 개장 시 실시간 자동 매매가 재개됩니다.</i>")
+            lines.append("💡 <i>월요일 밤 22:30 KST 정규장 개장 시 실시간 자동 매매가 재개됩니다.</i>")
 
         return "\n".join(lines)
 
