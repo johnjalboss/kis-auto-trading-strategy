@@ -444,8 +444,27 @@ class ThemeRadarDaemon:
             if not tg_token or not tg_chat_id:
                 return
 
-            if not hasattr(self, "alert_history"):
-                self.alert_history = {}
+            # 1. 🛑 Market Hours Check: Never send alerts when the market is CLOSED (Weekends / Off-hours)
+            m_state = get_market_state()
+            if m_state == "CLOSED":
+                logger.debug("Market is CLOSED. Skipping real-time theme alerts.")
+                return
+
+            # 2. SQLite Persisted 24-Hour Alert Cooldown
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS theme_alerts_history (
+                        theme_id TEXT PRIMARY KEY,
+                        sent_at REAL,
+                        quality INTEGER,
+                        rvol REAL
+                    )
+                """)
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
 
             now_ts = time.time()
             new_true = set()
@@ -455,24 +474,45 @@ class ThemeRadarDaemon:
             true_candidates = [r for r in current_results if r.get("signal_type") == "TRUE_SIGNAL"]
             true_candidates.sort(key=lambda x: x.get("quality", 0), reverse=True)
 
+            # Record all current true themes
             for r in true_candidates:
+                new_true.add(r.get("theme_id"))
+
+            prev_true = getattr(self, "prev_true_themes", set())
+
+            # 3. Only evaluate Elite TOP 3 Themes (Quality >= 90, RVOL >= 1.5x, Breadth >= 70%)
+            for rank_idx, r in enumerate(true_candidates[:3], 1):
                 tid = r.get("theme_id")
-                new_true.add(tid)
                 quality = r.get("quality", 0)
                 rvol = r.get("med_rvol", 1.0)
                 breadth = r.get("breadth_1d", 0.0)
 
-                # Strict Alert Hurdle: Quality >= 80, RVOL >= 1.4x, Breadth >= 60%
-                if quality < 80 or rvol < 1.4 or breadth < 60.0:
+                # Ultra-Elite Hurdle: Quality >= 90, RVOL >= 1.5x, Breadth >= 70%
+                if quality < 90 or rvol < 1.50 or breadth < 70.0:
                     continue
 
-                # 6-Hour Cooldown per theme to prevent alert spamming
-                last_sent = self.alert_history.get(tid, 0)
-                if now_ts - last_sent < 6 * 3600:
+                # State Transition: Only alert on NEW breakout (NOISE/WATCH -> TRUE_SIGNAL)
+                # OR if 24 hours have passed since last alert
+                last_sent = 0
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    row = conn.execute("SELECT sent_at FROM theme_alerts_history WHERE theme_id = ?", (tid,)).fetchone()
+                    if row:
+                        last_sent = float(row[0])
+                    conn.close()
+                except Exception:
+                    last_sent = 0
+
+                # 24-Hour Cooldown per theme
+                if now_ts - last_sent < 24 * 3600:
                     continue
 
-                # Max 2 alerts per cycle
-                if alerts_sent_this_cycle >= 2:
+                # Must be a newly emerged breakout OR top 1 rank
+                if tid in prev_true and rank_idx > 1 and (now_ts - last_sent < 24 * 3600):
+                    continue
+
+                # Max 1 alert per cycle to prevent clutter
+                if alerts_sent_this_cycle >= 1:
                     break
 
                 name_ko = r.get("name_ko", tid)
@@ -490,19 +530,19 @@ class ThemeRadarDaemon:
                     pass
 
                 msg_lines = [
-                    "🚨 <b>[주도 테마 기관 수급 폭발 포착 (상위 1%)]</b>",
+                    "🚨 <b>[주도 테마 기관 수급 폭발 포착 (TOP 1% 초정예)]</b>",
                     "━━━━━━━━━━━━━━━━━━━",
-                    f"📡 <b>테마:</b> <code>[{name_ko}]</code>",
-                    f"⭐️ <b>신호:</b> 🟢 <b>TRUE_SIGNAL</b> (품질 점수: <b>{quality}점</b>)",
+                    f"📡 <b>주도 테마 (랭킹 {rank_idx}위):</b> <code>[{name_ko}]</code>",
+                    f"⭐️ <b>신호:</b> 🟢 <b>TRUE_SIGNAL</b> (퀀트 품질: <b>{quality}점</b>)",
                     f"⚡️ <b>기관 수급:</b> RVOL <b>{rvol:.2f}x</b> | 브레드스 <b>{breadth:.1f}%</b> | 5D {ret_5d:+0.1f}%\n",
-                    "🏆 <b>[실시간 추천 1픽 주도주]</b>"
+                    "🏆 <b>[실시간 퀀트 1픽 주도주]</b>"
                 ]
                 if rec_lines:
                     msg_lines.extend(rec_lines)
                 else:
                     msg_lines.append("  • <i>종목 산출 중</i>")
                 msg_lines.append("━━━━━━━━━━━━━━━━━━━")
-                msg_lines.append("💡 <i>수급 폭발로 자동매매 봇의 1순위 매수 풀에 즉시 편입되었습니다.</i>")
+                msg_lines.append("💡 <i>초정예 수급 폭발로 자동매매 봇의 1순위 매수 풀에 즉시 편입되었습니다.</i>")
 
                 card_text = "\n".join(msg_lines)
                 import requests
@@ -511,9 +551,19 @@ class ThemeRadarDaemon:
                     json={"chat_id": tg_chat_id, "text": card_text, "parse_mode": "HTML"},
                     timeout=5
                 )
-                self.alert_history[tid] = now_ts
+
+                # Save to SQLite history
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("INSERT OR REPLACE INTO theme_alerts_history (theme_id, sent_at, quality, rvol) VALUES (?, ?, ?, ?)",
+                                 (tid, now_ts, quality, rvol))
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
                 alerts_sent_this_cycle += 1
-                logger.info("Sent Golden Cross Telegram alert for theme: {} (Quality: {})", name_ko, quality)
+                logger.info("Sent Elite Golden Cross Telegram alert for theme: {} (Quality: {}, Rank: {})", name_ko, quality, rank_idx)
 
             self.prev_true_themes = new_true
         except Exception as e:
