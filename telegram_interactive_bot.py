@@ -1178,35 +1178,19 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 섀도우 모의매매 조회 중 오류: {e}")
 
     def _handle_stock_charts_menu(self):
-        """보유 종목별 원클릭 차트 선택 메뉴 표출"""
+        """보유 종목별 실시간 고해상도 캔들 차트 즉시 렌더링 및 발송"""
         try:
             positions = self._get_positions_dict()
             if not positions:
                 self._send_reply("ℹ️ 현재 보유 중인 종목이 없습니다. (100% 현금 대기 중)")
                 return
 
-            buttons = []
-            row = []
+            self._send_reply(f"📊 보유 중인 <b>{len(positions)}개 종목</b>의 실시간 캔들 차트(볼린저 밴드, 20일선, 매수가 표시)를 즉시 생성하여 발송합니다...")
             for sym in positions.keys():
-                row.append({"text": f"📊 {sym} 캔들 차트", "callback_data": f"cmd_chart_sym_{sym}"})
-                if len(row) == 2:
-                    buttons.append(row)
-                    row = []
-            if row:
-                buttons.append(row)
-
-            buttons.append([{"text": "🔙 메인 제어판으로 돌아가기", "callback_data": "cmd_main_menu"}])
-
-            menu_text = (
-                f"📊 <b>보유 종목 실시간 차트 선택</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "차트를 확인하고 싶으신 종목의 버튼을 원클릭하시면\n"
-                "볼륨 프로파일 매물대와 20일선 황금 맥점이 그려진 캔들 차트가 즉시 렌더링됩니다."
-            )
-            self._send_reply(menu_text, reply_markup={"inline_keyboard": buttons})
+                self._handle_single_stock_chart(sym)
         except Exception as e:
-            logger.error("Failed stock charts menu: {}", e)
-            self._send_reply(f"⚠️ 차트 메뉴 생성 중 오류: {e}")
+            logger.error("Failed stock charts generation: {}", e)
+            self._send_reply(f"⚠️ 차트 생성 중 오류: {e}")
 
     def _handle_single_stock_chart(self, symbol: str):
         """개별 종목 고해상도 캔들 차트 발송"""
