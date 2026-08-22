@@ -1194,22 +1194,23 @@ class TelegramInteractiveBot:
                 return
 
             self._send_reply(f"📊 보유 중인 <b>{len(positions)}개 종목</b>의 실시간 캔들 차트(볼린저 밴드, 20일선, 매수가 표시)를 즉시 생성하여 발송합니다...")
-            for sym in positions.keys():
-                self._handle_single_stock_chart(sym)
+            for sym, pos in positions.items():
+                entry_p = getattr(pos, 'avg_price', getattr(pos, 'entry_price', None))
+                self._handle_single_stock_chart(sym, entry_price=entry_p)
         except Exception as e:
             logger.error("Failed stock charts generation: {}", e)
             self._send_reply(f"⚠️ 차트 생성 중 오류: {e}")
 
-    def _handle_single_stock_chart(self, symbol: str):
+    def _handle_single_stock_chart(self, symbol: str, entry_price: float = None):
         """개별 종목 고해상도 캔들 차트 발송"""
         try:
             from chart_generator import generate_stock_technical_chart
-            positions = self._get_positions_dict()
-            entry_p = None
-            if symbol in positions:
-                entry_p = getattr(positions[symbol], 'avg_price', getattr(positions[symbol], 'entry_price', None))
+            if entry_price is None:
+                positions = self._get_positions_dict()
+                if symbol in positions:
+                    entry_price = getattr(positions[symbol], 'avg_price', getattr(positions[symbol], 'entry_price', None))
 
-            chart_path, caption = generate_stock_technical_chart(symbol, days=40, entry_price=entry_p)
+            chart_path, caption = generate_stock_technical_chart(symbol, days=40, entry_price=entry_price)
             if chart_path and os.path.exists(chart_path):
                 self._send_photo(chart_path, caption)
             else:
