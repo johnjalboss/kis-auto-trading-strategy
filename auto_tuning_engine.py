@@ -39,9 +39,23 @@ def load_autotune_overrides():
 class AutoTuningEngine:
     """Institutional-Grade Self-Optimizing Quant Parameter Tuner"""
     
-    def __init__(self, db_path: str = "trades.db"):
-        self.db_path = db_path if os.path.exists(db_path) else "/home/ubuntu/kis-auto-trading/trades.db"
-        self.config_override_file = CONFIG_OVERRIDE_FILE
+    def __init__(self, db_path: str = None):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        if db_path and os.path.exists(db_path):
+            self.db_path = db_path
+        else:
+            cand1 = os.path.join(base_dir, "trades.db")
+            cand2 = "/home/ubuntu/kis-auto-trading/trades.db"
+            cand3 = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\trades.db"
+            if os.path.exists(cand1):
+                self.db_path = cand1
+            elif os.path.exists(cand2):
+                self.db_path = cand2
+            elif os.path.exists(cand3):
+                self.db_path = cand3
+            else:
+                self.db_path = cand1
+        self.config_override_file = os.path.join(base_dir, "autotune_config.json")
         
     def _get_db_connection(self):
         if os.path.exists(self.db_path):

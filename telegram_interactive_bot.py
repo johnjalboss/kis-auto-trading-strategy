@@ -731,6 +731,7 @@ class TelegramInteractiveBot:
             from datetime import timedelta, datetime, date
             db = get_database()
             now = datetime.now()
+            day1_date = date(2026, 8, 14)
             if period == "today":
                 start_d = now.date()
                 end_d = now.date()
@@ -738,70 +739,77 @@ class TelegramInteractiveBot:
                 empty_msg = "📭 오늘은 아직 청산(SELL) 완료된 매매가 없습니다."
             elif period == "weekly":
                 end_d = now.date()
-                start_d = end_d - timedelta(days=7)
+                start_d = max(day1_date, end_d - timedelta(days=7))
                 title = "📅 <b>최근 7일 누적 매매 성과</b>"
                 empty_msg = "📭 최근 7일간 청산(SELL) 완료된 매매가 없습니다."
             elif period == "monthly":
                 end_d = now.date()
-                start_d = end_d - timedelta(days=30)
-                title = "📅 <b>최근 30일(월간) 누적 매매 성과</b>"
-                empty_msg = "📭 최근 30일간 청산(SELL) 완료된 매매가 없습니다."
+                start_d = max(day1_date, end_d - timedelta(days=30))
+                title = "📅 <b>최근 30일(월간) 누적 매매 성과 (Day 1: 2026-08-14 기준)</b>"
+                empty_msg = "📭 8월 14일 이후 최근 30일간 청산(SELL) 완료된 매매가 없습니다."
             else:  # total - strictly starting 2026-08-14 Day 1
-                start_d = date(2026, 8, 14)
+                start_d = day1_date
                 end_d = date(2030, 12, 31)
                 title = "🏆 <b>AI 스윙 봇 전체 누적 매매 성과 (Day 1: 2026-08-14 기준)</b>"
                 empty_msg = "📭 8월 14일 이후 아직 전체 누적 매매 청산 기록이 없습니다."
+
             trades = db.get_trades_range(start_d, end_d)
             sells = [t for t in (trades or []) if t.side == "SELL"]
-            if not sells:
-                unrealized_pnl = 0.0
-                try:
-                    from trader import Trader
-                    t_obj = Trader()
-                    open_pos = t_obj.get_positions()
-                    for p in open_pos:
-                        qty = getattr(p, 'quantity', 0)
-                        avg_p = getattr(p, 'avg_price', 0)
-                        curr_p = getattr(p, 'current_price', avg_p)
-                        if qty > 0 and avg_p > 0 and curr_p > 0:
-                            unrealized_pnl += (curr_p - avg_p) * qty
-                except Exception:
-                    unrealized_pnl = 0.0
 
-                base_cap = 766.49
+            # Calculate open positions unrealized PnL & account equity
+            unrealized_pnl = 0.0
+            positions = self._get_positions_dict()
+            for sym, pos in positions.items():
+                entry_p = float(getattr(pos, 'entry_price', getattr(pos, 'avg_price', 0.0)))
+                qty = float(getattr(pos, 'quantity', 0.0))
+                curr_p, _, _ = self._fetch_live_ticker_price(sym, entry_p)
+                if qty > 0 and entry_p > 0 and curr_p > 0:
+                    unrealized_pnl += (curr_p - entry_p) * qty
+
+            base_cap = 766.49
+            bp = self._get_buying_power()
+            total_eq = bp + sum(self._fetch_live_ticker_price(s, float(getattr(p, 'entry_price', 0)))[0] * float(getattr(p, 'quantity', 0)) for s, p in positions.items())
+            if total_eq <= 0:
                 total_eq = base_cap + unrealized_pnl
+
+            if not sells:
                 unreal_pct = (unrealized_pnl / base_cap) * 100.0 if base_cap > 0 else 0.0
                 lines = [
                     title,
                     "━" * 18,
-                    "📅 <b>출발 상태</b>: 2026-08-14 Day 1 베이스라인 적용",
-                    "• <b>총 청산 거래</b>: 0건",
-                    "• <b>청산 실현 손익</b>: $0.00 USD",
+                    f"• {empty_msg}",
                     f"• <b>보유 포지션 미실현 손익</b>: <b>{'+' if unrealized_pnl>=0 else ''}${unrealized_pnl:,.2f} ({unreal_pct:+.2f}%)</b>",
-                    f"• <b>계좌 총자산</b>: <b>${total_eq:,.2f} USD</b>"
+                    f"• <b>계좌 총 평가 자산</b>: <b>${total_eq:,.2f} USD</b>"
                 ]
                 self._send_reply("\n".join(lines))
                 return
+
             total_pnl = sum(t.pnl for t in sells)
             wins = sum(1 for t in sells if t.pnl > 0)
             losses = len(sells) - wins
             wr = (wins / len(sells) * 100) if sells else 0.0
+            realized_pct = (total_pnl / base_cap) * 100.0 if base_cap > 0 else 0.0
+
             lines = [
                 title,
                 "━" * 18,
                 f"• 🎯 <b>매매 전적</b>: <b>{len(sells)}전 {wins}승 {losses}패</b> (승률 <b>{wr:.1f}%</b>)",
-                f"• 💰 <b>누적 실현 순손익</b>: <b>{'+' if total_pnl >= 0 else ''}${total_pnl:,.2f} USD</b>",
+                f"• 💰 <b>누적 실현 손익</b>: <b>{'+' if total_pnl >= 0 else ''}${total_pnl:,.2f} USD ({realized_pct:+.2f}%)</b>",
+                f"• 📈 <b>보유 포지션 미실현 손익</b>: <b>{'+' if unrealized_pnl >= 0 else ''}${unrealized_pnl:,.2f}</b>",
+                f"• 🏦 <b>계좌 총 평가 자산</b>: <b>${total_eq:,.2f} USD</b>",
                 "━" * 18,
-                "<b>[세부 청산 기록]</b>"
+                "<b>[세부 청산 기록 (최근순)]</b>"
             ]
-            for t in sells[:10]:
+            for t in reversed(sells[-10:]):
                 pnl_sign = "+" if t.pnl >= 0 else ""
                 emoji = "🟢" if t.pnl >= 0 else "🔴"
                 pct_str = f" ({pnl_sign}{t.pnl_pct*100:.1f}%)" if abs(t.pnl_pct) <= 1.0 else f" ({pnl_sign}{t.pnl_pct:.1f}%)"
                 date_str = str(t.exit_time)[:10] if t.exit_time else ""
-                lines.append(f"{emoji} <b>{t.symbol}</b> ({date_str}): <b>{pnl_sign}${t.pnl:,.2f}</b>{pct_str} | {t.reason[:25]}")
+                reason_clean = (t.reason or "EXIT").replace("TELEGRAM_", "").replace("_", " ")[:20]
+                lines.append(f"{emoji} <b>{t.symbol}</b> ({date_str}): <b>{pnl_sign}${t.pnl:,.2f}</b>{pct_str} | {reason_clean}")
             self._send_reply("\n".join(lines))
         except Exception as e:
+            logger.error("Failed PnL lookup: {}", e)
             self._send_reply(f"⚠️ 손익 조회 실패: {e}")
 
     def _handle_quant_status(self):
