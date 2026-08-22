@@ -2141,6 +2141,7 @@ class BotOrchestrator:
                 logger.debug("DailyQuantReportCard error: {}", _dqr_err)
 
             # [AUTO EXECUTIVE AI REPORT: Friday after market close (>= 16:00 EST) or Saturday delivery]
+            # [AUTO EXECUTIVE AI REPORT: Friday after market close (>= 16:00 EST) or Saturday delivery]
             from scheduler import TradingScheduler
             _sch = TradingScheduler()
             _est_now = _sch.now_est()
@@ -2148,10 +2149,8 @@ class BotOrchestrator:
             if is_post_friday:
                 try:
                     from weekly_ai_report_generator import WeeklyAIReportGenerator
-                    from notification import get_notifier
-                    rep_html = WeeklyAIReportGenerator().generate_report()
-                    get_notifier().send_message(rep_html)
-                    logger.info("📜 [AUTO_WEEKLY_AI_REPORT] Automatically sent weekly AI investor letter to Telegram.")
+                    WeeklyAIReportGenerator().send_weekly_report()
+                    logger.info("📜 [AUTO_WEEKLY_AI_REPORT] Automatically processed weekly AI investor letter for Telegram.")
                 except Exception as _war_err:
                     logger.debug("Auto weekly report error: {}", _war_err)
 

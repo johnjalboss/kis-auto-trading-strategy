@@ -18,8 +18,14 @@ from loguru import logger
 class DailySettlementReporter:
     """Generates daily settlement reports and Korean capital gains tax export files"""
 
-    def __init__(self, db_path: str = "trades.db", usd_krw_rate: Optional[float] = None):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: Optional[str] = None, usd_krw_rate: Optional[float] = None):
+        if not db_path:
+            script_dir = Path(__file__).resolve().parent
+            cand = script_dir / "trades.db"
+            self.db_path = cand if cand.exists() else Path("trades.db")
+        else:
+            self.db_path = Path(db_path)
+
         if usd_krw_rate and usd_krw_rate > 0:
             self.fx_rate = usd_krw_rate
         else:
@@ -58,19 +64,31 @@ class DailySettlementReporter:
         if not self.db_path.exists():
             return res
 
+        # Dynamic US Eastern offset (-13h in EDT, -14h in EST)
+        offset_hours = 13
+        try:
+            import pytz
+            now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+            now_et = datetime.now(pytz.timezone('US/Eastern'))
+            diff_sec = (now_kst.replace(tzinfo=None) - now_et.replace(tzinfo=None)).total_seconds()
+            offset_hours = int(round(diff_sec / 3600.0))
+        except Exception:
+            offset_hours = 13
+        offset_modifier = f"-{offset_hours} hours"
+
         try:
             conn = sqlite3.connect(str(self.db_path))
             cur = conn.cursor()
             cur.execute("""
                 SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, created_at
                 FROM trade_details
-                WHERE side = 'SELL' AND (date(created_at) = ? OR date(created_at, '-14 hours') = ?)
+                WHERE side = 'SELL' AND date(created_at, ?) = ?
                 UNION ALL
                 SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, created_at
                 FROM trades
-                WHERE side = 'SELL' AND (date(created_at) = ? OR date(created_at, '-14 hours') = ?)
+                WHERE side = 'SELL' AND date(created_at, ?) = ?
                 ORDER BY created_at ASC
-            """, (today_str, today_str, today_str, today_str))
+            """, (offset_modifier, today_str, offset_modifier, today_str))
             rows = cur.fetchall()
             conn.close()
 

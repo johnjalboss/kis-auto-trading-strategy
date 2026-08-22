@@ -18,18 +18,34 @@ class WeeklyAIReportGenerator:
     """Generates weekly executive quant reports using trades.db and Gemini AI."""
 
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or getattr(config, 'DB_PATH', 'trades.db')
+        if not db_path:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            cand = os.path.join(script_dir, "trades.db")
+            self.db_path = cand if os.path.exists(cand) else "/home/ubuntu/kis-auto-trading/trades.db"
+        else:
+            self.db_path = db_path
         self.api_key = getattr(config, 'GEMINI_API_KEY', '')
 
     def _get_weekly_trade_stats(self) -> Dict[str, Any]:
         """Queries the SQLite database for trades closed in the past 7 days."""
         import pytz
         now_est = datetime.now(pytz.timezone('US/Eastern'))
+        today_us = now_est.strftime("%Y-%m-%d")
         start_date = (now_est - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
+
+        # Dynamic US Eastern offset (-13h in EDT, -14h in EST)
+        offset_hours = 13
+        try:
+            now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+            diff_sec = (now_kst.replace(tzinfo=None) - now_est.replace(tzinfo=None)).total_seconds()
+            offset_hours = int(round(diff_sec / 3600.0))
+        except Exception:
+            offset_hours = 13
+        offset_modifier = f"-{offset_hours} hours"
 
         stats = {
             "start_date": start_date[:10],
-            "end_date": now_est.strftime("%Y-%m-%d"),
+            "end_date": today_us,
             "total_trades": 0,
             "wins": 0,
             "losses": 0,
@@ -58,14 +74,14 @@ class WeeklyAIReportGenerator:
                 FROM (
                     SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason, diagnostic_notes, created_at
                     FROM trade_details
-                    WHERE side = 'SELL' AND date(created_at) >= date('now', '-7 days')
+                    WHERE side = 'SELL' AND date(created_at, ?) >= date(?, '-7 days')
                     UNION ALL
                     SELECT symbol, side, price, quantity, pnl, pnl_pct, reason as setup_reason, reason as diagnostic_notes, created_at
                     FROM trades
-                    WHERE side = 'SELL' AND date(created_at) >= date('now', '-7 days')
+                    WHERE side = 'SELL' AND date(created_at, ?) >= date(?, '-7 days')
                 )
                 ORDER BY created_at DESC
-            """)
+            """, (offset_modifier, today_us, offset_modifier, today_us))
             rows = cursor.fetchall()
 
             gains = 0.0
@@ -213,6 +229,14 @@ class WeeklyAIReportGenerator:
             worst_str = "해당 없음 (손절 0건)"
         
         name_map = {
+            "ADP": "자동 데이터 프로세싱",
+            "CART": "인스타카트",
+            "LYFT": "리프트",
+            "NVDA": "엔비디아",
+            "PLTR": "팔란티어",
+            "TSLA": "테슬라",
+            "AAPL": "애플",
+            "MSFT": "마이크로소프트",
             "MDT": "메드트로닉",
             "STRC": "사라토가",
             "VTOL": "브리스토우",
@@ -242,6 +266,7 @@ class WeeklyAIReportGenerator:
 
         # 2. Try Gemini AI commentary
         ai_commentary = ""
+        pnl_sign = "+" if stats["gross_pnl"] >= 0 else ""
         if self.api_key:
             try:
                 import google.generativeai as genai
@@ -308,9 +333,21 @@ class WeeklyAIReportGenerator:
         )
         return report_html
 
-    def send_weekly_report(self) -> bool:
-        """Generates and sends the weekly AI report directly to Telegram."""
+    def send_weekly_report(self, force: bool = False) -> bool:
+        """Generates and sends the weekly AI report directly to Telegram (with duplicate suppression)."""
         try:
+            import pytz
+            now_est = datetime.now(pytz.timezone('US/Eastern')).date()
+            if not force:
+                try:
+                    from database import Database
+                    db = Database(self.db_path)
+                    if not db.claim_report_sending_lock("WEEKLY_AI_REPORT", now_est):
+                        logger.info("Weekly AI report already sent for week ending {}. Skipping duplicate.", now_est)
+                        return True
+                except Exception as le:
+                    logger.debug("Weekly report lock check skipped: {}", le)
+
             report_text = self.generate_report()
             token = getattr(config, 'TELEGRAM_BOT_TOKEN', '')
             chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')

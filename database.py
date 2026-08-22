@@ -263,8 +263,19 @@ class TradeDatabase:
         return self.get_trades_range(date.fromisoformat(today), date.fromisoformat(today))
     
     def get_trades_range(self, start: date, end: date) -> List[TradeRecord]:
-        """Get trades in date range from both trade_details and trades tables"""
+        """Get trades in date range from both trade_details and trades tables using US Eastern Trading Date offset"""
         trades_list = []
+        offset_hours = 13  # Default EDT
+        try:
+            import pytz
+            now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+            now_et = datetime.now(pytz.timezone('US/Eastern'))
+            diff_sec = (now_kst.replace(tzinfo=None) - now_et.replace(tzinfo=None)).total_seconds()
+            offset_hours = int(round(diff_sec / 3600.0))
+        except Exception:
+            offset_hours = 13
+        offset_modifier = f"-{offset_hours} hours"
+
         with self._get_conn() as conn:
             # 1. Fetch from trade_details (Modern 2026 format)
             try:
@@ -277,10 +288,9 @@ class TradeDatabase:
                            setup_reason as reason, 
                            regime, created_at
                     FROM trade_details
-                    WHERE DATE(created_at, '-14 hours') BETWEEN ? AND ? 
-                       OR DATE(created_at) BETWEEN ? AND ?
+                    WHERE DATE(created_at, ?) BETWEEN ? AND ?
                     ORDER BY created_at ASC
-                """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
+                """, (offset_modifier, start.isoformat(), end.isoformat())).fetchall()
                 for r in td_rows:
                     trades_list.append(self._row_to_trade(r))
             except Exception as td_err:
@@ -290,12 +300,13 @@ class TradeDatabase:
             try:
                 rows = conn.execute("""
                     SELECT * FROM trades 
-                    WHERE (entry_time IS NOT NULL AND DATE(entry_time, '-14 hours') BETWEEN ? AND ?)
-                       OR (exit_time IS NOT NULL AND DATE(exit_time, '-14 hours') BETWEEN ? AND ?)
-                       OR (created_at IS NOT NULL AND DATE(created_at, '-14 hours') BETWEEN ? AND ?)
-                       OR (created_at IS NOT NULL AND DATE(created_at) BETWEEN ? AND ?)
+                    WHERE (exit_time IS NOT NULL AND DATE(exit_time, ?) BETWEEN ? AND ?)
+                       OR (exit_time IS NULL AND entry_time IS NOT NULL AND DATE(entry_time, ?) BETWEEN ? AND ?)
+                       OR (exit_time IS NULL AND entry_time IS NULL AND created_at IS NOT NULL AND DATE(created_at, ?) BETWEEN ? AND ?)
                     ORDER BY created_at ASC
-                """, (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat())).fetchall()
+                """, (offset_modifier, start.isoformat(), end.isoformat(),
+                      offset_modifier, start.isoformat(), end.isoformat(),
+                      offset_modifier, start.isoformat(), end.isoformat())).fetchall()
                 for r in rows:
                     tr_rec = self._row_to_trade(r)
                     # Deduplicate if already present in trade_details
