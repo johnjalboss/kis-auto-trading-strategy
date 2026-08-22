@@ -1015,29 +1015,17 @@ class StrategyEngine:
             logger.debug("Smart money check skipped for {}: {}", symbol, _sm_err)
 
         # ================================
-        # [v4.0 INSTITUTIONAL DATA MODULE 2: INSIDER CLUSTER BUYING] (+25 pts)
+        # [v4.0 INSTITUTIONAL DATA MODULE 2: SEC FORM 4 INSIDER RADAR] (+5 ~ +15 pts max)
         # ================================
         try:
             from sec_form4_insider_radar import SECForm4InsiderRadar
             sec_ins = SECForm4InsiderRadar().analyze_insider_activity(symbol)
-            if sec_ins.get("cluster_detected"):
-                bonus = sec_ins.get("bonus_score", 25)
+            bonus = int(sec_ins.get("strategy_bonus", 0))
+            if bonus > 0:
                 score += bonus
-                logger.info("🔥 [SEC_FORM4_CLUSTER] +{} pts: {} for {}", bonus, sec_ins.get("cluster_type"), symbol)
-            elif sec_ins.get("net_buying_val_usd", 0) > 100000:
-                score += 15
-                logger.info("🔥 [SEC_FORM4_BUY] +15 pts: Whale insider buy ${:,.0f} for {}", sec_ins.get("net_buying_val_usd", 0), symbol)
-            else:
-                from insider_tracker import InsiderInstitutionalTracker
-                _insider_tr = InsiderInstitutionalTracker()
-                insider_sig = _insider_tr.analyze(symbol)
-                if insider_sig and getattr(insider_sig, 'insider_buys_90d', 0) >= 2 and getattr(insider_sig, 'insider_net_value', 0) > 50000:
-                    score += 25
-                    logger.info("🔥 [INSIDER_CLUSTER_BUY] +25 pts: Multiple C-level Executives buying 자사주 for {}", symbol)
-                elif insider_sig and getattr(insider_sig, 'insider_sentiment', 'NEUTRAL') == 'BUYING':
-                    score += 10
+                logger.info("🔥 [SEC_FORM4_INSIDER] +{} pts: {} for {}", bonus, sec_ins.get("cluster_desc", "Insider Buy"), symbol)
         except Exception as _ins_err:
-            logger.debug("Insider tracker check skipped for {}: {}", symbol, _ins_err)
+            logger.debug("SEC Form 4 insider check skipped for {}: {}", symbol, _ins_err)
 
         # ================================
         # [v4.0 INSTITUTIONAL DATA MODULE 3: OPTIONS GEX & MAX PAIN] (+20 / -20 pts)

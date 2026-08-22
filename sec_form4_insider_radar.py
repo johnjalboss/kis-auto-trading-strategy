@@ -39,7 +39,7 @@ class SECForm4InsiderRadar:
             try:
                 with open(cpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if time.time() - data.get("timestamp", 0) < self.cache_ttl:
+                if time.time() - data.get("timestamp", 0) < self.cache_ttl and "whale_threshold" in data:
                     return data
             except Exception as e:
                 logger.debug("Failed loading insider cache for {}: {}", symbol, e)
@@ -133,22 +133,69 @@ class SECForm4InsiderRadar:
             except Exception as e:
                 logger.debug("Yahoo insider lookup failed for {}: {}", symbol, e)
 
+        # ── Market-Cap Tiered Dynamic Whale Threshold ──
+        market_cap = 10_000_000_000
+        try:
+            fast = getattr(t, 'fast_info', {})
+            market_cap = float(fast.get("market_cap", 0.0) or 0.0)
+            if market_cap <= 0:
+                market_cap = 10_000_000_000
+        except Exception:
+            market_cap = 10_000_000_000
+
+        if market_cap < 2_000_000_000:       # Small-cap (< $2B)
+            whale_threshold = 50_000.0       # $50K USD
+            cap_tier_name = "소형주(<$2B)"
+        elif market_cap < 20_000_000_000:    # Mid-cap ($2B ~ $20B)
+            whale_threshold = 100_000.0      # $100K USD
+            cap_tier_name = "중형주($2B~$20B)"
+        elif market_cap < 100_000_000_000:   # Large-cap ($20B ~ $100B)
+            whale_threshold = 250_000.0      # $250K USD
+            cap_tier_name = "대형주($20B~$100B)"
+        else:                                # Mega-cap (> $100B)
+            whale_threshold = 500_000.0      # $500K USD
+            cap_tier_name = "초대형주(>$100B)"
+
         distinct_buyers = set(p["name"] for p in purchases)
         cluster_count = len(distinct_buyers)
         is_cluster = cluster_count >= 2
-        is_whale = total_bought_val >= 100000.0 or any(p["value_usd"] >= 100000.0 for p in purchases)
-        has_csuite = len(c_suite_buyers) > 0
+        is_whale = total_bought_val >= whale_threshold or any(p["value_usd"] >= whale_threshold for p in purchases)
+        
+        c_suite_roles = ["CEO", "CHIEF EXECUTIVE", "CFO", "CHIEF FINANCIAL", "CHAIRMAN", "PRESIDENT"]
+        has_csuite = any(any(csr in p.get("role", "").upper() for csr in c_suite_roles) for p in purchases)
 
-        # Calculate Insider Score (0 ~ 100)
-        score = 0
-        if is_cluster: score += 40
-        if is_whale: score += 30
-        if has_csuite: score += 30
-        if purchases and score == 0: score = 20
+        # ── Mathematical Quant Alpha Bonus (0 ~ 15 pts max for strategy.py) ──
+        strategy_bonus = 0
+        if is_cluster and has_csuite:
+            strategy_bonus = 15
+            cluster_desc = f"C-Suite 클러스터 매집 (CEO/CFO 포함 2인 이상, +15pt)"
+        elif is_whale and has_csuite:
+            strategy_bonus = 12
+            cluster_desc = f"C-Suite 고래 사비 매수 (${total_bought_val/1e3:,.0f}K >= 기준 ${whale_threshold/1e3:,.0f}K, +12pt)"
+        elif is_cluster:
+            strategy_bonus = 10
+            cluster_desc = f"임원/이사진 클러스터 매집 (2인 이상, +10pt)"
+        elif is_whale:
+            strategy_bonus = 8
+            cluster_desc = f"고래 사비 매수 (${total_bought_val/1e3:,.0f}K >= 기준 ${whale_threshold/1e3:,.0f}K, +8pt)"
+        elif purchases:
+            strategy_bonus = 5
+            cluster_desc = f"일반 장내 매수 (${total_bought_val/1e3:,.0f}K, +5pt)"
+        else:
+            strategy_bonus = 0
+            cluster_desc = "최근 90일 장내 순매수 없음"
+
+        # General Conviction Score (0 ~ 100)
+        conviction_score = min(100, strategy_bonus * 6 + (20 if purchases else 0))
 
         result = {
             "symbol": symbol,
-            "insider_score": score,
+            "market_cap": market_cap,
+            "cap_tier_name": cap_tier_name,
+            "whale_threshold": whale_threshold,
+            "strategy_bonus": strategy_bonus,
+            "cluster_desc": cluster_desc,
+            "insider_score": conviction_score,
             "purchase_count": len(purchases),
             "distinct_insider_count": cluster_count,
             "total_bought_usd": round(total_bought_val, 2),
@@ -164,7 +211,6 @@ class SECForm4InsiderRadar:
 
     def format_telegram_card(self, symbols: Any = None) -> str:
         """Formats the Comprehensive Multi-Ticker Insider Conviction card for Telegram"""
-        # If symbols is a single string or None, normalize to list
         if isinstance(symbols, str):
             sym_list = [symbols]
         elif isinstance(symbols, list):
@@ -185,10 +231,10 @@ class SECForm4InsiderRadar:
             sym_list = ["ADP", "CART", "LYFT"]
 
         lines = [
-            "👥 <b>[SEC Form 4 내부자 순매수 클러스터 레이더]</b>",
-            "<i>Wall Street Executive Open-Market Purchase Sentinel</i>",
+            "👥 <b>[SEC Form 4 내부자 순매수 퀀트 레이더]</b>",
+            "<i>Market-Cap Tiered Institutional Insider Alpha</i>",
             "━━━━━━━━━━━━━━━━━━━",
-            "💡 <i>CEO/CFO 등 C-Suite 임원의 사비 장내 매수(Code P)를 실시간 추적합니다.</i>",
+            "💡 <i>CEO/CFO 등 핵심 임원의 사비 장내 매수(Code P)를 시가총액별 동적 가중치로 평가합니다.</i>",
             ""
         ]
 
@@ -196,14 +242,18 @@ class SECForm4InsiderRadar:
         for s in sym_list:
             data = self.analyze_insider_activity(s)
             score = data['insider_score']
-            if data["is_cluster_buying"]:
-                status = "🟢 <b>클러스터 사비 매집 포착 (+25pt)</b>"
-            elif data["purchase_count"] > 0:
-                status = f"🟡 <b>장내 매수 ({data['purchase_count']}건 / ${data['total_bought_usd']:,.0f})</b>"
-            else:
-                status = "⚪ <i>최근 90일 장내 순매수 없음 (안정적 보유)</i>"
+            bonus = data['strategy_bonus']
+            tier_name = data.get('cap_tier_name', '중형주')
+            thresh_k = data.get('whale_threshold', 100000.0) / 1000.0
 
-            lines.append(f"• <b>{s}</b> (신뢰도: <b>{score}점</b>)\n  └ {status}")
+            if bonus >= 10:
+                status = f"🟢 <b>{data['cluster_desc']}</b>"
+            elif bonus > 0:
+                status = f"🟡 <b>{data['cluster_desc']}</b>"
+            else:
+                status = f"⚪ <i>최근 90일 장내 순매수 없음 (안정적 보유)</i>"
+
+            lines.append(f"• <b>{s}</b> [{tier_name} | 고래기준: ${thresh_k:.0f}K] (가산점: <b>+{bonus}pt</b>)\n  └ {status}")
             if data["recent_purchases"]:
                 for p in data["recent_purchases"][:2]:
                     lines.append(f"     • {p['name']} ({p['role']}): {p['shares']:,.0f}주 (${p['value_usd']:,.0f})")
