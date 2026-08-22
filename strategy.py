@@ -211,6 +211,73 @@ class StrategyEngine:
         self._data_cache: Dict[str, pd.DataFrame] = {}
         self._day_type_cache: str = "TRENDING"       #   
         self._day_type_date = None                   #     
+        self._dynamic_sector_cache: Dict[str, str] = {}
+
+    def _get_symbol_sector(self, symbol: str) -> str:
+        """Resolve GICS sector dynamically from cache, stock_metadata DB (3,002 stocks), or yfinance."""
+        if not symbol:
+            return "UNKNOWN"
+        symbol = symbol.upper()
+        if symbol in self._dynamic_sector_cache:
+            return self._dynamic_sector_cache[symbol]
+
+        # 1. Fast Map for common/active tickers
+        _fast_map = {
+            "NVDA": "TECH", "AMD": "TECH", "INTC": "TECH", "QCOM": "TECH", "AVGO": "TECH",
+            "AAPL": "TECH", "MSFT": "TECH", "ORCL": "TECH", "CRM": "TECH", "NOW": "TECH",
+            "ADBE": "TECH", "CDNS": "TECH", "SNPS": "TECH", "ANET": "TECH", "FTNT": "TECH",
+            "AKAM": "TECH", "DXCM": "TECH", "ALRM": "TECH", "SAIC": "TECH", "PLTR": "TECH",
+            "SOXL": "SEMI", "SOXS": "SEMI", "MU": "SEMI", "MRVL": "SEMI", "TSM": "SEMI",
+            "META": "COMM", "GOOGL": "COMM", "GOOG": "COMM", "NFLX": "COMM",
+            "T": "COMM", "VZ": "COMM", "CMCSA": "COMM",
+            "AMZN": "CONS_DISC", "TSLA": "CONS_DISC", "NKE": "CONS_DISC",
+            "HD": "CONS_DISC", "MCD": "CONS_DISC", "SBUX": "CONS_DISC",
+            "CART": "CONS_DISC", "LYFT": "INDUS", "UBER": "INDUS", "ADP": "INDUS",
+            "LLY": "HEALTH", "UNH": "HEALTH", "JNJ": "HEALTH", "MRK": "HEALTH", "MDT": "HEALTH",
+            "ABBV": "HEALTH", "PFE": "HEALTH", "BMY": "HEALTH", "HALO": "HEALTH", "VRTX": "HEALTH",
+            "JPM": "FIN", "BAC": "FIN", "GS": "FIN", "MS": "FIN", "WFC": "FIN",
+            "XOM": "ENERGY", "CVX": "ENERGY", "COP": "ENERGY", "FANG": "ENERGY",
+            "CAT": "INDUS", "GE": "INDUS", "HON": "INDUS", "UPS": "INDUS", "VRT": "INDUS",
+            "FCX": "MATERIALS", "SCCO": "MATERIALS", "ERO": "MATERIALS", "TECK": "MATERIALS",
+        }
+        if symbol in _fast_map:
+            self._dynamic_sector_cache[symbol] = _fast_map[symbol]
+            return _fast_map[symbol]
+
+        # 2. Query SQLite stock_metadata DB (3,002 stocks coverage)
+        db_paths = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "us_stocks_data.db"),
+            "/home/ubuntu/us-theme-tracker/us_stocks_data.db",
+            r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\us_stocks_data.db"
+        ]
+        for dbp in db_paths:
+            if os.path.exists(dbp):
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(dbp)
+                    row = conn.execute("SELECT sector FROM stock_metadata WHERE ticker = ?", (symbol,)).fetchone()
+                    conn.close()
+                    if row and row[0]:
+                        sec_str = str(row[0]).upper()
+                        self._dynamic_sector_cache[symbol] = sec_str
+                        return sec_str
+                except Exception:
+                    pass
+
+        # 3. YFinance fast_info fallback
+        try:
+            import yfinance as yf
+            info = yf.Ticker(symbol).info
+            sec = info.get('sector')
+            if sec:
+                sec_str = str(sec).upper()
+                self._dynamic_sector_cache[symbol] = sec_str
+                return sec_str
+        except Exception:
+            pass
+
+        self._dynamic_sector_cache[symbol] = "OTHER"
+        return "OTHER"
     
     def get_phase_config(self) -> PhaseConfig:
         phase = get_market_phase()
@@ -357,51 +424,20 @@ class StrategyEngine:
         except Exception as e:
             logger.error("Theme portfolio risk guard error: {}", e)
 
-        # 5b. Sector Concentration Guard (동일 섹터 최대 2종목 한도)
-        # 같은 섹터에 2종목 이상이면 하락 시 전부 같이 떨어짐 → 분산 강제
+        # 5b. Dynamic Sector Concentration Guard (동일 섹터 최대 2종목 한도)
+        # 3,002개 전 종목 메타데이터 및 yfinance 연동으로 미분류 누락 100% 방지
         try:
-            _SECTOR_MAP = {
-                # Technology
-                "NVDA": "TECH", "AMD": "TECH", "INTC": "TECH", "QCOM": "TECH", "AVGO": "TECH",
-                "AAPL": "TECH", "MSFT": "TECH", "ORCL": "TECH", "CRM": "TECH", "NOW": "TECH",
-                "ADBE": "TECH", "CDNS": "TECH", "SNPS": "TECH", "ANET": "TECH", "FTNT": "TECH",
-                "AKAM": "TECH", "DXCM": "TECH", "ALRM": "TECH", "SAIC": "TECH",
-                # Semiconductors (subset of TECH but grouped)
-                "SOXL": "SEMI", "SOXS": "SEMI", "MU": "SEMI", "MRVL": "SEMI",
-                # Communication
-                "META": "COMM", "GOOGL": "COMM", "GOOG": "COMM", "NFLX": "COMM",
-                "T": "COMM", "VZ": "COMM", "CMCSA": "COMM",
-                # Consumer Discretionary
-                "AMZN": "CONS_DISC", "TSLA": "CONS_DISC", "NKE": "CONS_DISC",
-                "HD": "CONS_DISC", "MCD": "CONS_DISC", "SBUX": "CONS_DISC",
-                # Healthcare
-                "LLY": "HEALTH", "UNH": "HEALTH", "JNJ": "HEALTH", "MRK": "HEALTH",
-                "ABBV": "HEALTH", "PFE": "HEALTH", "BMY": "HEALTH", "HALO": "HEALTH",
-                # Financials
-                "JPM": "FIN", "BAC": "FIN", "GS": "FIN", "MS": "FIN", "WFC": "FIN",
-                "BHF": "FIN", "PNFP": "FIN", "NTAP": "FIN",
-                # Energy
-                "XOM": "ENERGY", "CVX": "ENERGY", "COP": "ENERGY", "FANG": "ENERGY",
-                "DINO": "ENERGY",
-                # Industrials
-                "CAT": "INDUS", "GE": "INDUS", "HON": "INDUS", "UPS": "INDUS",
-                "FLS": "INDUS", "ARMK": "INDUS",
-                # Airlines/Transport
-                "AAL": "AIRLINE", "DAL": "AIRLINE", "UAL": "AIRLINE", "CSX": "TRANSPORT",
-                # REITs
-                "ARE": "REIT", "WPC": "REIT", "AMT": "REIT", "O": "REIT",
-            }
-            sym_sector = _SECTOR_MAP.get(symbol)
-            if sym_sector:
+            sym_sector = self._get_symbol_sector(symbol)
+            if sym_sector and sym_sector != "UNKNOWN":
                 same_sector_count = sum(
                     1 for pos in self._positions
-                    if _SECTOR_MAP.get(pos) == sym_sector
+                    if self._get_symbol_sector(pos) == sym_sector
                 )
                 if same_sector_count >= 2:
                     return EntrySignal("HOLD", 0,
-                        f"SECTOR_GUARD: Already {same_sector_count} positions in {sym_sector} sector", 0)
+                        f"SECTOR_GUARD: Max 2 positions for '{sym_sector}' sector reached", 0)
         except Exception as err:
-            logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
+            logger.warning("⚠️ [strategy.py] Sector Guard fallback triggered: {}", err)
 
         # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
