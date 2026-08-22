@@ -439,6 +439,27 @@ class StrategyEngine:
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Sector Guard fallback triggered: {}", err)
 
+        # 5c. Statistical Return De-Correlation Guard (실제 일일 수익률 피어슨 상관계수 rho >= 0.75 검증)
+        # 텍스트 테마 분류와 무관하게, 실제 주가 움직임이 75% 이상 일치하는 종목이 이미 2개 이상이면 3번째 진입 차단
+        try:
+            from portfolio_decorrelation import PortfolioDeCorrelationEngine
+            pde = PortfolioDeCorrelationEngine(max_correlation=0.75)
+            held_symbols = list(self._positions.keys())
+            if len(held_symbols) >= 2:
+                high_corr_count = 0
+                high_corr_symbols = []
+                for held in held_symbols:
+                    gate = pde.check_correlation_gate(symbol, [held])
+                    if gate.get("max_rho", 0.0) >= 0.75:
+                        high_corr_count += 1
+                        high_corr_symbols.append(f"{held}(rho={gate['max_rho']:.2f})")
+                
+                if high_corr_count >= 2:
+                    return EntrySignal("HOLD", 0,
+                        f"CORRELATION_GUARD: Mathematical duplicate risk (rho>=0.75 with {', '.join(high_corr_symbols)})", 0)
+        except Exception as _corr_err:
+            logger.debug("Correlation guard check skipped: {}", _corr_err)
+
         # 6. Fetch & Validate Historical Data
         df_daily = self.fetch_data(symbol)
         if df_daily is None or len(df_daily) < 50:

@@ -18,6 +18,27 @@ class PortfolioDeCorrelationEngine:
     def __init__(self, max_correlation: float = 0.70):
         self.max_correlation = max_correlation
 
+    def _get_returns(self, symbol: str) -> Optional[pd.Series]:
+        """Fetch daily close returns with robust fallback"""
+        try:
+            from kis_data import get_daily_ohlcv
+            df = get_daily_ohlcv(symbol, days=35)
+            if df is not None and len(df) >= 15:
+                return df['Close'].pct_change().dropna()
+        except Exception:
+            pass
+
+        try:
+            import yfinance as yf
+            df = yf.download(symbol, period="2mo", interval="1d", progress=False)
+            if df is not None and len(df) >= 15:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                return df['Close'].pct_change().dropna()
+        except Exception:
+            pass
+        return None
+
     def check_correlation_gate(self, candidate_symbol: str, current_positions: List[str]) -> Dict[str, Any]:
         """
         Check if candidate symbol is overly correlated with currently held positions.
@@ -35,13 +56,9 @@ class PortfolioDeCorrelationEngine:
             return res
 
         try:
-            from kis_data import get_daily_ohlcv
-
-            df_cand = get_daily_ohlcv(candidate_symbol, days=35)
-            if df_cand is None or len(df_cand) < 15:
+            cand_ret = self._get_returns(candidate_symbol)
+            if cand_ret is None or len(cand_ret) < 10:
                 return res
-
-            cand_ret = df_cand['Close'].pct_change().dropna()
 
             highest_rho = -1.0
             highest_sym = ""
@@ -49,11 +66,10 @@ class PortfolioDeCorrelationEngine:
             for held in current_positions:
                 if held.upper() == candidate_symbol.upper():
                     continue
-                df_held = get_daily_ohlcv(held, days=35)
-                if df_held is None or len(df_held) < 15:
+                held_ret = self._get_returns(held)
+                if held_ret is None or len(held_ret) < 10:
                     continue
 
-                held_ret = df_held['Close'].pct_change().dropna()
                 common_idx = cand_ret.index.intersection(held_ret.index)
 
                 if len(common_idx) >= 10:
