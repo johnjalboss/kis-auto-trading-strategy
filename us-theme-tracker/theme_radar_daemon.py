@@ -444,10 +444,21 @@ class ThemeRadarDaemon:
             if not tg_token or not tg_chat_id:
                 return
 
-            # 1. 🛑 Market Hours Check: Never send alerts when the market is CLOSED (Weekends / Off-hours)
+            # 1. 🛑 Ironclad Weekend & Off-Market Hours Silence Guard (100% Silent on Weekends/Off-Hours)
+            tz = pytz.timezone('US/Eastern')
+            now_est = datetime.datetime.now(tz)
+            if now_est.weekday() >= 5:
+                logger.info("Weekend in US (ET: {}). Theme push alerts are 100% silenced.", now_est.strftime("%A %H:%M"))
+                return
+
+            current_minutes = now_est.hour * 60 + now_est.minute
+            if not (9 * 60 + 30 <= current_minutes < 16 * 60):
+                logger.info("Off-market hours in US (ET: {}). Theme push alerts are 100% silenced.", now_est.strftime("%H:%M"))
+                return
+
             m_state = get_market_state()
-            if m_state == "CLOSED":
-                logger.debug("Market is CLOSED. Skipping real-time theme alerts.")
+            if m_state != "REGULAR":
+                logger.info("Market is not in REGULAR trading (State: {}). Skipping theme alerts.", m_state)
                 return
 
             # 2. SQLite Persisted 24-Hour Alert Cooldown
@@ -578,11 +589,11 @@ class ThemeRadarDaemon:
                 
                 # Dynamic sleep interval based on market hours
                 if m_state == "REGULAR":
-                    sleep_sec = 60  # Every 1 minute in regular trading
+                    sleep_sec = 60   # Every 1 minute in regular trading
                 elif m_state == "EXTENDED":
-                    sleep_sec = 120 # Every 2 minutes in pre/post market
+                    sleep_sec = 300  # Every 5 minutes in pre/post market
                 else:
-                    sleep_sec = 600 # Every 10 minutes outside market hours
+                    sleep_sec = 1800 # Every 30 minutes outside market hours/weekends
                     
                 logger.info("Sleeping for {}s until next cycle...", sleep_sec)
                 time.sleep(sleep_sec)
