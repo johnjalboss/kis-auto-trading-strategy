@@ -1018,14 +1018,24 @@ class StrategyEngine:
         # [v4.0 INSTITUTIONAL DATA MODULE 2: INSIDER CLUSTER BUYING] (+25 pts)
         # ================================
         try:
-            from insider_tracker import InsiderInstitutionalTracker
-            _insider_tr = InsiderInstitutionalTracker()
-            insider_sig = _insider_tr.analyze(symbol)
-            if insider_sig and getattr(insider_sig, 'insider_buys_90d', 0) >= 2 and getattr(insider_sig, 'insider_net_value', 0) > 50000:
-                score += 25
-                logger.info("🔥 [INSIDER_CLUSTER_BUY] +25 pts: Multiple C-level Executives buying 자사주 for {}", symbol)
-            elif insider_sig and getattr(insider_sig, 'insider_sentiment', 'NEUTRAL') == 'BUYING':
-                score += 10
+            from sec_form4_insider_radar import SECForm4InsiderRadar
+            sec_ins = SECForm4InsiderRadar().analyze_insider_activity(symbol)
+            if sec_ins.get("cluster_detected"):
+                bonus = sec_ins.get("bonus_score", 25)
+                score += bonus
+                logger.info("🔥 [SEC_FORM4_CLUSTER] +{} pts: {} for {}", bonus, sec_ins.get("cluster_type"), symbol)
+            elif sec_ins.get("net_buying_val_usd", 0) > 100000:
+                score += 15
+                logger.info("🔥 [SEC_FORM4_BUY] +15 pts: Whale insider buy ${:,.0f} for {}", sec_ins.get("net_buying_val_usd", 0), symbol)
+            else:
+                from insider_tracker import InsiderInstitutionalTracker
+                _insider_tr = InsiderInstitutionalTracker()
+                insider_sig = _insider_tr.analyze(symbol)
+                if insider_sig and getattr(insider_sig, 'insider_buys_90d', 0) >= 2 and getattr(insider_sig, 'insider_net_value', 0) > 50000:
+                    score += 25
+                    logger.info("🔥 [INSIDER_CLUSTER_BUY] +25 pts: Multiple C-level Executives buying 자사주 for {}", symbol)
+                elif insider_sig and getattr(insider_sig, 'insider_sentiment', 'NEUTRAL') == 'BUYING':
+                    score += 10
         except Exception as _ins_err:
             logger.debug("Insider tracker check skipped for {}: {}", symbol, _ins_err)
 

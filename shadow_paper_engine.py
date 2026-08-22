@@ -18,8 +18,22 @@ STATE_FILE = "shadow_state.json"
 class ShadowPaperEngine:
     """Simulates an aggressive parallel paper-trading portfolio."""
 
-    def __init__(self, state_file: str = STATE_FILE, initial_capital: float = 1000.0):
-        self.state_file = state_file
+    def __init__(self, state_file: str = None, initial_capital: float = 1000.0):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        if state_file and os.path.exists(state_file):
+            self.state_file = state_file
+        else:
+            cand1 = os.path.join(base_dir, "shadow_state.json")
+            cand2 = "/home/ubuntu/kis-auto-trading/shadow_state.json"
+            cand3 = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\shadow_state.json"
+            if os.path.exists(cand1):
+                self.state_file = cand1
+            elif os.path.exists(cand2):
+                self.state_file = cand2
+            elif os.path.exists(cand3):
+                self.state_file = cand3
+            else:
+                self.state_file = cand1
         self.initial_capital = initial_capital
         self.state = self._load_state()
 
