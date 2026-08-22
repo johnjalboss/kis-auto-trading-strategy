@@ -424,8 +424,28 @@ def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: flo
     """
     symbol = symbol.upper()
     try:
-        from kis_data import download
-        df = download(symbol, period="3mo")
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import yfinance as yf
+
+        df = None
+        # 1. Fast download via yfinance
+        try:
+            df = yf.download(symbol, period="3mo", interval="1d", progress=False, auto_adjust=True)
+            if df is not None and isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+        except Exception as yfe:
+            logger.debug("YF fast chart download fallback: {}", yfe)
+
+        # 2. Fallback to kis_data
+        if df is None or len(df) < 15:
+            try:
+                from kis_data import download
+                df = download(symbol, period="3mo")
+            except Exception:
+                pass
+
         if df is None or len(df) < 15:
             return "", f"⚠️ {symbol} 데이터를 불러올 수 없습니다."
 

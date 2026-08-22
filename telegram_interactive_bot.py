@@ -87,16 +87,24 @@ class TelegramInteractiveBot:
 
     def _send_photo(self, photo_path: str, caption: str = ""):
         try:
+            dest_chat = getattr(self, "last_chat_id", None) or self.chat_id
             url = f"https://api.telegram.org/bot{self.bot_token}/sendPhoto"
             if os.path.exists(photo_path):
                 with open(photo_path, "rb") as f:
                     files = {"photo": f}
-                    data = {"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML"}
-                    requests.post(url, data=data, files=files, timeout=15)
+                    data = {"chat_id": dest_chat, "caption": caption, "parse_mode": "HTML"}
+                    resp = requests.post(url, data=data, files=files, timeout=20)
+                    if not resp.ok:
+                        import re
+                        clean_cap = re.sub(r'<[^>]+>', '', caption)
+                        f.seek(0)
+                        data = {"chat_id": dest_chat, "caption": clean_cap}
+                        resp = requests.post(url, data=data, files=files, timeout=20)
+                    logger.info("📤 Telegram photo sent to chat {} | status: {}", dest_chat, resp.status_code)
             else:
                 self._send_reply(f"⚠️ 차트 파일을 찾을 수 없습니다: {photo_path}")
         except Exception as e:
-            logger.debug("Telegram photo send error: {}", e)
+            logger.error("Telegram photo send error: {}", e)
 
     def _answer_callback(self, callback_query_id: str, text: str = None):
         try:
@@ -1196,7 +1204,6 @@ class TelegramInteractiveBot:
         """개별 종목 고해상도 캔들 차트 발송"""
         try:
             from chart_generator import generate_stock_technical_chart
-            from notifier import get_notifier
             positions = self._get_positions_dict()
             entry_p = None
             if symbol in positions:
@@ -1204,10 +1211,7 @@ class TelegramInteractiveBot:
 
             chart_path, caption = generate_stock_technical_chart(symbol, days=40, entry_price=entry_p)
             if chart_path and os.path.exists(chart_path):
-                notifier = get_notifier()
-                success = notifier.send_photo_sync(chart_path, caption)
-                if not success:
-                    self._send_photo(chart_path, caption)
+                self._send_photo(chart_path, caption)
             else:
                 self._send_reply(caption or f"⚠️ {symbol} 차트를 생성할 수 없습니다.")
         except Exception as e:
