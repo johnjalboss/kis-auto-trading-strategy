@@ -523,53 +523,80 @@ class TelegramInteractiveBot:
     def _fetch_live_ticker_price(sym: str, entry_fallback: float = 0.0) -> tuple[float, float, str]:
         """
         통합 실시간 시세 및 ATR 조회기:
-        프리마켓/정규장/애프터마켓의 실시간 호가/체결가를 100% 동일하게 가져옵니다.
-        우선순위:
-        1. yfinance Ticker.fast_info.last_price (프리/애프터/정규장 실시간 1초 갱신)
-        2. yfinance 1d 1m prepost tick
-        3. 60d daily fallback
-        4. entry_fallback
+        프리마켓(04:00~09:30 ET), 정규장(09:30~16:00 ET), 애프터장(16:00~20:00 ET)의 실시간 호가/체결가를
+        정확하게 감지하여 반영합니다.
         """
         import yfinance as yf
         import pandas as pd
+        from datetime import datetime
+        import pytz
+
         curr_p = entry_fallback
         atr = 0.0
         price_label = ""
-        try:
-            ticker = yf.Ticker(sym)
-            fi = ticker.fast_info
-            lp = getattr(fi, 'last_price', None)
-            if lp and float(lp) > 0:
-                curr_p = float(lp)
-                import pytz
-                et = datetime.now(pytz.timezone('US/Eastern'))
-                hm = et.hour * 60 + et.minute
-                if hm < 9 * 60 + 30:
-                    price_label = " 🌅<i>[프리장]</i>"
-                elif hm >= 16 * 60:
-                    price_label = " 🌙<i>[애프터장]</i>"
 
+        try:
+            tz = pytz.timezone('US/Eastern')
+            now_est = datetime.now(tz)
+            hm = now_est.hour * 60 + now_est.minute
+            weekday = now_est.weekday()
+
+            is_pre = (4 * 60 <= hm < 9 * 60 + 30) and weekday < 5
+            is_post = (16 * 60 <= hm < 20 * 60) and weekday < 5
+            is_regular = (9 * 60 + 30 <= hm < 16 * 60) and weekday < 5
+
+            ticker = yf.Ticker(sym)
+
+            # 1. 🌅/🌙 장외 시간(Pre/Post Market)일 때는 1분봉 실시간 틱 데이터 우선 조회
+            if is_pre or is_post:
+                try:
+                    intra = ticker.history(period="1d", interval="1m", prepost=True)
+                    if intra is not None and not intra.empty:
+                        last_close = float(intra['Close'].iloc[-1])
+                        if last_close > 0:
+                            curr_p = last_close
+                            price_label = " 🌅<i>[프리장 실시간]</i>" if is_pre else " 🌙<i>[애프터장 실시간]</i>"
+                except Exception:
+                    pass
+
+                # Fallback to info preMarketPrice / postMarketPrice
+                if curr_p == entry_fallback or curr_p <= 0:
+                    try:
+                        info = ticker.info or {}
+                        ext_p = info.get('preMarketPrice') if is_pre else info.get('postMarketPrice')
+                        if ext_p and float(ext_p) > 0:
+                            curr_p = float(ext_p)
+                            price_label = " 🌅<i>[프리장 실시간]</i>" if is_pre else " 🌙<i>[애프터장 실시간]</i>"
+                    except Exception:
+                        pass
+
+            # 2. 🟢 정규장이거나 위 단계에서 못 가져온 경우 fast_info / info 조회
+            if curr_p == entry_fallback or curr_p <= 0:
+                fi = getattr(ticker, 'fast_info', None)
+                lp = getattr(fi, 'last_price', None)
+                if lp and float(lp) > 0:
+                    curr_p = float(lp)
+                    if is_regular:
+                        price_label = " 🟢<i>[정규장]</i>"
+
+            # 3. ATR 및 일봉 데이터 조회
             hist = ticker.history(period="60d", auto_adjust=True)
             if hist is not None and not hist.empty:
                 if isinstance(hist.columns, pd.MultiIndex):
                     hist.columns = hist.columns.get_level_values(0)
-                if curr_p == entry_fallback:
-                    try:
-                        intra = ticker.history(period="1d", interval="1m", prepost=True)
-                        if intra is not None and not intra.empty:
-                            curr_p = float(intra['Close'].iloc[-1])
-                            price_label = " 🌅<i>[프리/애프터]</i>"
-                    except Exception:
-                        curr_p = float(hist['Close'].iloc[-1])
+                if curr_p <= 0:
+                    curr_p = float(hist['Close'].iloc[-1])
                 tr1 = hist['High'] - hist['Low']
                 tr2 = (hist['High'] - hist['Close'].shift(1)).abs()
                 tr3 = (hist['Low'] - hist['Close'].shift(1)).abs()
                 tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
                 atr = float(tr.rolling(min(14, len(tr))).mean().iloc[-1])
+
         except Exception as fe:
             logger.debug("Price fetch error for {}: {}", sym, fe)
             if curr_p <= 0:
                 curr_p = entry_fallback
+
         return curr_p, atr, price_label
 
     def _get_buying_power(self) -> float:

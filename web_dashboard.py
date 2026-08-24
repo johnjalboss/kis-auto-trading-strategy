@@ -450,6 +450,13 @@ def render_dashboard_html() -> str:
             qty = p.quantity
             entry_p = p.avg_price
             curr_p = p.current_price if p.current_price > 0 else entry_p
+            if trader_obj:
+                try:
+                    lp = trader_obj.get_price(sym)
+                    if lp > 0:
+                        curr_p = lp
+                except Exception:
+                    pass
 
             pnl_usd = (curr_p - entry_p) * qty
             pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0

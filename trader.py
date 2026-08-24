@@ -544,20 +544,39 @@ class Trader:
         
         # Check if currently in Pre-Market or After-Hours session
         try:
-            from scheduler import TradingScheduler
-            _sch = TradingScheduler()
-            _is_ext = _sch.is_premarket() or _sch.is_afterhours()
+            import datetime, pytz
+            tz = pytz.timezone('US/Eastern')
+            now_est = datetime.datetime.now(tz)
+            hm = now_est.hour * 60 + now_est.minute
+            weekday = now_est.weekday()
+            is_pre = (4 * 60 <= hm < 9 * 60 + 30) and weekday < 5
+            is_post = (16 * 60 <= hm < 20 * 60) and weekday < 5
+            _is_ext = is_pre or is_post
         except Exception:
             _is_ext = False
+            is_pre = False
+            is_post = False
 
-        # If in extended hours (Pre/After market), prioritize live yfinance tick for true real-time price
+        # If in extended hours (Pre/After market), prioritize live 1m tick and pre/postMarketPrice
         if _is_ext:
             try:
                 import yfinance as yf
                 ticker = yf.Ticker(symbol)
-                fast_p = getattr(ticker.fast_info, 'last_price', None)
-                if fast_p and float(fast_p) > 0:
-                    return float(fast_p)
+                # Method 1: 1m intraday prepost bar (most accurate real-time tick)
+                try:
+                    df = ticker.history(period="1d", interval="1m", prepost=True)
+                    if df is not None and not df.empty:
+                        ext_p = float(df['Close'].iloc[-1])
+                        if ext_p > 0:
+                            return ext_p
+                except Exception:
+                    pass
+
+                # Method 2: fast info / info preMarketPrice or postMarketPrice
+                info = ticker.info or {}
+                ext_p = info.get('preMarketPrice') if is_pre else info.get('postMarketPrice')
+                if ext_p and float(ext_p) > 0:
+                    return float(ext_p)
             except Exception:
                 pass
 
