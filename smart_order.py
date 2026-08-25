@@ -287,7 +287,7 @@ class SmartOrderExecutor:
                     if is_filled:
                         order.status = OrderStatus.FILLED
                         order.filled_quantity = order.total_quantity
-                        order.avg_fill_price = getattr(result, 'price', limit) or limit
+                        order.avg_fill_price = self.trader.get_order_fill_price(order_id_from_kis, order.symbol, limit)
                     else:
                         logger.warning("❌ Order {} for {} did NOT fill within 30s.", order_id_from_kis, order.symbol)
                         exchange_to_use = getattr(result, 'exchange', None) or self.trader._exchange_mapper.get_exchange(order.symbol)
@@ -339,7 +339,7 @@ class SmartOrderExecutor:
                                 if is_filled:
                                     order.status = OrderStatus.FILLED
                                     order.filled_quantity = order.total_quantity
-                                    order.avg_fill_price = limit
+                                    order.avg_fill_price = self.trader.get_order_fill_price(order_id_from_kis, order.symbol, limit)
                                 else:
                                     order.status = OrderStatus.FAILED
                                     order.reason = "Cancel failed, original order still unfilled"
@@ -358,7 +358,7 @@ class SmartOrderExecutor:
                                     if is_chase_filled:
                                         order.status = OrderStatus.FILLED
                                         order.filled_quantity = order.total_quantity
-                                        order.avg_fill_price = chase_price
+                                        order.avg_fill_price = self.trader.get_order_fill_price(chase_order_id, order.symbol, chase_price)
                                     else:
                                         logger.error("🚨 CRITICAL: Aggressive chase SELL order {} also unfilled!", chase_order_id)
                                         order.status = OrderStatus.PARTIAL
@@ -378,7 +378,7 @@ class SmartOrderExecutor:
                                     logger.info("✅ FULFILLMENT VERIFIED: {} order filled on broker (remaining qty: {})", order.symbol, current_held_qty)
                                     order.status = OrderStatus.FILLED
                                     order.filled_quantity = order.total_quantity
-                                    order.avg_fill_price = limit
+                                    order.avg_fill_price = self.trader.get_order_fill_price(order_id_from_kis, order.symbol, limit)
                                 else:
                                     order.status = OrderStatus.FAILED
                                     order.reason = "Cancel failed, original order still unfilled"

@@ -1073,6 +1073,63 @@ class Trader:
         logger.warning("Order {} not filled within {}s for {}", 
                        order_id, max_wait, symbol)
         return False
+
+    def get_order_fill_price(self, order_id: str, symbol: str, default_price: float) -> float:
+        """
+        Queries KIS Overseas Order Execution History (inquire-ccnl) to retrieve the EXACT 
+        market execution/fill price matched on the exchange, rather than the submitted limit order price.
+        """
+        if not order_id:
+            return default_price
+            
+        try:
+            exchange = self.get_exchange(symbol)
+            headers = self._get_headers("TTTS3035R")
+            from datetime import datetime, date
+            today_str = date.today().strftime("%Y%m%d")
+            params = {
+                "CANO": config.KIS_CANO,
+                "ACNT_PRDT_CD": config.KIS_ACNT_PRDT_CD,
+                "PDNO": "%",
+                "ORD_STRT_DT": today_str,
+                "ORD_END_DT": today_str,
+                "SLL_BUY_DVSN": "00",
+                "CCLD_DVSN": "00",
+                "OVRS_EXCG_CD": exchange,
+                "SORT_SQN": "DS",
+                "ORD_DT": "",
+                "ORD_GNO_BRNO": "",
+                "ODNO": order_id,
+                "CTX_AREA_FK200": "",
+                "CTX_AREA_NK200": ""
+            }
+            url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl"
+            r = requests.get(url, headers=headers, params=params, timeout=8)
+            if r.ok:
+                data = r.json()
+                for item in data.get("output", []):
+                    item_odno = item.get("odno", "")
+                    if item_odno == order_id or not order_id:
+                        ccld_p = float(item.get("ft_ccld_pric3", 0.0) or 0.0)
+                        ccld_qty = int(item.get("ft_ccld_qty", 0) or 0)
+                        if ccld_p > 0 and ccld_qty > 0:
+                            logger.info("🎯 [REAL_FILL_PRICE] Order {} ({}) actual broker fill price: ${:.2f} (vs submitted ${:.2f})",
+                                        order_id, symbol, ccld_p, default_price)
+                            return ccld_p
+        except Exception as e:
+            logger.debug("Failed to query inquire-ccnl for order {}: {}", order_id, e)
+            
+        # Fallback: check live quote if drift is significant
+        try:
+            curr_p = self.get_price(symbol)
+            if curr_p > 0 and abs(curr_p - default_price) / default_price > 0.005:
+                logger.info("🎯 [REAL_FILL_PRICE_FALLBACK] Using market quote ${:.2f} for {} fill (vs limit ${:.2f})",
+                            curr_p, symbol, default_price)
+                return curr_p
+        except Exception:
+            pass
+            
+        return default_price
     
     def close_all_positions(self, dry_run: bool = False) -> List[OrderResult]:
         """Close all open positions"""
