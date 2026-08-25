@@ -67,10 +67,12 @@ class SmartMoneyFootprint:
 
             # 3. Continuous Mathematical Quant Scoring
             # Inst Sizing: Baseline 60%. Continuous tanh curve (+0 to +4 pts)
-            inst_val = result["institutional_pct"]
+            # Clamp calculation input to 100% max for mathematical stability
+            inst_raw = result["institutional_pct"]
+            inst_calc = min(100.0, inst_raw)
             short_val = result["short_pct"]
 
-            inst_bonus = float(4.0 * np.tanh(max(0.0, inst_val - 50.0) / 25.0))
+            inst_bonus = float(4.0 * np.tanh(max(0.0, inst_calc - 50.0) / 25.0))
             short_bonus = float(4.0 * np.tanh(max(0.0, short_val - 3.0) / 6.0))
 
             total_bonus = round(float(np.clip(inst_bonus + short_bonus, 0.0, 8.0)), 1)
@@ -78,18 +80,24 @@ class SmartMoneyFootprint:
             result["sponsor_score"] = int(np.clip(50.0 + (total_bonus * 6.25), 50, 100))
 
             tags = []
-            if inst_val >= 70.0:
-                tags.append(f"기관 집중 매집(지분 {inst_val}%)")
-            elif inst_val >= 50.0:
+            if inst_raw >= 100.0:
+                tags.append(f"기관 100% 초과 포화(13F 중복집계 {inst_raw}%)")
+            elif inst_raw >= 70.0:
+                tags.append(f"기관 집중 매집(지분 {inst_raw}%)")
+            elif inst_raw >= 50.0:
                 tags.append("기관 스폰서십 안착")
 
-            if short_val >= 10.0:
-                tags.append(f"숏스퀴즈 폭발 압력(공매도 {short_val}%)")
-            elif short_val >= 5.0:
+            if short_val >= 15.0:
+                tags.append(f"🔥 숏스퀴즈 초고압력(공매도 {short_val}%)")
+            elif short_val >= 8.0:
                 tags.append(f"숏커버링 잠재력({short_val}%)")
 
             result["signal_tag"] = " | ".join(tags) if tags else "월가 기관 장기 보유 안착"
-            result["summary"] = f"기관지분 {inst_val}% (가산 +{inst_bonus:.1f}pt) / 공매도 {short_val}% (가산 +{short_bonus:.1f}pt)"
+            
+            if inst_raw >= 100.0:
+                result["summary"] = f"기관지분 100% 포화 (13F 대여중복 {inst_raw:.1f}%, +{inst_bonus:.1f}pt) / 공매도 {short_val:.1f}% (+{short_bonus:.1f}pt)"
+            else:
+                result["summary"] = f"기관지분 {inst_raw:.1f}% (가산 +{inst_bonus:.1f}pt) / 공매도 {short_val:.1f}% (가산 +{short_bonus:.1f}pt)"
 
         except Exception as e:
             logger.debug("Smart money analysis failed for {}: {}", symbol, e)
@@ -110,8 +118,11 @@ class SmartMoneyFootprint:
 
         syms = symbols if symbols and len(symbols) > 0 else ["ADP", "CART", "LYFT", "SPY", "NVDA"]
         lines = []
+        has_over_100 = False
         for s in syms:
             res = self.analyze_ticker(s)
+            if res.get("institutional_pct", 0) >= 100.0:
+                has_over_100 = True
             bonus_str = f"+{res['bonus_points']:.1f}pt" if res['bonus_points'] > 0 else "0.0pt"
             lines.append(
                 f"• <b>{s}</b> (수학적 퀀트 가산점: <code>{bonus_str}</code>)\n"
@@ -119,13 +130,24 @@ class SmartMoneyFootprint:
                 f"  🏷️ <i>{res['signal_tag']}</i>"
             )
 
+        footnote = (
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"💡 <i>스마트머니 수급이 집중된 종목일수록 돌파 시 강한 상방 랠리가 나타납니다.</i>"
+        )
+        if has_over_100:
+            footnote = (
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"ℹ️ <b>[기관 지분 100% 초과 원리 (월가 13F 공시 표준)]</b>\n"
+                f"• 대형 기관(뱅가드 등)이 보유 주식을 공매도 세력에 대여하고, 공매도자가 이를 시장에 매도하여 다른 기관(블랙록 등)이 매수하면 <b>SEC 13F 공시상 양쪽 기관에 모두 집계(이중 계산)</b>됩니다.\n"
+                f"• 월가 퀀트에서는 이를 <b>'기관 100% 완전 장악 + 숏스퀴즈(Short Squeeze) 폭발 직전'</b>의 최상위 수급 집중 신호로 판정합니다."
+            )
+
         card = (
             f"📡 <b>[월가 스마트머니 & 기관 수급 계량 모델 (13F Radar)]</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"기관 대량 지분 매집(13F) 및 숏스퀴즈 계량 분석으로 최대 +8.0점을 가산합니다.\n\n"
             + "\n\n".join(lines) + "\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 <i>스마트머니 수급이 집중된 종목일수록 돌파 시 강한 상방 랠리가 나타납니다.</i>"
+            + footnote
         )
         return card
 
