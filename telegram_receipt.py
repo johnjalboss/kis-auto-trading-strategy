@@ -175,6 +175,41 @@ class TelegramReceiptGenerator:
         pnl_badge = f"{sign} <b>${pnl_usd:+,.2f}</b> ({pnl_pct:+.2f}%)"
         reason_detail_ko = _translate_exit_reason_detail(reason)
 
+        # Look up Peak High (MFE) and Lowest Trough (MAE) during holding period
+        peak_high = exit_price
+        trough_low = entry_price
+        try:
+            import sqlite3, os
+            db_f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
+            if os.path.exists(db_f):
+                conn = sqlite3.connect(db_f)
+                cur = conn.cursor()
+                cur.execute("SELECT high_since_entry FROM positions WHERE symbol = ?", (symbol,))
+                p_row = cur.fetchone()
+                if p_row and p_row[0] and float(p_row[0]) > 0:
+                    peak_high = float(p_row[0])
+                conn.close()
+        except Exception:
+            pass
+
+        try:
+            import yfinance as yf
+            import numpy as np
+            hist = yf.download(symbol, period="5d", interval="1h", progress=False)
+            if hist is not None and not hist.empty:
+                h_vals = hist['High'].values.flatten()
+                l_vals = hist['Low'].values.flatten()
+                if len(h_vals) > 0:
+                    peak_high = max(peak_high, float(np.max(h_vals)))
+                    trough_low = min(trough_low, float(np.min(l_vals)))
+        except Exception:
+            pass
+
+        peak_high = max(peak_high, entry_price, exit_price)
+        trough_low = min(trough_low, entry_price, exit_price)
+        mfe_pct = (peak_high - entry_price) / entry_price * 100.0 if entry_price > 0 else 0.0
+        mae_pct = (trough_low - entry_price) / entry_price * 100.0 if entry_price > 0 else 0.0
+
         # Compute factor performance attribution
         factor_lines = ""
         try:
@@ -192,6 +227,8 @@ class TelegramReceiptGenerator:
             f"• <b>종목코드</b>: <code>{symbol}</code>\n"
             f"• <b>청산수량</b>: <b>{quantity:,} 주</b>\n"
             f"• <b>진입평단</b>: ${entry_price:,.2f}\n"
+            f"• <b>최고도달(MFE)</b>: <b>${peak_high:,.2f}</b> (<b>{mfe_pct:+.2f}%</b>)\n"
+            f"• <b>최저도달(MAE)</b>: <b>${trough_low:,.2f}</b> (<b>{mae_pct:+.2f}%</b>)\n"
             f"• <b>청산단가</b>: <b>${exit_price:,.2f}</b>\n"
             f"• <b>총 회수금액</b>: <b>${total_value:,.2f}</b>\n"
             f"──────────────────────\n"
@@ -199,6 +236,10 @@ class TelegramReceiptGenerator:
             f"⏱️ <b>실제 보유기간</b>: <b>{actual_hold_str}</b>\n"
             f"📌 <b>상세 청산사유</b>:\n"
             f"{reason_detail_ko}\n"
+            f"──────────────────────\n"
+            f"📊 <b>변동성 궤적 (MFE / MAE 퀀트 튜닝)</b>:\n"
+            f"• 🚀 <b>최고 유리 도달 (MFE)</b>: ${peak_high:,.2f} ({mfe_pct:+.2f}%)\n"
+            f"• 🛡️ <b>최저 불리 낙폭 (MAE)</b>: ${trough_low:,.2f} ({mae_pct:+.2f}%)\n"
             f"──────────────────────\n"
             f"🧬 <b>수익 팩터 기여도 분해 (Factor Attribution)</b>:\n"
             f"{factor_lines}\n"
