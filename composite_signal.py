@@ -576,8 +576,25 @@ class CompositeSignalEngine:
                 signals.append("NEGATIVE_GEX_VOLATILITY")
         except Exception:
             pass
+
+        # 4. US Congressional STOCK Act Trading Radar Integration (Stocks & Call Option LEAPs)
+        try:
+            from congressional_trade_tracker import get_congressional_tracker
+            cong_ev = get_congressional_tracker().check_ticker_catalyst(symbol)
+            if cong_ev and cong_ev.transaction_type == "BUY":
+                bonus = float(cong_ev.score_bonus)
+                # Option LEAPs carry 1.25x high-conviction leverage weighting
+                is_option = "OPTION" in getattr(cong_ev, 'asset_type', '').upper() or "LEAP" in getattr(cong_ev, 'asset_type', '').upper()
+                if is_option:
+                    bonus = min(25.0, bonus * 1.25)
+                    signals.append(f"CONGRESS_LEAP_OPTION (+{bonus:.0f}pt {cong_ev.politician})")
+                else:
+                    signals.append(f"CONGRESS_STOCK_BUY (+{bonus:.0f}pt {cong_ev.politician})")
+                score += bonus
+        except Exception:
+            pass
         
-        # 4. Volume Accumulation Ratio (OBV & Price Action)
+        # 5. Volume Accumulation Ratio (OBV & Price Action)
         volume = df['Volume']
         close = df['Close']
         if len(volume) >= 20:
