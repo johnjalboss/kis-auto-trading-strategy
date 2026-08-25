@@ -7,7 +7,15 @@ for Telegram upon BUY and SELL order executions.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import html
 import pytz
+
+
+def _html_escape(text: str) -> str:
+    """Safely escapes HTML special characters for Telegram API HTML mode."""
+    if not text:
+        return ""
+    return html.escape(str(text), quote=False)
 
 
 def _translate_exit_reason_detail(reason: str) -> str:
@@ -22,9 +30,9 @@ def _translate_exit_reason_detail(reason: str) -> str:
             "• <b>분류</b>: 🔒 <b>이익 보존 손절선 (Profit Locking Stop)</b>\n"
             "• <b>상세 근거</b>: 주가 고점 상승 후 가격 조정을 받을 때, 확보한 이익(+2.0%/+5.5%/+9.0%)을 뺏기지 않고 안전하게 확정 청산."
         )
-    if "trailing_stop" in r_lower or "trailing" in r_lower:
+    if "trailing_stop" in r_lower or "trailing" in r_lower or "trail" in r_lower or "sota_lock" in r_lower:
         return (
-            "• <b>분류</b>: 📈 <b>ATR 동적 트레일링 스탑 (Trailing Stop)</b>\n"
+            "• <b>분류</b>: 📈 <b>SOTA 동적 트레일링 스탑 (Trailing Stop)</b>\n"
             "• <b>상세 근거</b>: 고점 대비 ATR 변동성 채널 이탈로 상승 모멘텀 둔화가 감지되어 고점 부근에서 수익을 극대화하며 방어 매도."
         )
     if "hard_stop" in r_lower or "stop_loss" in r_lower:
@@ -58,7 +66,7 @@ def _translate_exit_reason_detail(reason: str) -> str:
             "• <b>상세 근거</b>: 설정된 1차/2차 목표 수익률에 도달하여 안정적으로 수익을 실현."
         )
 
-    return f"• <b>청산 사유</b>: <code>{reason}</code>"
+    return f"• <b>청산 사유</b>: <code>{_html_escape(reason)}</code>"
 
 
 class TelegramReceiptGenerator:
