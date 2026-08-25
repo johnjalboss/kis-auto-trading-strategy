@@ -244,7 +244,7 @@ class DynamicScreener:
         # OHLCV downloads are I/O-bound but KIS API enforces rate limits;
         # 16 concurrent threads cause 429 bursts. 8 workers is the sweet spot.
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:200]}
+            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:350]}
             try:
                 # Increased timeout 90s→150s: 100 candidates × KIS download.
                 # Each KIS call can take up to 2-3s; at 8 workers, 100 symbols = ~37s min.
@@ -259,11 +259,11 @@ class DynamicScreener:
             except concurrent.futures.TimeoutError:
                 logger.warning("Preliminary screener scoring timed out (150s limit)")
 
-        # Sort by preliminary score and take the top 20 for full scoring
+        # Sort by preliminary score and take the top 50 for full scoring
         preliminary_scored.sort(key=lambda x: x.total_score, reverse=True)
-        top_candidates = [s.symbol for s in preliminary_scored[:20]]
+        top_candidates = [s.symbol for s in preliminary_scored[:50]]
         
-        # Pass 2: Full event-driven scoring (calls Finnhub APIs) on top 20 candidates only
+        # Pass 2: Full event-driven scoring (calls Finnhub APIs) on top 50 candidates
         scored = []
         def _safe_full_score(sym):
             try:
@@ -273,15 +273,10 @@ class DynamicScreener:
                 return None
 
         if top_candidates:
-            # Full scoring: max_workers=4 (was 8). Each symbol calls Finnhub (news, insider, earnings)
-            # Finnhub read timeout=10s × 3 retries = up to 30s/symbol. With 8 workers, 20 symbols
-            # could spike to 240 concurrent Finnhub connections causing mass timeouts.
-            # 4 workers × 20 symbols = 5 batches × ~30s max = ~150s worst case.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Full scoring: max_workers=6. Each symbol calls Finnhub (news, insider, earnings)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
                 futures2 = {executor.submit(_safe_full_score, sym): sym for sym in top_candidates}
                 try:
-                    # Increased timeout 120s→180s: Finnhub retries can take 30s/symbol.
-                    # 4 workers × 20 symbols = ~150s max. 180s gives safe headroom.
                     for future in concurrent.futures.as_completed(futures2, timeout=180):
                         try:
                             result = future.result()
