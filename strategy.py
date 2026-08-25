@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Optional, Dict, List, Tuple, Any
 from enum import Enum
+import os
 import pandas as pd
 import kis_data as yf  # KIS API drop-in replacement for yfinance
 import pytz
