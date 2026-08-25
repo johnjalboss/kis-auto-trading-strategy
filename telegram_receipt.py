@@ -7,6 +7,7 @@ for Telegram upon BUY and SELL order executions.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import pytz
 
 
 def _translate_exit_reason_detail(reason: str) -> str:
