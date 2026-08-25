@@ -642,9 +642,31 @@ class StrategyEngine:
             if indicators.obv_trend == "UP" and indicators.bollinger.percent_b < 0.75 and indicators.rsi < 68:
                 is_quant_accumulation = True
 
+        # ── Setup H: 장 마감 30분 전 종가 베팅 (MOC Institutional Closing Drive) ────────
+        # 15:25~16:00 EDT 구간에서 당일 최고가 부근(1.8% 이내) 유지 + 상승추세 = 기관의 종가 집중 매수 확인
+        is_moc_drive = False
+        try:
+            import pytz
+            now_edt = datetime.now(pytz.timezone('US/Eastern'))
+            if (now_edt.hour == 15 and now_edt.minute >= 25) or (now_edt.hour == 16 and now_edt.minute <= 5):
+                high_today = float(df_daily['High'].iloc[-1])
+                open_today = float(df_daily['Open'].iloc[-1])
+                if high_today > 0 and open_today > 0:
+                    gain_today = (current_price - open_today) / open_today
+                    dist_from_day_high = (high_today - current_price) / high_today
+                    if gain_today >= 0.012 and dist_from_day_high <= 0.018 and structural_uptrend:
+                        is_moc_drive = True
+                        confidence += 8
+                        logger.info("🔥 [MOC_CLOSING_DRIVE] {} holding Day High (-{:.1%}, Gain +{:.1%}) at MOC window! +8pt Boost",
+                                    symbol, dist_from_day_high, gain_today * 100)
+        except Exception as err:
+            logger.debug("MOC check skipped for {}: {}", symbol, err)
+
         # ── 설정 우선순위 결정 (가장 강한 신호부터) ─────────────────────
         setup_reason = ""
-        if is_pead:
+        if is_moc_drive:
+            setup_reason = "MOC_CLOSING_DRIVE: Holding Day High at Market Close (Institutional MOC Sweep)"
+        elif is_pead:
             setup_reason = f"PEAD_CONTINUATION: Earnings beat +{pead_beat:.0f}% ({pead_beat:.0f}% surprise)"
         elif is_golden_cross:
             setup_reason = "GOLDEN_CROSS: SMA50 crossed above SMA200 (trend change confirmed)"
