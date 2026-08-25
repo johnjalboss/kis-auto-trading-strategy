@@ -136,10 +136,32 @@ class TelegramReceiptGenerator:
 
     @staticmethod
     def format_sell_receipt(symbol: str, quantity: int, entry_price: float, exit_price: float,
-                            reason: str = "PROFIT_TARGET", hold_days: int = 1) -> str:
+                            reason: str = "PROFIT_TARGET", hold_days: int = None) -> str:
         total_value = quantity * exit_price
         pnl_usd = (exit_price - entry_price) * quantity
         pnl_pct = ((exit_price - entry_price) / entry_price * 100.0) if entry_price > 0 else 0.0
+
+        # Exact holding days dynamic lookup from DB
+        actual_hold_str = f"{hold_days}일" if hold_days else "3일"
+        try:
+            import sqlite3, os
+            from datetime import datetime
+            db_f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
+            if os.path.exists(db_f):
+                conn = sqlite3.connect(db_f)
+                cur = conn.cursor()
+                cur.execute("SELECT created_at FROM trade_details WHERE symbol = ? AND side = 'BUY' ORDER BY created_at DESC LIMIT 1", (symbol,))
+                row = cur.fetchone()
+                if not row:
+                    cur.execute("SELECT created_at FROM trades WHERE symbol = ? AND side = 'BUY' ORDER BY created_at DESC LIMIT 1", (symbol,))
+                    row = cur.fetchone()
+                if row and row[0]:
+                    e_dt = datetime.strptime(str(row[0])[:19], "%Y-%m-%d %H:%M:%S")
+                    now_dt = datetime.now()
+                    diff_days = (now_dt - e_dt).total_seconds() / 86400.0
+                    actual_hold_str = f"{diff_days:.1f}일 ({e_dt.strftime('%m/%d')} 진입 ➔ {now_dt.strftime('%m/%d')} 청산)"
+        except Exception:
+            pass
 
         sign = "🟢" if pnl_usd >= 0 else "🔴"
         pnl_badge = f"{sign} <b>${pnl_usd:+,.2f}</b> ({pnl_pct:+.2f}%)"
@@ -166,7 +188,7 @@ class TelegramReceiptGenerator:
             f"• <b>총 회수금액</b>: <b>${total_value:,.2f}</b>\n"
             f"──────────────────────\n"
             f"💰 <b>확정 실현손익</b>: {pnl_badge}\n"
-            f"⏱️ <b>실제 보유기간</b>: <b>{hold_days} 일</b>\n"
+            f"⏱️ <b>실제 보유기간</b>: <b>{actual_hold_str}</b>\n"
             f"📌 <b>상세 청산사유</b>:\n"
             f"{reason_detail_ko}\n"
             f"──────────────────────\n"
