@@ -1871,20 +1871,23 @@ class BotOrchestrator:
                                 
                         from notification import get_notifier
                         notifier = get_notifier()
-                        # Check if order was confirmed filled (order.status == FILLED)
-                        if order.status == OrderStatus.FILLED:
+                        # Send trade receipt for FILLED, PLACED, or SUBMITTED orders
+                        is_valid_order = order.status in [OrderStatus.FILLED, OrderStatus.PLACED, OrderStatus.SUBMITTED, OrderStatus.PARTIAL_FILL]
+                        if is_valid_order:
+                            fill_qty = order.filled_quantity if order.filled_quantity > 0 else qty
+                            fill_px = order.avg_fill_price or price
                             if action == "BUY":
                                 try:
                                     from telegram_receipt import TelegramReceiptGenerator
                                     sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
                                     q_score = getattr(self.strategy, '_last_scores', {}).get(symbol, 100)
                                     atr_val = self.strategy.get_current_atr(symbol) if hasattr(self.strategy, 'get_current_atr') else 0.0
-                                    sl_calc = (order.avg_fill_price or price) - (atr_val * 1.5) if atr_val > 0 else (order.avg_fill_price or price) * 0.95
+                                    sl_calc = fill_px - (atr_val * 1.5) if atr_val > 0 else fill_px * 0.95
                                     macro_name = getattr(self, '_current_regime', 'RISK_ON')
                                     receipt_msg = TelegramReceiptGenerator.format_buy_receipt(
                                         symbol=symbol,
-                                        quantity=order.filled_quantity,
-                                        price=order.avg_fill_price or price,
+                                        quantity=fill_qty,
+                                        price=fill_px,
                                         setup=reason,
                                         score=q_score,
                                         sl_price=sl_calc,
@@ -1895,25 +1898,30 @@ class BotOrchestrator:
                                     notifier.send(receipt_msg)
                                 except Exception as _tr_err:
                                     logger.debug("Telegram BUY receipt fallback: {}", _tr_err)
-                                    notifier.trade_entry(symbol, order.filled_quantity, order.avg_fill_price or price, reason)
+                                    notifier.trade_entry(symbol, fill_qty, fill_px, reason)
                             else:
                                 try:
                                     from telegram_receipt import TelegramReceiptGenerator
                                     entry_p = 0.0
                                     if symbol in self.strategy._positions:
                                         entry_p = getattr(self.strategy._positions[symbol], 'entry_price', 0.0)
+                                    elif hasattr(self, '_last_entry_prices') and symbol in self._last_entry_prices:
+                                        entry_p = self._last_entry_prices[symbol]
+                                    else:
+                                        entry_p = fill_px
                                     receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
                                         symbol=symbol,
-                                        quantity=order.filled_quantity,
+                                        quantity=fill_qty,
                                         entry_price=entry_p,
-                                        exit_price=order.avg_fill_price or price,
+                                        exit_price=fill_px,
                                         reason=reason
                                     )
                                     notifier.send(receipt_msg)
                                 except Exception as _tr_err:
                                     logger.debug("Telegram SELL receipt error: {}", _tr_err)
+                                    notifier.trade_exit(symbol, fill_qty, entry_p, fill_px, reason)
                         else:
-                            logger.info("Trade alert suppressed for {}: order status={} (not FILLED)",
+                            logger.info("Trade alert suppressed for {}: order status={}",
                                        symbol, order.status.value)
                     except Exception as ne:
                         logger.debug("Trade notification failed: {}", ne)
