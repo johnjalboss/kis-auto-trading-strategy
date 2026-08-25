@@ -85,7 +85,7 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Telegram reply error: {}", e)
 
-    def _send_photo(self, photo_path: str, caption: str = ""):
+    def _send_photo(self, photo_path: str, caption: str = None, reply_markup: dict = None):
         try:
             dest_chat = getattr(self, "last_chat_id", None) or self.chat_id
             url = f"https://api.telegram.org/bot{self.bot_token}/sendPhoto"
@@ -93,12 +93,18 @@ class TelegramInteractiveBot:
                 with open(photo_path, "rb") as f:
                     files = {"photo": f}
                     data = {"chat_id": dest_chat, "caption": caption, "parse_mode": "HTML"}
+                    if reply_markup:
+                        import json
+                        data["reply_markup"] = json.dumps(reply_markup)
                     resp = requests.post(url, data=data, files=files, timeout=20)
                     if not resp.ok:
                         import re
                         clean_cap = re.sub(r'<[^>]+>', '', caption)
                         f.seek(0)
                         data = {"chat_id": dest_chat, "caption": clean_cap}
+                        if reply_markup:
+                            import json
+                            data["reply_markup"] = json.dumps(reply_markup)
                         resp = requests.post(url, data=data, files=files, timeout=20)
                     logger.info("📤 Telegram photo sent to chat {} | status: {}", dest_chat, resp.status_code)
             else:
@@ -195,7 +201,11 @@ class TelegramInteractiveBot:
                 ],
                 [
                     {"text": "🛡️ 리스크 현황", "callback_data": "cmd_risk"},
-                    {"text": "📊 전체 수익차트", "callback_data": "cmd_chart_all"}
+                    {"text": "📊 QQQ 비교 수익차트", "callback_data": "cmd_chart_qqq"}
+                ],
+                [
+                    {"text": "📈 SPY 비교 수익차트", "callback_data": "cmd_chart_spy"},
+                    {"text": "📊 보유종목 캔들 차트", "callback_data": "cmd_stock_charts_menu"}
                 ],
                 [
                     {"text": "⏸️ 매수 일시정지", "callback_data": "cmd_pause"},
@@ -309,18 +319,12 @@ class TelegramInteractiveBot:
                                     _run_async(self._handle_regime)
                                 elif cb_data == "cmd_risk":
                                     _run_async(self._handle_risk)
-                                elif cb_data == "cmd_chart30":
-                                    _run_async(self._handle_chart, 30)
-                                elif cb_data == "cmd_chart90":
-                                    _run_async(self._handle_chart, 90)
-                                elif cb_data == "cmd_chart180":
-                                    _run_async(self._handle_chart, 180)
-                                elif cb_data == "cmd_chart365":
-                                    self._answer_callback(cb_id, "📊 1년 차트를 생성합니다.")
-                                    _run_async(self._handle_chart, 365)
-                                elif cb_data == "cmd_chart_all":
-                                    self._answer_callback(cb_id, "📊 전체 수익차트를 생성합니다.")
-                                    _run_async(self._handle_chart, 0)
+                                elif cb_data in ("cmd_chart_qqq", "cmd_chart_all", "cmd_chart90", "cmd_chart30", "cmd_chart180", "cmd_chart365"):
+                                    self._answer_callback(cb_id, "📊 QQQ 비교 수익차트를 생성합니다.")
+                                    _run_async(self._handle_chart, 0, "QQQ")
+                                elif cb_data == "cmd_chart_spy":
+                                    self._answer_callback(cb_id, "📈 SPY 비교 수익차트를 생성합니다.")
+                                    _run_async(self._handle_chart, 0, "SPY")
                                 elif cb_data == "cmd_pause":
                                     _is_bot_paused = True
                                     self._answer_callback(cb_id, "⏸️ 매매가 일시정지되었습니다.")
@@ -406,12 +410,10 @@ class TelegramInteractiveBot:
                                     self._handle_regime()
                                 elif any(cmd.startswith(c) for c in ["/리스크", "리스크"]):
                                     self._handle_risk()
-                                elif any(cmd.startswith(c) for c in ["/차트30", "차트30"]):
-                                    self._handle_chart(30)
-                                elif any(cmd.startswith(c) for c in ["/차트90", "차트90", "/차트", "차트"]):
-                                    self._handle_chart(90)
-                                elif any(cmd.startswith(c) for c in ["/차트전체", "전체차트"]):
-                                    self._handle_chart(0)
+                                elif any(cmd.startswith(c) for c in ["/차트spy", "차트spy", "/spy차트", "spy차트", "/차트_spy", "chart_spy", "/chartspy"]):
+                                    self._handle_chart(0, "SPY")
+                                elif any(cmd.startswith(c) for c in ["/차트qqq", "차트qqq", "/qqq차트", "qqq차트", "/차트", "차트", "/chart", "/차트전체", "전체차트", "/차트30", "/차트90"]):
+                                    self._handle_chart(0, "QQQ")
                                 elif any(cmd.startswith(c) for c in ["/pause", "/정지", "/일시정지", "일시정지", "정지"]):
                                     _is_bot_paused = True
                                     self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 또는 /재개 로 다시 가동)")
@@ -857,10 +859,13 @@ class TelegramInteractiveBot:
 
             # 1. Systematic CTA Trend-Following Fund Sentinel
             cta_status = "100% (MAX_LONG_ACCELERATION)"
+            cta_cliff_line = "🚨 <b>기계적 투매/청산 위험선(20일선)까지</b>: <b>+1.8% 여유</b>"
             try:
                 from cta_trend_following_sentinel import get_cta_sentinel
                 cta_sig = get_cta_sentinel().analyze()
-                cta_status = f"{cta_sig.cta_net_exposure_pct}% ({cta_sig.cta_regime}, 청산위험선까지 {cta_sig.distance_to_nearest_sell_trigger_pct:.1f}%)"
+                cta_status = f"{cta_sig.cta_net_exposure_pct}% ({cta_sig.cta_regime})"
+                trigger_px = cta_sig.trigger_levels.get('level_1_20d_sma', 0)
+                cta_cliff_line = f"🚨 <b>기계적 투매/청산 위험선(20일선)까지</b>: <b>{cta_sig.distance_to_nearest_sell_trigger_pct:+.1f}% 여유</b> (SPY ${trigger_px:.1f})"
             except Exception as e:
                 logger.debug("CTA fetch in quant_status: {}", e)
 
@@ -928,6 +933,7 @@ class TelegramInteractiveBot:
                 f"• <b>운용 모드</b>: 🚀 <b>공격형 고수익 모드 (3종목 집중 35%)</b>",
                 f"• <b>시장 레짐 (Market Regime)</b>: <b>{regime}</b>",
                 f"• <b>CTA 추세추종 노출도</b>: <b>{cta_status}</b>",
+                f"  - {cta_cliff_line}",
                 f"• <b>VIX 기간구조 (VIX/VIX3M)</b>: <b>{vix_status}</b>",
                 f"• <b>옵션만기 감마핀 사이클</b>: <b>{opex_status}</b>",
                 f"• <b>거시 꼬리 리스크 (Cross-Asset)</b>: {risk_label}",
@@ -1153,22 +1159,32 @@ class TelegramInteractiveBot:
         except Exception as e:
             self._send_reply(f"⚠️ 리스크 상태 조회 실패: {e}")
 
-    def _handle_chart(self, days: int = 90):
-        """수익 차트 및 QQQ 벤치마크 실시간 생성 및 발송"""
+    def _handle_chart(self, days: int = 0, benchmark: str = "QQQ"):
+        """수익 차트 및 벤치마크 (QQQ / SPY) 실시간 생성 및 발송"""
         try:
             from chart_generator import generate_daily_pnl_chart
-            from notifier import get_notifier
-            res = generate_daily_pnl_chart(days=days)
+            bm = (benchmark or "QQQ").upper().strip()
+            if bm not in ("QQQ", "SPY"):
+                bm = "QQQ"
+
+            res = generate_daily_pnl_chart(days=days, benchmark=bm)
             if isinstance(res, tuple):
                 chart_path, caption = res
             else:
-                chart_path, caption = res, "📊 <b>수익 차트 및 QQQ 벤치마크</b>"
+                chart_path, caption = res, f"📊 <b>수익 차트 및 {bm} 벤치마크</b>"
+
+            # Dynamic toggle button between QQQ and SPY
+            alt_bm = "SPY" if bm == "QQQ" else "QQQ"
+            alt_label = "📈 S&P 500 (SPY) 비교로 전환" if bm == "QQQ" else "📊 나스닥100 (QQQ) 비교로 전환"
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": alt_label, "callback_data": f"cmd_chart_{alt_bm.lower()}"}],
+                    [{"text": "📜 도움말 메뉴", "callback_data": "cmd_help"}]
+                ]
+            }
 
             if chart_path and os.path.exists(chart_path):
-                notifier = get_notifier()
-                success = notifier.send_photo_sync(chart_path, caption)
-                if not success:
-                    self._send_photo(chart_path, caption)
+                self._send_photo(chart_path, caption, reply_markup=reply_markup)
             else:
                 self._send_reply("⚠️ 차트 생성 실패: 거래 데이터가 없거나 오류가 발생했습니다.")
         except Exception as e:

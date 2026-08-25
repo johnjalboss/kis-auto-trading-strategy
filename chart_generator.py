@@ -36,18 +36,22 @@ def _get_us_date() -> date:
         return datetime.now().date()
 
 
-def _fetch_qqq_returns_since_baseline(start_date: date, end_date: date, base_capital: float, date_list: list[str]) -> list[float]:
+def _fetch_benchmark_returns_since_baseline(benchmark: str, start_date: date, end_date: date, base_capital: float, date_list: list[str]) -> list[float]:
     """
-    Fetch exact QQQ daily benchmark returns normalized strictly to 2026-08-14 open ($0.00 / 0.00%).
+    Fetch exact benchmark (QQQ or SPY) daily returns normalized strictly to 2026-08-14 open ($0.00 / 0.00%).
     """
+    bm_symbol = (benchmark or "QQQ").upper().strip()
+    if bm_symbol not in ("QQQ", "SPY"):
+        bm_symbol = "QQQ"
+
     try:
         start_fetch = start_date - timedelta(days=7)
         end_fetch = end_date + timedelta(days=3)
-        df = yf.download("QQQ", start=start_fetch.strftime('%Y-%m-%d'), 
+        df = yf.download(bm_symbol, start=start_fetch.strftime('%Y-%m-%d'), 
                          end=end_fetch.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)
         if df is not None and not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
-                close_series = df['Close']['QQQ'] if ('Close' in df and 'QQQ' in df['Close']) else df.iloc[:, 0]
+                close_series = df['Close'][bm_symbol] if ('Close' in df and bm_symbol in df['Close']) else df.iloc[:, 0]
             elif 'Close' in df.columns:
                 close_series = df['Close']
                 if isinstance(close_series, pd.DataFrame):
@@ -72,7 +76,7 @@ def _fetch_qqq_returns_since_baseline(start_date: date, end_date: date, base_cap
                 day1_pct = (aug14_price / base_price - 1.0) if base_price > 0 else 0.0
                 return [0.0, base_capital * day1_pct]
 
-            qqq_returns = []
+            bm_returns = []
             last_price = base_price
             for d_str in date_list:
                 cur_dt = pd.to_datetime(d_str).normalize()
@@ -80,19 +84,20 @@ def _fetch_qqq_returns_since_baseline(start_date: date, end_date: date, base_cap
                 if not match.empty:
                     last_price = float(match.iloc[-1])
                 pct = (last_price / base_price - 1.0) if base_price > 0 else 0.0
-                qqq_returns.append(base_capital * pct)
+                bm_returns.append(base_capital * pct)
 
-            return qqq_returns
+            return bm_returns
     except Exception as e:
-        logger.debug("Failed to fetch QQQ benchmark history: {}", e)
+        logger.debug("Failed to fetch {} benchmark history: {}", bm_symbol, e)
 
-    # Fallback: Aug 14 QQQ return was -0.14% ($732.07 -> $731.07)
+    # Fallback default returns
+    fallback_pct = -0.0014 if bm_symbol == "QQQ" else -0.0010
     if len(date_list) == 2:
-        return [0.0, base_capital * -0.0014]
+        return [0.0, base_capital * fallback_pct]
     return [0.0] * len(date_list)
 
 
-def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, str]:
+def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str = "QQQ") -> tuple[str, str]:
     """
     Generates 100% accurate Day 1 Zero-Baseline performance chart starting strictly from 2026-08-14.
     """
@@ -297,16 +302,23 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
         daily_bars.append(round(daily_change, 2))
         prev_total_pnl = total_pnl_on_day
 
+    bm_symbol = (benchmark or "QQQ").upper().strip()
+    if bm_symbol not in ("QQQ", "SPY"):
+        bm_symbol = "QQQ"
+
+    bm_color = "#f0b429" if bm_symbol == "QQQ" else "#58a6ff"  # Amber for QQQ, Blue for SPY
+    bm_name = "나스닥100 (QQQ)" if bm_symbol == "QQQ" else "S&P 500 (SPY)"
+
     # Handle 1-day edge case (Open -> Close)
     if len(date_strs) == 1:
         cum_pnls = [0.0, cum_pnls[0]]
         daily_bars = [0.0, daily_bars[0]]
-        qqq_dollars = _fetch_qqq_returns_since_baseline(start_date, end_date, base_capital, date_labels)
+        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, base_capital, date_labels)
     else:
-        qqq_dollars = _fetch_qqq_returns_since_baseline(start_date, end_date, base_capital, date_strs)
+        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, base_capital, date_strs)
 
-    # Calculate Alpha (Excess Return vs QQQ)
-    alpha_dollars = [b - q for b, q in zip(cum_pnls, qqq_dollars)]
+    # Calculate Alpha (Excess Return vs Benchmark)
+    alpha_dollars = [b - q for b, q in zip(cum_pnls, bm_dollars)]
 
     # 4. Render High-Resolution Dark Theme Chart
     plt.style.use('dark_background')
@@ -322,9 +334,9 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     bar_colors = ['#2ea44f' if p >= 0 else '#da3637' for p in daily_bars]
     ax_main.bar(date_labels, daily_bars, color=bar_colors, alpha=0.45, label='Daily P&L ($)', width=0.35)
 
-    # Main Panel: Bot Equity vs QQQ Benchmark
+    # Main Panel: Bot Equity vs Selected Benchmark
     ax_main.plot(date_labels, cum_pnls, color='#2ea44f', linewidth=3.2, marker='o', markersize=6, label='Bot Cumulative P&L ($)', zorder=4)
-    ax_main.plot(date_labels, qqq_dollars, color='#f0b429', linewidth=2.4, linestyle='--', marker='s', markersize=5, label='QQQ Benchmark ($)', zorder=3)
+    ax_main.plot(date_labels, bm_dollars, color=bm_color, linewidth=2.4, linestyle='--', marker='s', markersize=5, label=f'{bm_symbol} Benchmark ($)', zorder=3)
     ax_main.fill_between(date_labels, cum_pnls, 0, color='#2ea44f', alpha=0.12)
 
     ax_main.set_ylabel('Cumulative Return ($)', color='#f0f6fc', fontsize=10, fontweight='bold')
@@ -337,23 +349,23 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
         return f"${x:+,.2f} ({pct:+.1f}%)"
     ax_main.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
 
-    all_vals = cum_pnls + qqq_dollars + daily_bars
+    all_vals = cum_pnls + bm_dollars + daily_bars
     max_val = max(max(all_vals), 5.0)
     min_val = min(min(all_vals), -5.0)
     ax_main.set_ylim(min_val - 5.0, max_val + 12.0)
 
     # Summary metrics
     final_bot = cum_pnls[-1]
-    final_qqq = qqq_dollars[-1]
+    final_bm = bm_dollars[-1]
     final_alpha = alpha_dollars[-1]
     bot_pct = (final_bot / base_capital) * 100
-    qqq_pct = (final_qqq / base_capital) * 100
+    bm_pct = (final_bm / base_capital) * 100
     alpha_pct = (final_alpha / base_capital) * 100
 
     ann_text = (
-        f"Bot P&L : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
-        f"QQQ BM  : ${final_qqq:+,.2f} ({qqq_pct:+.2f}%)\n"
-        f"Alpha   : ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
+        f"Bot P&L   : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
+        f"{bm_symbol:<8}: ${final_bm:+,.2f} ({bm_pct:+.2f}%)\n"
+        f"Alpha     : ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
     )
     # Place card at upper-right with zorder=10 to guarantee NO graph line overlap
     ax_main.text(
@@ -368,7 +380,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     leg = ax_main.legend(loc='upper left', facecolor='#161b22', edgecolor='#30363d', fontsize=9, labelcolor='#c9d1d9')
     if leg:
         leg.set_zorder(10)
-    ax_main.set_title('AI QUANT BOT vs QQQ BENCHMARK (Day 1: 2026-08-14)', color='#f0f6fc', fontsize=12, fontweight='bold', pad=12)
+    ax_main.set_title(f'AI QUANT BOT vs {bm_symbol} BENCHMARK (Day 1: 2026-08-14)', color='#f0f6fc', fontsize=12, fontweight='bold', pad=12)
 
     # Bottom Panel: Alpha Excess Return Area
     ax_alpha.fill_between(date_labels, alpha_dollars, 0, where=[v >= 0 for v in alpha_dollars], color='#2ea44f', alpha=0.5, label='Alpha Outperformance (+)')
@@ -388,7 +400,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
 
     fig.subplots_adjust(top=0.92, bottom=0.10, left=0.10, right=0.92, hspace=0.25)
 
-    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_pnl_chart.png")
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"daily_pnl_chart_{bm_symbol.lower()}.png")
     if os.path.exists(out_path):
         try: os.remove(out_path)
         except Exception: pass
@@ -403,13 +415,13 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30) -> tuple[str, 
     current_unrealized = sum((p.get('current_price', p['avg_price']) - p['avg_price']) * p['quantity'] for p in current_trader_positions.values())
 
     caption_text = (
-        f"📊 <b>[AI 퀀트 봇 vs QQQ 벤치마크 Day 1 성과 리포트]</b>\n"
+        f"📊 <b>[AI 퀀트 봇 vs {bm_symbol} 벤치마크 Day 1 성과 리포트]</b>\n"
         f"📅 <b>출발 기준일</b>: <b>2026-08-14 (Day 1 시작)</b>\n"
         f"💰 <b>시작 원금</b>: <b>${base_capital:,.2f} USD</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🚀 <b>봇 총 평가 자산</b>: <b>${total_equity:,.2f} USD</b> (<b>{bot_pct:+.2f}%</b>)\n"
-        f"📈 <b>QQQ 벤치마크 자산</b>: <b>${(base_capital + final_qqq):,.2f} USD</b> (<b>{qqq_pct:+.2f}%</b>)\n"
-        f"🔥 <b>QQQ 대비 초과 수익 (Alpha)</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
+        f"📈 <b>{bm_symbol} ({bm_name})</b>: <b>${(base_capital + final_bm):,.2f} USD</b> (<b>{bm_pct:+.2f}%</b>)\n"
+        f"🔥 <b>{bm_symbol} 대비 초과 알파</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💡 <i>현재 보유 종목({held_symbols_str}) 미실현 손익: ${current_unrealized:+,.2f} USD 반영 완료</i>"
     )
