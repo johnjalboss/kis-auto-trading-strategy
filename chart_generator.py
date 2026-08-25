@@ -13,6 +13,7 @@ Core Rules:
 
 import os
 import sqlite3
+import threading
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -23,6 +24,8 @@ from datetime import datetime, date, timedelta
 from loguru import logger
 import yfinance as yf
 import pytz
+
+_matplotlib_lock = threading.Lock()
 
 DAY_ZERO_DATE = date(2026, 8, 14)
 INITIAL_CAPITAL_BASELINE = 766.49

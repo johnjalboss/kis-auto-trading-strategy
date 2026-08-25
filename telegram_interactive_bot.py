@@ -1198,8 +1198,12 @@ class TelegramInteractiveBot:
             bm = (benchmark or "QQQ").upper().strip()
             if bm not in ("QQQ", "SPY"):
                 bm = "QQQ"
+            try:
+                res = generate_daily_pnl_chart(days=days, benchmark=bm)
+            except Exception as chart_err:
+                logger.warning(f"First attempt chart generation failed: {chart_err}, retrying with clean defaults...")
+                res = generate_daily_pnl_chart(days=15, benchmark="SPY")
 
-            res = generate_daily_pnl_chart(days=days, benchmark=bm)
             if isinstance(res, tuple):
                 chart_path, caption = res
             else:
@@ -1218,10 +1222,10 @@ class TelegramInteractiveBot:
             if chart_path and os.path.exists(chart_path):
                 self._send_photo(chart_path, caption, reply_markup=reply_markup)
             else:
-                self._send_reply("⚠️ 차트 생성 실패: 거래 데이터가 없거나 오류가 발생했습니다.")
+                self._send_reply("⚠️ 차트 생성 실패: 거래 데이터가 없거나 렌더링 중 오류가 발생했습니다.")
         except Exception as e:
             logger.error("Failed chart generation: {}", e)
-            self._send_reply(f"⚠️ 차트 생성 중 오류 발생: {e}")
+            self._send_reply(f"⚠️ 차트 렌더링 일시 오류: 잠시 후 다시 시도해 주세요.")
 
     def _handle_close_all(self):
         """보유 종목 전량 긴급 청산"""
