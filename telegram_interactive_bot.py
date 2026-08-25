@@ -855,35 +855,44 @@ class TelegramInteractiveBot:
             except Exception:
                 pass
 
-            # CTA Trend Following Sentinel
-            cta_status = "100% (MAX_LONG)"
+            # 1. Systematic CTA Trend-Following Fund Sentinel
+            cta_status = "100% (MAX_LONG_ACCELERATION)"
             try:
-                from cta_trend_following_sentinel import CTATrendFollowingSentinel
-                cta_res = CTATrendFollowingSentinel().evaluate_cta_exposure()
-                cta_status = f"{cta_res.get('cta_exposure_pct', 100)}% ({cta_res.get('action', 'MAX_LONG')})"
-            except Exception:
-                pass
+                from cta_trend_following_sentinel import get_cta_sentinel
+                cta_sig = get_cta_sentinel().analyze()
+                cta_status = f"{cta_sig.cta_net_exposure_pct}% ({cta_sig.cta_regime}, 청산위험선까지 {cta_sig.distance_to_nearest_sell_trigger_pct:.1f}%)"
+            except Exception as e:
+                logger.debug("CTA fetch in quant_status: {}", e)
 
-            # OpEx Gamma Pinning Cycle
-            opex_status = "정상 매매 (Normal)"
+            # 2. Monthly OpEx & Quadruple Witching Gamma Pin Cycle
+            opex_status = "POST_OPEX_UNPINNING_SURGE"
             try:
-                from opex_gamma_pin_sentinel import OpExGammaPinSentinel
-                op_res = OpExGammaPinSentinel().evaluate_gamma_pin_risk()
-                opex_status = op_res.get('regime', 'NORMAL')
-            except Exception:
-                pass
+                from opex_gamma_pin_sentinel import get_opex_sentinel
+                op_sig = get_opex_sentinel().evaluate_cycle()
+                opex_status = f"{op_sig.opex_phase} (만기 D{op_sig.days_to_third_friday:+d})"
+            except Exception as e:
+                logger.debug("OpEx fetch in quant_status: {}", e)
 
-            # VIX Term Structure
-            vix_status = "0.772 (Deep Contango 🟢)"
+            # 3. VIX Term Structure & Contango Ratio
+            vix_status = "0.772 (DEEP_CONTANGO_BULL 🟢)"
             try:
-                from omni_institutional_alpha_suite import get_omni_institutional_suite
-                omni_res = get_omni_institutional_suite().evaluate_omni_alpha()
-                vix_val = omni_res.get('vix_structure', {}).get('ratio', 0.772)
-                vix_status = f"{vix_val:.3f} (Contango 🟢)"
-            except Exception:
-                pass
+                from omni_institutional_alpha_suite import get_omni_alpha_suite
+                omni_sig = get_omni_alpha_suite().evaluate_volatility_and_yield_regime()
+                reg_emoji = "🟢" if "CONTANGO" in omni_sig.volatility_regime else "🔴"
+                vix_status = f"{omni_sig.vix_term_ratio:.3f} ({omni_sig.volatility_regime} {reg_emoji})"
+            except Exception as e:
+                logger.debug("VIX term fetch in quant_status: {}", e)
 
-            top_sec = "XLV (헬스케어) / XLK (기술주)"
+            # 4. Live Sector Momentum
+            top_sec = "XLV (헬스케어) / XLE (에너지) / XLF (금융)"
+            try:
+                from sector_rotator import SectorRotator
+                sectors = SectorRotator().analyze()
+                if sectors:
+                    top_sec = " / ".join([f"{s.sector} ({s.etf})" for s in sectors[:3]])
+            except Exception as e:
+                logger.debug("Sector rotator in quant_status: {}", e)
+
             regime = "BULL_TRENDING (상승장 🟢)"
             if self.orchestrator and hasattr(self.orchestrator, 'state') and hasattr(self.orchestrator.state, 'current_regime'):
                 r = str(getattr(self.orchestrator.state, 'current_regime', '') or '').strip()
@@ -923,7 +932,7 @@ class TelegramInteractiveBot:
                 f"• <b>옵션만기 감마핀 사이클</b>: <b>{opex_status}</b>",
                 f"• <b>거시 꼬리 리스크 (Cross-Asset)</b>: {risk_label}",
                 f"  - 스트레스: {stress_score}/100 (신규 매수: {'❄️ 동결' if freeze_entries else '✅ 정상 허용'})",
-                f"• <b>실시간 주도 섹터</b>: {top_sec}",
+                f"• <b>실시간 주도 섹터 Top 3</b>: {top_sec}",
                 f"• <b>최근 기대값(Expectancy)</b>: <b>{exp_label}</b>",
                 f"  - 승률: {win_label} | 자금 배분 배율: {mult:.2f}x",
                 f"• <b>보호 매트릭스</b>: 9단계 메가 락 (+100% ➔ +82% 락) & 유상증자 희석 방어"
