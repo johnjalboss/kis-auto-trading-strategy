@@ -159,15 +159,15 @@ class DynamicScreener:
             logger.error("Failed to inject local smart money candidates: {}", sm_err)
 
 
-        # 🚀 Inject 3,500+ US Stock Bulk Universe Expander candidates (v7.0)
+        # 🚀 Inject 3,500+ US Stock Bulk Universe Expander candidates (v8.0 Full Market)
         try:
             from universe_expander import UniverseExpander
-            expander_cands = UniverseExpander().get_top_super_candidates(top_n=80)
+            expander_cands = UniverseExpander().get_top_super_candidates(top_n=200)
             if expander_cands:
-                logger.info("🚀 [v7.0 BULK_EXPANDER] Scanned 3,500+ US Market stocks. Injecting Top {} Super-Candidates.", len(expander_cands))
+                logger.info("🚀 [v8.0 BULK_EXPANDER] Scanned 3,000+ US Market stocks. Injecting Top {} Super-Candidates.", len(expander_cands))
                 candidates = list(dict.fromkeys(expander_cands + candidates))
         except Exception as _exp_err:
-            logger.error("Failed to inject 3,500+ universe expander candidates: {}", _exp_err)
+            logger.error("Failed to inject 3,000+ universe expander candidates: {}", _exp_err)
 
         # 🎯 Inject Theme Radar recommended candidates (Top picks)
         try:
@@ -207,7 +207,7 @@ class DynamicScreener:
             cs_filter = CrossSectionalMomentum(top_percentile=0.90)
             # Create DF map for candidates
             cand_dfs = {}
-            for c in candidates[:60]:
+            for c in candidates[:80]:
                 df_c = self._fetch_ohlcv(c, period_days=120)
                 if df_c is not None and not df_c.empty:
                     cand_dfs[c] = df_c
@@ -244,12 +244,9 @@ class DynamicScreener:
         # OHLCV downloads are I/O-bound but KIS API enforces rate limits;
         # 16 concurrent threads cause 429 bursts. 8 workers is the sweet spot.
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:350]}
+            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:500]}
             try:
-                # Increased timeout 90s→150s: 100 candidates × KIS download.
-                # Each KIS call can take up to 2-3s; at 8 workers, 100 symbols = ~37s min.
-                # 150s gives 4× headroom for slow API responses on VPS.
-                for future in concurrent.futures.as_completed(futures, timeout=150):
+                for future in concurrent.futures.as_completed(futures, timeout=180):
                     try:
                         result = future.result()
                         if result:
@@ -257,11 +254,11 @@ class DynamicScreener:
                     except Exception as e:
                         logger.debug("Preliminary scoring future failed: {}", e)
             except concurrent.futures.TimeoutError:
-                logger.warning("Preliminary screener scoring timed out (150s limit)")
+                logger.warning("Preliminary screener scoring timed out (180s limit)")
 
-        # Sort by preliminary score and take the top 50 for full scoring
+        # Sort by preliminary score and take the top 75 for full scoring
         preliminary_scored.sort(key=lambda x: x.total_score, reverse=True)
-        top_candidates = [s.symbol for s in preliminary_scored[:50]]
+        top_candidates = [s.symbol for s in preliminary_scored[:75]]
         
         # Pass 2: Full event-driven scoring (calls Finnhub APIs) on top 50 candidates
         scored = []
