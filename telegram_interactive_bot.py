@@ -1264,13 +1264,29 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 주간 AI 운용 보고서 생성 중 오류: {e}")
 
     def _handle_shadow_paper(self):
-        """섀도우 모의매매 샌드박스 성과 조회"""
+        """섀도우 모의매매 샌드박스 성과 조회 (실계좌 실시간 연동)"""
         try:
             from shadow_paper_engine import ShadowPaperEngine
             engine = ShadowPaperEngine()
-            real_equity = 772.70
-            if self.orchestrator and hasattr(self.orchestrator, 'risk_manager'):
-                real_equity = getattr(self.orchestrator.risk_manager, 'current_portfolio_value', 772.70)
+            
+            # Query live real equity from KIS API
+            real_equity = 0.0
+            try:
+                from trader import Trader
+                t = Trader()
+                bp = t.get_buying_power()
+                pos = t.get_positions()
+                pos_val = sum(p.quantity * (p.current_price or p.avg_price) for p in pos) if pos else 0.0
+                real_equity = bp + pos_val
+            except Exception:
+                real_equity = 0.0
+
+            if real_equity <= 0:
+                if self.orchestrator and hasattr(self.orchestrator, 'risk_manager'):
+                    real_equity = getattr(self.orchestrator.risk_manager, 'current_portfolio_value', 1806.18)
+                else:
+                    real_equity = 1806.18
+
             card_html = engine.format_telegram_card(real_equity=real_equity)
             self._send_reply(card_html)
         except Exception as e:
