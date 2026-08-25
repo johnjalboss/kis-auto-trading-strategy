@@ -302,6 +302,30 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
         daily_bars.append(round(daily_change, 2))
         prev_total_pnl = total_pnl_on_day
 
+    # 6. GIPS Unit NAV (Time-Weighted Return) Calculation to eliminate both Cash Drag and Denominator Inflation
+    current_total_equity = base_capital
+    try:
+        from trader import Trader
+        _tr_inst = Trader()
+        _bp = _tr_inst.get_buying_power()
+        _pos_val = sum(p.current_price * p.quantity for p in _tr_inst.get_positions())
+        if _bp + _pos_val > 500:
+            current_total_equity = _bp + _pos_val
+    except Exception:
+        pass
+
+    nav_series = []
+    current_nav = 1.0
+    for i, d_str in enumerate(date_strs):
+        d_dt = pd.to_datetime(d_str).date()
+        active_cap = base_capital if d_dt < date(2026, 8, 25) else current_total_equity
+        d_pnl_change = daily_bars[i]
+        daily_r = (d_pnl_change / active_cap) if active_cap > 0 else 0.0
+        current_nav = current_nav * (1.0 + daily_r)
+        nav_series.append(current_nav)
+
+    total_twr_pct = (nav_series[-1] - 1.0) * 100 if nav_series else 0.0
+
     bm_symbol = (benchmark or "QQQ").upper().strip()
     if bm_symbol not in ("QQQ", "SPY"):
         bm_symbol = "QQQ"
@@ -354,13 +378,13 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     min_val = min(min(all_vals), -5.0)
     ax_main.set_ylim(min_val - 5.0, max_val + 12.0)
 
-    # Summary metrics
+    # Summary metrics (GIPS Time-Weighted Return)
     final_bot = cum_pnls[-1]
     final_bm = bm_dollars[-1]
     final_alpha = alpha_dollars[-1]
-    bot_pct = (final_bot / base_capital) * 100
+    bot_pct = total_twr_pct
     bm_pct = (final_bm / base_capital) * 100
-    alpha_pct = (final_alpha / base_capital) * 100
+    alpha_pct = bot_pct - bm_pct
 
     ann_text = (
         f"Bot P&L   : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
