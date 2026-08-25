@@ -180,9 +180,12 @@ class Position:
     atr_at_entry: float
     half_sold: bool = False
     high_since_entry: float = 0.0
+    low_since_entry: float = 0.0
     stop_price: float = 0.0
     trailing_stop: float = 0.0
     phase_at_entry: MarketPhase = MarketPhase.MIDDAY
+    spread_at_entry: float = 0.0
+    quant_score_at_entry: int = 50
 
 
 # ==============================================
@@ -948,14 +951,16 @@ class StrategyEngine:
             logger.error("🚨 [DATA_GLITCH_GUARD] Price is 0 for {}. Aborting exit check to prevent false stop-loss!", symbol)
             return ExitSignal("HOLD", "Data glitch: Price unavailable", 0)
         
-        # Update tracking
+        # Update tracking (MFE & MAE)
         old_high = pos.high_since_entry
+        old_low = getattr(pos, 'low_since_entry', pos.entry_price)
         pos.high_since_entry = max(pos.high_since_entry, price)
-        if pos.high_since_entry != old_high:
+        pos.low_since_entry = min(old_low, price) if old_low > 0 else price
+        if pos.high_since_entry != old_high or pos.low_since_entry != old_low:
             try:
                 from database import get_database
                 db_mgr = get_database()
-                db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price)
+                db_mgr.update_position_tracking(symbol, pos.high_since_entry, pos.stop_price, low_since_entry=pos.low_since_entry)
             except Exception as e:
                 logger.warning("⚠️ [strategy.py] Fallback triggered: {}", e)
         pnl_pct = (price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
@@ -1480,13 +1485,14 @@ class StrategyEngine:
             entry_time=datetime.now(),
             atr_at_entry=atr,
             high_since_entry=entry_price,
+            low_since_entry=entry_price,
             stop_price=stop_price,
             trailing_stop=entry_price,
             phase_at_entry=get_market_phase()
         )
         try:
             db_mgr = get_database()
-            db_mgr.update_position_tracking(symbol, entry_price, stop_price)
+            db_mgr.update_position_tracking(symbol, entry_price, stop_price, low_since_entry=entry_price)
         except Exception as e:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", e)
         logger.info("Position added: {} @ ${:.2f}, stop ${:.2f}", 
@@ -1568,12 +1574,17 @@ class StrategyEngine:
                                 true_entry_time = db_entry_time
                                 logger.info("Recovered true entry time for {}: {}", symbol, true_entry_time)
                                 
-                            # Recover tracking values (high_since_entry, stop_price) to prevent state loss on restart
+                            # Recover tracking values (high_since_entry, low_since_entry, stop_price) to prevent state loss on restart
                             db_high = db_pos.get('high_since_entry', 0.0)
+                            db_low = db_pos.get('low_since_entry', 0.0)
                             db_stop = db_pos.get('stop_price', 0.0)
                             if db_high and db_high > pos.avg_price * 0.5:
                                 true_high = max(true_high, db_high)
                                 logger.info("Recovered true high since entry for {}: ${:.2f}", symbol, true_high)
+                            true_low = pos.avg_price
+                            if db_low and db_low > pos.avg_price * 0.5:
+                                true_low = db_low
+                                logger.info("Recovered true low since entry for {}: ${:.2f}", symbol, true_low)
                             if db_stop and db_stop > pos.avg_price * 0.5:
                                 stop_price = db_stop
                                 logger.info("Recovered stop price from DB for {}: ${:.2f}", symbol, stop_price)
@@ -1599,6 +1610,7 @@ class StrategyEngine:
                     entry_time=true_entry_time,
                     atr_at_entry=atr,
                     high_since_entry=true_high,
+                    low_since_entry=true_low if 'true_low' in locals() else pos.avg_price,
                     stop_price=stop_price,
                     trailing_stop=pos.avg_price,
                     phase_at_entry=get_market_phase()

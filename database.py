@@ -29,6 +29,10 @@ class TradeRecord:
     pnl_pct: float = 0.0
     reason: str = ""
     regime: str = ""
+    mfe_pct: float = 0.0
+    mae_pct: float = 0.0
+    holding_minutes: float = 0.0
+    spread_at_entry: float = 0.0
 
 
 @dataclass
@@ -149,6 +153,22 @@ class TradeDatabase:
                 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
             """)
             
+            # Migration for trades and trade_details tables
+            try:
+                t_cols = [x[1] for x in conn.execute("PRAGMA table_info(trades)").fetchall()]
+                if "mfe_pct" not in t_cols:
+                    conn.execute("ALTER TABLE trades ADD COLUMN mfe_pct REAL DEFAULT 0.0")
+                if "mae_pct" not in t_cols:
+                    conn.execute("ALTER TABLE trades ADD COLUMN mae_pct REAL DEFAULT 0.0")
+                if "holding_minutes" not in t_cols:
+                    conn.execute("ALTER TABLE trades ADD COLUMN holding_minutes REAL DEFAULT 0.0")
+                if "spread_at_entry" not in t_cols:
+                    conn.execute("ALTER TABLE trades ADD COLUMN spread_at_entry REAL DEFAULT 0.0")
+                if "quant_score_at_entry" not in t_cols:
+                    conn.execute("ALTER TABLE trades ADD COLUMN quant_score_at_entry INTEGER DEFAULT 50")
+            except Exception as _t_mig_err:
+                logger.debug("trades schema migration: {}", _t_mig_err)
+
             # positions 테이블의 컬럼 호환성 및 트레일링 스탑 상태 컬럼 마이그레이션
             try:
                 existing_cols = [x[1] for x in conn.execute("PRAGMA table_info(positions)").fetchall()]
@@ -160,6 +180,8 @@ class TradeDatabase:
                     conn.execute("UPDATE positions SET entry_price = avg_price WHERE entry_price = 0.0 OR entry_price IS NULL")
                 if "high_since_entry" not in existing_cols:
                     conn.execute("ALTER TABLE positions ADD COLUMN high_since_entry REAL DEFAULT 0.0")
+                if "low_since_entry" not in existing_cols:
+                    conn.execute("ALTER TABLE positions ADD COLUMN low_since_entry REAL DEFAULT 0.0")
                 if "stop_price" not in existing_cols:
                     conn.execute("ALTER TABLE positions ADD COLUMN stop_price REAL DEFAULT 0.0")
             except Exception as e:
@@ -172,23 +194,23 @@ class TradeDatabase:
     # ==============================================
     
     def record_entry(self, symbol: str, quantity: int, price: float,
-                    regime: str = "") -> int:
-        """Record trade entry"""
+                    regime: str = "", spread_at_entry: float = 0.0, quant_score: int = 50) -> int:
+        """Record trade entry with spread and initial quant score"""
         total = quantity * price
         with self._get_conn() as conn:
             cursor = conn.execute("""
-                INSERT INTO trades (symbol, side, quantity, price, total, entry_time, regime)
-                VALUES (?, 'BUY', ?, ?, ?, ?, ?)
-            """, (symbol, quantity, price, total, datetime.now(), regime))
+                INSERT INTO trades (symbol, side, quantity, price, total, entry_time, regime, spread_at_entry, quant_score_at_entry)
+                VALUES (?, 'BUY', ?, ?, ?, ?, ?, ?, ?)
+            """, (symbol, quantity, price, total, datetime.now(), regime, spread_at_entry, quant_score))
             trade_id = cursor.lastrowid
             
-            # Update positions
+            # Update positions with high and low tracking initialized
             conn.execute("""
-                INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, entry_time, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (symbol, quantity, price, datetime.now(), datetime.now()))
+                INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, entry_time, updated_at, high_since_entry, low_since_entry)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (symbol, quantity, price, datetime.now(), datetime.now(), price, price))
             
-        logger.debug("Recorded entry: {} x {} @ ${:.2f}", symbol, quantity, price)
+        logger.debug("Recorded entry: {} x {} @ ${:.2f} (Spread: {:.3f}%, Score: {})", symbol, quantity, price, spread_at_entry * 100, quant_score)
         return trade_id
 
     def update_position(self, symbol: str, quantity: int, avg_price: float):
@@ -198,8 +220,6 @@ class TradeDatabase:
                 conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
                 logger.debug("Removed position via update: {}", symbol)
             else:
-                # [CRITICAL FIX] 기존에는 INSERT OR REPLACE를 사용하여 기존 entry_time을 NULL로 덮어쓰고 있었음.
-                # 이로 인해 매 재시작마다 보유 시간이 0으로 초기화되어 업그레이드(교체매매) 로직이 영구 작동 불능 상태였음.
                 row = conn.execute("SELECT entry_time FROM positions WHERE symbol = ?", (symbol,)).fetchone()
                 now_dt = datetime.now()
                 if row and row[0] is not None:
@@ -209,33 +229,43 @@ class TradeDatabase:
                     """, (quantity, avg_price, now_dt, symbol))
                 else:
                     conn.execute("""
-                        INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, entry_time, updated_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (symbol, quantity, avg_price, now_dt, now_dt))
+                        INSERT OR REPLACE INTO positions (symbol, quantity, avg_price, entry_time, updated_at, high_since_entry, low_since_entry)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (symbol, quantity, avg_price, now_dt, now_dt, avg_price, avg_price))
                 logger.debug("Updated position via sync: {} x {} @ ${:.2f}", symbol, quantity, avg_price)
                 
-    def update_position_tracking(self, symbol: str, high_since_entry: float, stop_price: float):
-        """Update position tracking values (high_since_entry, stop_price) to prevent state loss on restart"""
+    def update_position_tracking(self, symbol: str, high_since_entry: float, stop_price: float, low_since_entry: float = None):
+        """Update position tracking values (high_since_entry, low_since_entry, stop_price) to prevent state loss on restart"""
         with self._get_conn() as conn:
-            conn.execute("""
-                UPDATE positions 
-                SET high_since_entry = ?, stop_price = ?, updated_at = ?
-                WHERE symbol = ?
-            """, (high_since_entry, stop_price, datetime.now(), symbol))
-        logger.debug("Updated position tracking: {} (High: ${:.2f}, Stop: ${:.2f})", symbol, high_since_entry, stop_price)
+            if low_since_entry is not None and low_since_entry > 0:
+                conn.execute("""
+                    UPDATE positions 
+                    SET high_since_entry = ?, low_since_entry = ?, stop_price = ?, updated_at = ?
+                    WHERE symbol = ?
+                """, (high_since_entry, low_since_entry, stop_price, datetime.now(), symbol))
+            else:
+                conn.execute("""
+                    UPDATE positions 
+                    SET high_since_entry = ?, stop_price = ?, updated_at = ?
+                    WHERE symbol = ?
+                """, (high_since_entry, stop_price, datetime.now(), symbol))
+        logger.debug("Updated position tracking: {} (High: ${:.2f}, Low: ${:.2f}, Stop: ${:.2f})",
+                     symbol, high_since_entry, low_since_entry or 0.0, stop_price)
     
     def record_exit(self, symbol: str, quantity: int, price: float,
-                   entry_price: float, reason: str = "") -> int:
-        """Record trade exit with P&L"""
+                   entry_price: float, reason: str = "",
+                   mfe_pct: float = 0.0, mae_pct: float = 0.0,
+                   holding_minutes: float = 0.0) -> int:
+        """Record trade exit with P&L, MFE, MAE, and holding minutes"""
         total = quantity * price
         pnl = (price - entry_price) * quantity
         pnl_pct = (price - entry_price) / entry_price if entry_price > 0 else 0
         
         with self._get_conn() as conn:
             cursor = conn.execute("""
-                INSERT INTO trades (symbol, side, quantity, price, total, exit_time, pnl, pnl_pct, reason)
-                VALUES (?, 'SELL', ?, ?, ?, ?, ?, ?, ?)
-            """, (symbol, quantity, price, total, datetime.now(), pnl, pnl_pct, reason))
+                INSERT INTO trades (symbol, side, quantity, price, total, exit_time, pnl, pnl_pct, reason, mfe_pct, mae_pct, holding_minutes)
+                VALUES (?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (symbol, quantity, price, total, datetime.now(), pnl, pnl_pct, reason, mfe_pct, mae_pct, holding_minutes))
             trade_id = cursor.lastrowid
             
             # Check remaining quantity in positions table
@@ -248,8 +278,8 @@ class TradeDatabase:
             else:
                 conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
             
-        logger.debug("Recorded exit: {} x {} @ ${:.2f} (P&L: ${:.2f})", 
-                    symbol, quantity, price, pnl)
+        logger.info("Recorded exit: {} x {} @ ${:.2f} (P&L: ${:.2f} / {:+.2%}, MFE: {:+.1%}, MAE: {:+.1%}, Hold: {:.0f}m)", 
+                    symbol, quantity, price, pnl, pnl_pct, mfe_pct, mae_pct, holding_minutes)
         return trade_id
     
     def get_trades_today(self, target_date: date = None) -> List[TradeRecord]:
@@ -316,28 +346,32 @@ class TradeDatabase:
                 logger.debug("trades query in get_trades_range skipped: {}", tr_err)
         
         return trades_list
-    
+
     def _row_to_trade(self, row) -> TradeRecord:
-        """Convert database row to TradeRecord"""
-        
+        """Convert database row to TradeRecord safely"""
         def parse_dt(dt_str):
             if not dt_str: return None
             try: return datetime.fromisoformat(dt_str)
             except Exception: return dt_str
 
+        keys = row.keys() if hasattr(row, 'keys') else []
         return TradeRecord(
-            id=row['id'],
-            symbol=row['symbol'],
-            side=row['side'],
-            quantity=row['quantity'],
-            price=row['price'],
-            total=row['total'],
-            entry_time=parse_dt(row['entry_time']),
-            exit_time=parse_dt(row['exit_time']),
-            pnl=row['pnl'] or 0,
-            pnl_pct=row['pnl_pct'] or 0,
-            reason=row['reason'] or "",
-            regime=row['regime'] or ""
+            id=row['id'] if 'id' in keys else None,
+            symbol=row['symbol'] if 'symbol' in keys else "",
+            side=row['side'] if 'side' in keys else "",
+            quantity=row['quantity'] if 'quantity' in keys else 0,
+            price=row['price'] if 'price' in keys else 0.0,
+            total=row['total'] if 'total' in keys else 0.0,
+            entry_time=parse_dt(row['entry_time']) if 'entry_time' in keys else None,
+            exit_time=parse_dt(row['exit_time']) if 'exit_time' in keys else None,
+            pnl=float(row['pnl'] or 0.0) if 'pnl' in keys else 0.0,
+            pnl_pct=float(row['pnl_pct'] or 0.0) if 'pnl_pct' in keys else 0.0,
+            reason=row['reason'] if 'reason' in keys else "",
+            regime=row['regime'] if 'regime' in keys else "",
+            mfe_pct=float(row['mfe_pct'] or 0.0) if 'mfe_pct' in keys else 0.0,
+            mae_pct=float(row['mae_pct'] or 0.0) if 'mae_pct' in keys else 0.0,
+            holding_minutes=float(row['holding_minutes'] or 0.0) if 'holding_minutes' in keys else 0.0,
+            spread_at_entry=float(row['spread_at_entry'] or 0.0) if 'spread_at_entry' in keys else 0.0
         )
     
     # ==============================================

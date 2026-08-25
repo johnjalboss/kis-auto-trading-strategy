@@ -1942,7 +1942,8 @@ class BotOrchestrator:
                         atr = self.strategy.get_current_atr(symbol)
                         self.strategy.add_position(symbol, fill_price, fill_qty, atr)
                         try:
-                            self.db.record_entry(symbol, fill_qty, fill_price, self.state.current_regime)
+                            score = getattr(self.strategy, '_last_scores', {}).get(symbol, 80)
+                            self.db.record_entry(symbol, fill_qty, fill_price, self.state.current_regime, quant_score=score)
                         except Exception as db_err:
                             logger.error("Failed to record entry in DB for {}: {}", symbol, db_err)
                             
@@ -1967,9 +1968,19 @@ class BotOrchestrator:
                     else:
                         # Get actual entry price before removing position to calculate PNL correctly
                         entry_price = fill_price  # fallback
+                        mfe_pct = 0.0
+                        mae_pct = 0.0
+                        holding_minutes = 0.0
                         if symbol in self.strategy._positions:
                             pos = self.strategy._positions[symbol]
                             entry_price = pos.entry_price
+                            if pos.entry_price > 0:
+                                high_p = max(getattr(pos, 'high_since_entry', pos.entry_price), fill_price)
+                                low_p = min(getattr(pos, 'low_since_entry', pos.entry_price), fill_price)
+                                mfe_pct = (high_p - pos.entry_price) / pos.entry_price
+                                mae_pct = (low_p - pos.entry_price) / pos.entry_price
+                            if pos.entry_time:
+                                holding_minutes = (datetime.now() - pos.entry_time).total_seconds() / 60.0
                             
                             # Handle partial sells properly without losing entry tracking
                             if fill_qty < pos.quantity:
@@ -1984,7 +1995,8 @@ class BotOrchestrator:
                                     logger.error("[QUANT_RISK] Failed to remove from RiskManager: {}", rm_err)
                         
                         try:
-                            self.db.record_exit(symbol, fill_qty, fill_price, entry_price, reason)
+                            self.db.record_exit(symbol, fill_qty, fill_price, entry_price, reason,
+                                                mfe_pct=mfe_pct, mae_pct=mae_pct, holding_minutes=holding_minutes)
                         except Exception as db_err:
                             logger.error("Failed to record exit in DB for {}: {}", symbol, db_err)
                         

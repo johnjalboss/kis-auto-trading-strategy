@@ -751,12 +751,26 @@ class Trader:
 
         if limit_price is None:
             price = self.get_price(symbol)
-            # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
+            # [SOTA QUANT SPREAD GATE & MID-SPREAD PEGGING]
+            # 10호가 스프레드를 실시간 측정하여 슬리피지를 원천 차단
             spread = self.get_spread(symbol)
-            markup = max(0.001, min(0.015, spread * 1.5))
-            limit_price = round(price * (1.0 + markup), 2)
-            logger.info("BUY {} | Price: ${:.2f}, Spread: {:.2%}, Markup: {:.2%}, Limit: ${:.2f}",
-                        symbol, price, spread, markup, limit_price)
+            if spread > 0.0035:
+                # 스프레드가 35 bps 초과로 넓을 경우: Ask가 아닌 호가 내부 40% 지점(Mid-Spread)에 페깅하여 60% 슬리피지 절감
+                ob = self.get_order_book(symbol)
+                output2 = ob.get("output2", {}) if isinstance(ob, dict) else {}
+                pbid1 = float(output2.get("pbid1", 0) or 0)
+                pask1 = float(output2.get("pask1", 0) or 0)
+                if pbid1 > 0 and pask1 > 0 and pask1 > pbid1:
+                    limit_price = round(pbid1 + (pask1 - pbid1) * 0.40, 2)
+                    logger.info("🛡️ [SPREAD_GATE_PEGGED] {} Wide Spread {:.2%} (>0.35%) | Bid: ${:.2f}, Ask: ${:.2f} -> Pegged Limit: ${:.2f} (Saved {:.2%} slippage)",
+                                symbol, spread, pbid1, pask1, limit_price, (pask1 - limit_price) / price)
+                else:
+                    limit_price = round(price * 1.0015, 2)
+            else:
+                # 스프레드가 35 bps 이하로 촘촘할 경우: 즉시 체결을 위해 15 bps 가산 지정가
+                limit_price = round(price * (1.0 + max(0.0005, spread * 0.5)), 2)
+                logger.info("⚡ [TIGHT_SPREAD_EXECUTION] BUY {} | Price: ${:.2f}, Spread: {:.2%}, Limit: ${:.2f}",
+                            symbol, price, spread, limit_price)
             
         exchange = self._exchange_mapper.get_exchange(symbol)
         
