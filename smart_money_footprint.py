@@ -80,10 +80,12 @@ class SmartMoneyFootprint:
             except Exception:
                 pass
 
-            # 4. Institutional Sponsorship Alpha (0.0 to +5.0 pts)
+            # 4. Institutional Sponsorship Alpha (Gaussian Sweet-Spot Curve, 0.0 to +5.0 pts)
+            # Maximum alpha in optimal 55%-78% accumulation zone; over-saturated (>85%) gets crowded trade dampener
             inst_raw = result["institutional_pct"]
-            inst_calc = min(100.0, inst_raw)
-            inst_bonus = float(5.0 * np.tanh(max(0.0, inst_calc - 40.0) / 30.0))
+            inst_calc = min(100.0, max(0.0, inst_raw))
+            phi_inst = float(np.exp(-((inst_calc - 68.0) ** 2) / (2 * (22.0 ** 2))))
+            inst_bonus = float(5.0 * phi_inst)
 
             # 5. Asymmetric Short Squeeze Condition (-3.5 to +3.0 pts)
             short_val = result["short_pct"]
@@ -114,17 +116,21 @@ class SmartMoneyFootprint:
 
             tags = []
             if inst_raw >= 100.0:
-                tags.append(f"기관 100% 초과 포화(13F 중복 {inst_raw}%)")
-            elif inst_raw >= 70.0:
+                tags.append(f"기관 포화 100%+ (과밀 리스크 감쇄 +{inst_bonus:.1f}pt)")
+            elif 55.0 <= inst_raw <= 78.0:
+                tags.append(f"기관 최적 스폰서십 골든존(지분 {inst_raw}%)")
+            elif inst_raw >= 80.0:
                 tags.append(f"기관 집중 매집(지분 {inst_raw}%)")
-            elif inst_raw >= 50.0:
-                tags.append("기관 스폰서십 안착")
+            elif inst_raw >= 40.0:
+                tags.append(f"기관 지분 유입 안정권(지분 {inst_raw}%)")
             tags.append(short_tag)
 
             result["signal_tag"] = " | ".join(tags)
             
             if inst_raw >= 100.0:
-                result["summary"] = f"기관지분 100% 포화 (13F 대여중복 {inst_raw:.1f}%, +{inst_bonus:.1f}pt) / {short_tag}"
+                result["summary"] = f"기관지분 100% 포화 (과밀 감쇄 적용 +{inst_bonus:.1f}pt) / {short_tag}"
+            elif 55.0 <= inst_raw <= 78.0:
+                result["summary"] = f"기관지분 {inst_raw:.1f}% (최적 골든존 +{inst_bonus:.1f}pt) / {short_tag}"
             else:
                 result["summary"] = f"기관지분 {inst_raw:.1f}% (+{inst_bonus:.1f}pt) / {short_tag}"
 

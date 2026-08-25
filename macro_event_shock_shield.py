@@ -147,13 +147,15 @@ class MacroEventShockShield:
         
         status_tag = "🔴 <b>신규 매수 일시 동결 (SHOCK SHIELD ACTIVE)</b>" if st["is_blackout_active"] else "🟢 <b>정상 매매 허용 (안전 구간)</b>"
 
+        buffer_desc = "<code>+0.0%</code> (평시 정상 상태)" if not st["is_blackout_active"] else "<code>+1.0%</code> 🛡️ (지표 발표 알고리즘 휩소 방어 쿠션 작동 중)"
+
         lines = [
             "⏰ <b>[거시경제 지표 발표 충격 쉴드 리포트]</b>",
             "<i>Macro Shock & Whipsaw Anti-Spike Sentinel</i>",
             "━━━━━━━━━━━━━━━━━━━",
             f"🛡️ <b>현재 상태:</b> {status_tag}",
             f"📝 <b>진단:</b> <i>{st['reason']}</i>",
-            f"⚡️ <b>스탑로스 완충 버퍼:</b> <code>+{st['stop_cushion_pct']*100:.1f}%</code>",
+            f"⚡️ <b>스탑로스 완충 버퍼:</b> {buffer_desc}",
             "━━━━━━━━━━━━━━━━━━━",
             "📅 <b>다가오는 핵심 거시 이벤트 (D-7)</b>:"
         ]
@@ -165,7 +167,7 @@ class MacroEventShockShield:
             lines.append("  • <i>7일 이내 예정된 초특급 충격 이벤트 없음</i>")
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
-        lines.append("💡 <i>CPI/FOMC 발표 전후 15분간 알고리즘 휩소에 의한 불필요한 손절과 뇌동매매를 원천 차단합니다.</i>")
+        lines.append("💡 <i>CPI/FOMC 지표 발표 전후 15분간 알고리즘 휩소(1분봉 급등락) 방어를 위해 신규 매수를 동결하고 스탑로스를 +1.0% 임시 완충합니다.</i>")
 
         return "\n".join(lines)
 
