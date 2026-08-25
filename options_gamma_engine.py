@@ -198,6 +198,12 @@ class OptionsGammaEngine:
             gex_regime = "POSITIVE_GAMMA" if is_pos_gamma else "NEGATIVE_GAMMA"
             vol_profile = "LOW_VOLATILITY_UPTREND" if is_pos_gamma else "HIGH_VOLATILITY_EXPANSION"
 
+            nearest_exp = target_exps[0] if target_exps else datetime.now().strftime("%Y-%m-%d")
+            try:
+                dte_calc = max(0, (datetime.strptime(nearest_exp, "%Y-%m-%d").date() - datetime.now().date()).days)
+            except Exception:
+                dte_calc = 3
+
             result = {
                 "symbol": symbol,
                 "current_price": round(current_price, 2),
@@ -207,6 +213,8 @@ class OptionsGammaEngine:
                 "gamma_flip_level": round(gamma_flip, 2),
                 "call_wall_dist_pct": round((call_wall - current_price) / current_price * 100, 2),
                 "put_wall_dist_pct": round((put_wall - current_price) / current_price * 100, 2),
+                "nearest_expiration": nearest_exp,
+                "dte_days": dte_calc,
                 "gex_regime": gex_regime,
                 "volatility_profile": vol_profile,
                 "is_synthetic": False

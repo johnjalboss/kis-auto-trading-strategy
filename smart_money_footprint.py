@@ -60,10 +60,13 @@ class SmartMoneyFootprint:
                 except Exception:
                     pass
 
-            # 2. Short Interest % of Float
+            # 2. Short Interest % of Float & Days to Cover (DTC / 공매도 상환 소요일수)
             short_pct = info.get("shortPercentOfFloat", None)
             if short_pct is not None and float(short_pct) > 0:
                 result["short_pct"] = round(float(short_pct) * 100, 1)
+
+            dtc = float(info.get("shortRatio", 0.0) or 0.0)
+            result["days_to_cover"] = round(dtc, 1)
 
             # 3. Technical Trend & Momentum Check for Asymmetric Short Conditioning
             is_above_sma20 = True
@@ -87,28 +90,30 @@ class SmartMoneyFootprint:
             phi_inst = float(np.exp(-((inst_calc - 68.0) ** 2) / (2 * (22.0 ** 2))))
             inst_bonus = float(5.0 * phi_inst)
 
-            # 5. Asymmetric Short Squeeze Condition (-3.5 to +3.0 pts)
+            # 5. Asymmetric Short Squeeze & Short Covering Dynamics (-3.5 to +4.0 pts)
             short_val = result["short_pct"]
+            dtc_str = f"DTC {dtc:.1f}일" if dtc > 0 else "DTC 정상"
+
             if short_val >= 15.0:
                 if is_above_sma20 and is_momentum_pos:
-                    short_bonus = +3.0
-                    short_tag = f"🔥 상승돌파 숏스퀴즈 점화 (공매도 {short_val:.1f}%, +3.0pt)"
+                    short_bonus = +4.0 if dtc >= 4.0 else +3.0
+                    short_tag = f"🔥 상승돌파 숏스퀴즈 점화 (공매도 {short_val:.1f}%, {dtc_str}, +{short_bonus:.1f}pt)"
                 else:
                     short_bonus = -3.5
-                    short_tag = f"⚠️ 하락추세 공매도 압박 (공매도 {short_val:.1f}%, -3.5pt)"
+                    short_tag = f"⚠️ 하락추세 공매도 압박 (공매도 {short_val:.1f}%, {dtc_str}, -3.5pt)"
             elif short_val >= 8.0:
                 if is_above_sma20:
-                    short_bonus = +1.5
-                    short_tag = f"숏커버링 잠재력 (공매도 {short_val:.1f}%, +1.5pt)"
+                    short_bonus = +2.5 if dtc >= 4.0 else +1.5
+                    short_tag = f"⚡ 숏커버링 상환 가속 (공매도 {short_val:.1f}%, {dtc_str}, +{short_bonus:.1f}pt)"
                 else:
                     short_bonus = -1.5
-                    short_tag = f"공매도 저항 매물 (공매도 {short_val:.1f}%, -1.5pt)"
+                    short_tag = f"공매도 저항 매물 (공매도 {short_val:.1f}%, {dtc_str}, -1.5pt)"
             elif short_val >= 3.0:
                 short_bonus = 0.0
-                short_tag = f"통상적 공매도 ({short_val:.1f}%, 0.0pt)"
+                short_tag = f"통상적 공매도 ({short_val:.1f}%, {dtc_str}, 0.0pt)"
             else:
                 short_bonus = +0.5
-                short_tag = f"안정적 클린 수급 ({short_val:.1f}%, +0.5pt)"
+                short_tag = f"안정적 클린 수급 ({short_val:.1f}%, {dtc_str}, +0.5pt)"
 
             total_bonus = round(float(np.clip(inst_bonus + short_bonus, -4.0, 8.0)), 1)
             result["bonus_points"] = total_bonus
