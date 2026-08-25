@@ -40,6 +40,7 @@ class AITradePostMortem:
         if self.api_key:
             try:
                 import google.generativeai as genai
+                genai.configure(api_key=self.api_key)
                 prompt = (
                     f"너는 세계 최정상 퀀트 트레이더이자 리스크 매니저야. "
                     f"방금 완료된 아래 실전 매매 건에 대해, 다음 3가지 항목으로 구성된 명쾌하고 전문적인 3줄 트레이딩 복기 노트를 작성해줘:\n\n"
@@ -65,13 +66,26 @@ class AITradePostMortem:
             except Exception as e:
                 logger.debug("Gemini post-mortem generation failed: {}", e)
 
-        # 2. Rule-based Quant Fallback Heuristics
+        # 2. Dynamic Rule-based Quant Fallback Heuristics
         if not ai_review:
-            if is_win:
+            r_lower = reason.lower()
+            if "dead_money" in r_lower:
+                ai_review = (
+                    f"• <b>진입 평가</b>: 고득점(Score: {entry_score}점) 셋업 진입 후 박스권 횡보 지속\n"
+                    f"• <b>보유 흐름</b>: {holding_days}일간 추가 상승 모멘텀 둔화로 자금 회전율 저하 감지\n"
+                    f"• <b>청산 총평</b>: 기회비용 최소화를 위한 예수금 조기 회수 및 호가 개선 익절({pnl_sign}{pnl_pct:.2f}%) 완수"
+                )
+            elif "profit_lock" in r_lower or "trailing" in r_lower:
                 ai_review = (
                     f"• <b>진입 평가</b>: VCP 수축 돌파 및 잔차 모멘텀(Score: {entry_score}점) 황금 맥점 포착\n"
+                    f"• <b>보유 흐름</b>: 고점 상승 후 변동성 조정에 따른 이익 보존선 접근\n"
+                    f"• <b>청산 총평</b>: 샹들리에 트레일링 스탑 준수로 고점 부근 이익 보존({pnl_sign}{pnl_pct:.2f}%) 확정"
+                )
+            elif is_win:
+                ai_review = (
+                    f"• <b>진입 평가</b>: 5대 필라 종합 점수(Score: {entry_score}점) 우위 셋업 포착\n"
                     f"• <b>보유 흐름</b>: 20일선 지지를 받으며 시장 대비 초과 알파(Alpha)를 지속 발산\n"
-                    f"• <b>청산 총평</b>: 목표 도달에 따른 분할/래칫 익절({pnl_sign}{pnl_pct:.1f}%) 성공적 완수"
+                    f"• <b>청산 총평</b>: 목표 수익 도달에 따른 원칙적 분할/래칫 익절({pnl_sign}{pnl_pct:.2f}%) 성공적 완수"
                 )
             else:
                 ai_review = (
