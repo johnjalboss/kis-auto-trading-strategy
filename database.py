@@ -68,10 +68,12 @@ class TradeDatabase:
     
     @contextmanager
     def _get_conn(self):
-        """Get database connection with auto-commit"""
+        """Get database connection with auto-commit, 30s busy timeout, and WAL mode"""
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         try:
+            conn.execute("PRAGMA busy_timeout = 30000;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
             yield conn
             conn.commit()
         except Exception as e:
