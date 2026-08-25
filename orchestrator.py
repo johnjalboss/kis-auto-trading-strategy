@@ -2536,9 +2536,17 @@ class BotOrchestrator:
                                     if curr_price > 0:
                                         exit_sig = self.strategy.check_exit(sym, curr_price)
                                         if exit_sig and exit_sig.action != "HOLD":
-                                            logger.warning("🚨 [EXTENDED-HOURS EMERGENCY STOP] {} triggered @ ${:.2f} ({})", sym, curr_price, exit_sig.reason)
-                                            self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_STOP: {exit_sig.reason}")
-                                            self.strategy.remove_position(sym)
+                                            # In extended hours (pre-market/after-hours), only trigger for EMERGENCY risk stops (Hard Stop, Market Shock, < -3.5%)
+                                            # Routine rotation exits (Dead Money, Max Hold, Rebalance) must wait for regular market open for maximum liquidity
+                                            reason_upper = exit_sig.reason.upper()
+                                            is_emergency = any(k in reason_upper for k in ["HARD_STOP", "CIRCUIT", "EMERGENCY", "SHOCK"]) or (curr_price < pos.entry_price * 0.965)
+                                            if is_emergency:
+                                                logger.warning("🚨 [EXTENDED-HOURS EMERGENCY STOP] {} triggered @ ${:.2f} ({})", sym, curr_price, exit_sig.reason)
+                                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_STOP: {exit_sig.reason}")
+                                                self.strategy.remove_position(sym)
+                                            else:
+                                                logger.info("⏳ [EXTENDED_HOURS_DEFERRED] {} exit signal ({}) deferred to regular market open (22:30 KST) for maximum liquidity.",
+                                                           sym, exit_sig.reason)
                         except Exception as eh_err:
                             logger.debug("Extended hours stop check error: {}", eh_err)
 
