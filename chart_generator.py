@@ -491,12 +491,12 @@ def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: flo
         if len(df) > days:
             df = df.tail(days)
 
-        # Indicators
-        close = df['Close']
-        high = df['High']
-        low = df['Low']
-        op = df['Open']
-        vol = df['Volume']
+        # Indicators (Squeeze to 1D series to prevent pandas comparison errors)
+        close = df['Close'].squeeze()
+        high = df['High'].squeeze()
+        low = df['Low'].squeeze()
+        op = df['Open'].squeeze()
+        vol = df['Volume'].squeeze()
 
         sma20 = close.rolling(20).mean()
         std20 = close.rolling(20).std()
@@ -516,7 +516,7 @@ def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: flo
 
         # Draw Candlesticks
         for i in range(len(df)):
-            o, c, h, l = op.iloc[i], close.iloc[i], high.iloc[i], low.iloc[i]
+            o, c, h, l = float(op.iloc[i]), float(close.iloc[i]), float(high.iloc[i]), float(low.iloc[i])
             color = '#2ea44f' if c >= o else '#da3637'
             # Wick
             ax_price.plot([i, i], [l, h], color=color, linewidth=1.2)
