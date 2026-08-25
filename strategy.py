@@ -759,11 +759,32 @@ class StrategyEngine:
         if confidence < min_required:
             return EntrySignal("HOLD", confidence, f"Low confidence: {confidence} (needs {min_required})", current_price)
 
+        # [2026 SOTA LITERATURE: WHEN NOT TO TRADE - SELECTIVE META-ALPHA GATE]
+        # Marcos López de Prado Meta-Labeling & Conformal Uncertainty Hurdle
+        try:
+            from selective_meta_alpha_gate import SelectiveMetaAlphaGate
+            atr_v = indicators.atr if indicators else 0.0
+            meta_res = SelectiveMetaAlphaGate().evaluate_entry_hurdle(
+                symbol=symbol,
+                quant_score=float(confidence),
+                current_price=current_price,
+                atr=atr_v,
+                spread=0.0012,
+                regime=current_regime,
+                df_daily=df_daily
+            )
+            if not meta_res["can_trade"]:
+                return EntrySignal("HOLD", confidence, meta_res["reason"], current_price)
+            else:
+                setup_reason += f" | {meta_res['decision']}({meta_res['sizing_multiplier']:.2f}x)"
+        except Exception as _meta_err:
+            logger.debug("SelectiveMetaAlphaGate evaluation skipped for {}: {}", symbol, _meta_err)
+
         if not hasattr(self, '_last_score_breakdown'):
             self._last_score_breakdown = {}
         self._last_score_breakdown[symbol] = score_breakdown
 
-        logger.info(" ENTRY SIGNAL TRIGGERED [v1.0.7]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
+        logger.info("🎯 ENTRY SIGNAL TRIGGERED [2026 SOTA]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
         return EntrySignal("BUY", confidence, setup_reason, current_price, indicators, score_breakdown=score_breakdown)
 
 
