@@ -680,14 +680,13 @@ class StrategyEngine:
         if not is_quant_accumulation and not filter_res['passed']:
             return EntrySignal("HOLD", confidence, f"Failed entry filters: {', '.join(filter_res['failed'])}", current_price)
 
-        # Volume verification bonus
+        # Volume verification tag
         vol_recent = float(df_daily['Volume'].iloc[-1])
         vol_avg = float(df_daily['Volume'].iloc[:-1].mean())
         if vol_avg > 0 and vol_recent > vol_avg * 1.4:
-            confidence += 8
             setup_reason += " | Vol Confirmation"
 
-        # PEAD Earnings Bonus
+        # PEAD Earnings Guard & Tagging
         try:
             from earnings_analyzer import get_earnings_analyzer
             _ea = get_earnings_analyzer()
@@ -698,11 +697,10 @@ class StrategyEngine:
             if 0 <= _days_to <= 2:
                 return EntrySignal("HOLD", 0, f"PRE_EARNINGS_BLACKOUT_GUARD: Earnings in {_days_to} days (avoid coin-flip)", current_price)
 
-            # 2. PEAD Post-Earnings Momentum Bonus
+            # 2. PEAD Post-Earnings Momentum Tagging
             _beat = getattr(_earn_result, 'last_eps_surprise', 0) if hasattr(_earn_result, 'last_eps_surprise') else ((_earn_result.get('beat_surprise', 0) or _earn_result.get('eps_surprise_pct', 0)) if isinstance(_earn_result, dict) else 0)
             _days = getattr(_earn_result, 'beat_streak', 0) if hasattr(_earn_result, 'beat_streak') else (_earn_result.get('days_since_earnings', 99) if isinstance(_earn_result, dict) else 99)
             if _beat > 5 and _days <= 30:
-                confidence += 10
                 setup_reason += f" | PEAD (+{_beat:.0f}%)"
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
