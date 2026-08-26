@@ -388,11 +388,13 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     bot_pct = total_twr_pct
     bm_pct = (final_bm / base_capital) * 100
     alpha_pct = bot_pct - bm_pct
+    real_live_equity = current_total_equity if current_total_equity > 1000 else (base_capital + final_bot)
 
     ann_text = (
-        f"Bot P&L   : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
-        f"{bm_symbol:<8}: ${final_bm:+,.2f} ({bm_pct:+.2f}%)\n"
-        f"Alpha     : ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
+        f"Live Total : ${real_live_equity:,.2f}\n"
+        f"Bot P&L    : ${final_bot:+,.2f} ({bot_pct:+.2f}%)\n"
+        f"{bm_symbol:<11}: ${final_bm:+,.2f} ({bm_pct:+.2f}%)\n"
+        f"Alpha      : ${final_alpha:+,.2f} ({alpha_pct:+.2f}%)"
     )
     # Place card at upper-right with zorder=10 to guarantee NO graph line overlap
     ax_main.text(
@@ -436,21 +438,21 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     plt.close(fig)
 
     # 5. Format Structured Caption Text
-    total_equity = base_capital + final_bot
     current_held_symbols = list(current_trader_positions.keys())
-    held_symbols_str = ", ".join(current_held_symbols) if current_held_symbols else "없음"
+    held_symbols_str = ", ".join(current_held_symbols) if current_held_symbols else "없음 (100% 현금 안전 대기 중)"
     current_unrealized = sum((p.get('current_price', p['avg_price']) - p['avg_price']) * p['quantity'] for p in current_trader_positions.values())
 
     caption_text = (
         f"📊 <b>[AI 퀀트 봇 vs {bm_symbol} 벤치마크 Day 1 성과 리포트]</b>\n"
         f"📅 <b>출발 기준일</b>: <b>2026-08-14 (Day 1 시작)</b>\n"
-        f"💰 <b>시작 원금</b>: <b>${base_capital:,.2f} USD</b>\n"
+        f"💰 <b>기초 시작원금</b>: <b>${base_capital:,.2f} USD</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🚀 <b>봇 총 평가 자산</b>: <b>${total_equity:,.2f} USD</b> (<b>{bot_pct:+.2f}%</b>)\n"
+        f"🏦 <b>실시간 계좌 총 자산</b>: <b>${real_live_equity:,.2f} USD</b>\n"
+        f"🚀 <b>누적 수익률 (TWR)</b>: <b>{bot_pct:+.2f}%</b> (누적 P&L: <b>${final_bot:+,.2f} USD</b>)\n"
         f"📈 <b>{bm_symbol} ({bm_name})</b>: <b>${(base_capital + final_bm):,.2f} USD</b> (<b>{bm_pct:+.2f}%</b>)\n"
         f"🔥 <b>{bm_symbol} 대비 초과 알파</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 <i>현재 보유 종목({held_symbols_str}) 미실현 손익: ${current_unrealized:+,.2f} USD 반영 완료</i>"
+        f"💡 <i>현재 보유 종목: {held_symbols_str} (미실현 손익: ${current_unrealized:+,.2f} USD)</i>"
     )
 
     return out_path, caption_text

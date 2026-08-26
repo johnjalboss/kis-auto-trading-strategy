@@ -35,6 +35,14 @@ class AITradePostMortem:
         pnl_sign = "+" if is_win else ""
         pnl_tag = "수익 익절" if is_win else "손실 방어/손절"
 
+        # Ensure valid holding days string
+        if holding_days is not None and isinstance(holding_days, (int, float)) and holding_days > 0:
+            h_days_str = f"{holding_days:.1f}일" if isinstance(holding_days, float) and holding_days % 1 != 0 else f"{int(holding_days)}일"
+        elif isinstance(holding_days, str) and holding_days.strip():
+            h_days_str = holding_days if "일" in holding_days else f"{holding_days}일"
+        else:
+            h_days_str = "약 3일"
+
         # 1. Try Gemini AI generation
         ai_review = ""
         if self.api_key:
@@ -48,7 +56,7 @@ class AITradePostMortem:
                     f"진입가: ${entry_price:.2f} -> 청산가: ${exit_price:.2f}\n"
                     f"실현손익: {pnl_sign}${pnl:.2f} ({pnl_sign}{pnl_pct:.2f}%)\n"
                     f"청산 사유: {reason}\n"
-                    f"보유 기간: 약 {holding_days}일, 진입 시 퀀트 스코어: {entry_score}점\n\n"
+                    f"보유 기간: {h_days_str}, 진입 시 퀀트 스코어: {entry_score}점\n\n"
                     f"작성 규칙:\n"
                     f"1) 정확히 3개 불릿으로 작성 (• 진입 평가: ... / • 보유 흐름: ... / • 청산 총평: ...)\n"
                     f"2) 헤지펀드 매니저 어조로, 승리 시에는 팩터 유효성을 칭찬하고 손실 시에는 리스크 방어 성과를 객관적으로 분석할 것\n"
@@ -72,7 +80,7 @@ class AITradePostMortem:
             if "dead_money" in r_lower:
                 ai_review = (
                     f"• <b>진입 평가</b>: 고득점(Score: {entry_score}점) 셋업 진입 후 박스권 횡보 지속\n"
-                    f"• <b>보유 흐름</b>: {holding_days}일간 추가 상승 모멘텀 둔화로 자금 회전율 저하 감지\n"
+                    f"• <b>보유 흐름</b>: {h_days_str}간 추가 상승 모멘텀 둔화로 자금 회전율 저하 감지\n"
                     f"• <b>청산 총평</b>: 기회비용 최소화를 위한 예수금 조기 회수 및 호가 개선 익절({pnl_sign}{pnl_pct:.2f}%) 완수"
                 )
             elif "profit_lock" in r_lower or "trailing" in r_lower:

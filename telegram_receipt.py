@@ -151,12 +151,13 @@ class TelegramReceiptGenerator:
 
         # Exact holding days dynamic lookup from DB
         actual_hold_str = f"{hold_days}일" if hold_days else "3일"
+        calc_hold_days = float(hold_days) if (hold_days is not None and hold_days > 0) else 3.0
         try:
             import sqlite3, os
             from datetime import datetime
             db_f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
             if os.path.exists(db_f):
-                conn = sqlite3.connect(db_f)
+                conn = sqlite3.connect(db_f, timeout=30.0)
                 cur = conn.cursor()
                 cur.execute("SELECT created_at FROM trade_details WHERE symbol = ? AND side = 'BUY' ORDER BY created_at DESC LIMIT 1", (symbol,))
                 row = cur.fetchone()
@@ -167,7 +168,9 @@ class TelegramReceiptGenerator:
                     e_dt = datetime.strptime(str(row[0])[:19], "%Y-%m-%d %H:%M:%S")
                     now_dt = datetime.now()
                     diff_days = (now_dt - e_dt).total_seconds() / 86400.0
+                    calc_hold_days = round(diff_days, 1)
                     actual_hold_str = f"{diff_days:.1f}일 ({e_dt.strftime('%m/%d')} 진입 ➔ {now_dt.strftime('%m/%d')} 청산)"
+                conn.close()
         except Exception:
             pass
 
@@ -256,7 +259,7 @@ class TelegramReceiptGenerator:
                 pnl=pnl_usd,
                 pnl_pct=pnl_pct,
                 reason=reason,
-                holding_days=hold_days
+                holding_days=calc_hold_days
             )
             receipt += f"{pm_text}\n"
         except Exception:
