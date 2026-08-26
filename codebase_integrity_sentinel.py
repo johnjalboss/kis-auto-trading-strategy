@@ -10,7 +10,7 @@ import traceback
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 sys.path.insert(0, BASE_DIR)
 
@@ -25,7 +25,12 @@ warnings = []
 # PHASE 1: AST SYNTAX & SCOPE AUDIT FOR ALL .PY FILES
 # =========================================================================
 print("\n[PHASE 1] AST Parsing & Syntax Verification...")
-py_files = sorted(glob.glob("*.py"))
+# Target production files and filter out one-off scratch/debug snippets
+SCRATCH_PREFIXES = ("temp_", "scratch_", "debug_", "check_", "test_temp_", "audit_", "get_", "remote_", "tmp_", "fix_", "verify_")
+py_files = [
+    fn for fn in sorted(glob.glob("*.py"))
+    if not any(fn.startswith(pfx) for pfx in SCRATCH_PREFIXES)
+]
 for fn in py_files:
     try:
         with open(fn, "r", encoding="utf-8", errors="ignore") as f:
@@ -34,7 +39,7 @@ for fn in py_files:
     except Exception as e:
         critical_issues.append(f"[SYNTAX ERROR] {fn}: {e}")
 
-print(f"  -> Checked {len(py_files)} files. Syntax errors: {len(critical_issues)}")
+print(f"  -> Checked {len(py_files)} production files. Syntax errors: {len(critical_issues)}")
 
 # =========================================================================
 # PHASE 2: STATIC PATTERN AUDIT (UNDEFINED VARS, NONE STRINGS, TIMEZONE)
