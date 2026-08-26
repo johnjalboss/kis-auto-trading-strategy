@@ -1909,17 +1909,21 @@ class BotOrchestrator:
                                         entry_p = self._last_entry_prices[symbol]
                                     else:
                                         entry_p = fill_px
-                                    receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
-                                        symbol=symbol,
-                                        quantity=fill_qty,
-                                        entry_price=entry_p,
-                                        exit_price=fill_px,
-                                        reason=reason
-                                    )
-                                    notifier.send(receipt_msg)
-                                except Exception as _tr_err:
-                                    logger.debug("Telegram SELL receipt error: {}", _tr_err)
-                                    notifier.trade_exit(symbol, fill_qty, entry_p, fill_px, reason)
+                                    pnl_pct_val = ((fill_px - entry_p) / entry_p) if entry_p > 0 else 0.0
+                                    try:
+                                        import pytz
+                                        from telegram_receipt import TelegramReceiptGenerator
+                                        receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
+                                            symbol=symbol,
+                                            quantity=fill_qty,
+                                            entry_price=entry_p,
+                                            exit_price=fill_px,
+                                            reason=reason
+                                        )
+                                        notifier.send(receipt_msg)
+                                    except Exception as _tr_err:
+                                        logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
+                                        notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={}",
                                        symbol, order.status.value)
@@ -2364,16 +2368,17 @@ class BotOrchestrator:
         
         try:
             while True:
-                #  DYNAMIC PARAMETER RELOAD
-                # Auto-Tuner .env     ( )
+                # ── DYNAMIC PARAMETER RELOAD ──────────────────────────
+                # Auto-Tuner .env 반영 (무중단 핫리로드)
                 try:
+                    import sys as _sys
                     from dotenv import load_dotenv
                     import importlib
                     load_dotenv(override=True)
-                    if 'config' in sys.modules:
-                        importlib.reload(sys.modules['config'])
+                    if 'config' in _sys.modules:
+                        importlib.reload(_sys.modules['config'])
                 except Exception as e:
-                    logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", e)
+                    logger.debug("⚠️ [orchestrator.py] Dynamic config reload error: {}", e)
                 
                 now = datetime.now()
                 
