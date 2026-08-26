@@ -1461,20 +1461,34 @@ class DynamicScreener:
             except Exception as e:
                 logger.debug("Failed to calculate RS bonus for {}: {}", symbol, e)
 
-            # Clamp total score between 0 and 100
-            total = min(100, max(0, short_score + momentum_score + inst_score + options_score + 
-                       tech_score + mode_bonus + multi_bonus + news_bonus + insider_bonus +
-                       high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + rs_bonus))
+            # ============================================================
+            # 📐 5대 필라 정밀 결합 및 점수 연속 정규화 (Continuous Asymptotic Scaling)
+            # ============================================================
+            import numpy as np
+            base_score = short_score + momentum_score + inst_score + options_score + tech_score
+            bonus_sum = (mode_bonus + multi_bonus + news_bonus + insider_bonus +
+                         high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + rs_bonus)
+
+            # Raw Combined Score
+            raw_total = float(base_score) + 0.4 * float(bonus_sum)
+
+            if raw_total <= 80.0:
+                total = max(0.0, raw_total)
+            else:
+                # 80점 초과 구간: 점수 쏠림(100점 도배) 방지 및 세부 변별력 확보를 위한 tanh 점진 수렴
+                total = 80.0 + 18.0 * np.tanh((raw_total - 80.0) / 25.0)
+
+            total = min(99.0, max(0.0, total))
             
             # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
             if news_blacklist or pead_blacklist:
-                total = 0
+                total = 0.0
                 logger.warning("🚨 [BLACKLIST_FILTER] {} completely blacklisted (news_blacklist: {}, pead_blacklist: {})!",
                                symbol, news_blacklist, pead_blacklist)
             
             return StockScore(
                 symbol=symbol,
-                total_score=int(total),
+                total_score=int(round(total)),
                 short_squeeze_score=short_score,
                 momentum_score=momentum_score,
                 institutional_score=inst_score,
