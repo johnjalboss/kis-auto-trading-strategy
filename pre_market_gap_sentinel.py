@@ -2,13 +2,19 @@
 Pre-Market Gap Sentinel (pre_market_gap_sentinel.py)
 ====================================================
 Designed by World #1 Quant Systems Architecture.
-Runs 30 minutes before US regular market open (23:00 KST / 10:00 EDT)
-to detect violent pre-market gap-ups and gap-downs (>= +/-3.0%)
-across held positions and key watchlist leaders.
+Runs 30 minutes before US regular market open (22:00 KST / 09:00 EDT)
+to detect violent pre-market opening gaps (>= +/-3.0%) across held positions
+and key benchmark/growth leaders.
+
+Data Timing & Precision:
+- Reference Base: Previous regular trading session's official close (전일 정규장 종가)
+- Live Comparison: Real-time extended hours 1-minute tick price (당일 프리마켓 실시간 체결가)
+- Precision Guard: Timezone-aware date boundaries (US/Eastern) prevent multi-day skew.
 """
 
 import os
 import sqlite3
+import pytz
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
@@ -19,8 +25,9 @@ import config
 class PreMarketGapSentinel:
     """Detects pre-market opening gaps and alerts the trader with actionable quant guidance."""
 
-    def __init__(self, db_path: str = "trades.db"):
-        self.db_path = db_path if os.path.exists(db_path) else "/home/ubuntu/kis-auto-trading/trades.db"
+    def __init__(self, db_path: str = None):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.db_path = db_path or os.path.join(script_dir, "trades.db")
         self.bot_token = getattr(config, 'TELEGRAM_BOT_TOKEN', '')
         self.chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
 
@@ -35,10 +42,11 @@ class PreMarketGapSentinel:
                 symbols = [p.symbol for p in pos_list if getattr(p, 'quantity', 0) > 0]
                 if symbols:
                     return symbols
+                return [] # Broker returned explicit 0 positions
         except Exception as _tr_err:
             logger.debug("Live trader get_positions skipped in sentinel: {}", _tr_err)
 
-        # 2. Direct SQLite query with active quantity > 0
+        # 2. Direct SQLite query on target trades.db with active quantity > 0
         try:
             if os.path.exists(self.db_path):
                 conn = sqlite3.connect(self.db_path)
@@ -51,37 +59,16 @@ class PreMarketGapSentinel:
         except Exception as _sql_err:
             logger.debug("Direct SQL positions query skipped: {}", _sql_err)
 
-        # 3. Try TradeDatabase
-        try:
-            from database import TradeDatabase, get_database
-            db = get_database()
-            pos_dict = db.get_positions()
-            if pos_dict:
-                symbols = [s for s, p in pos_dict.items() if p.get('quantity', 0) > 0]
-                if symbols:
-                    return symbols
-        except Exception as _db_err:
-            logger.debug("Database get_positions skipped: {}", _db_err)
-
         return []
 
     def get_dynamic_watchlist(self) -> list:
-        """Dynamically builds 2nd priority watch candidates from:
-        1. Bot's active screened targets (screener / target universe)
-        2. Key Sector/Market Benchmark ETFs (QQQ, SPY, SMH, IWM)
-        3. Active momentum growth leaders
+        """Dynamically builds watch candidates from:
+        1. Key Sector/Market Benchmark ETFs (QQQ, SPY, SMH, IWM, DIA)
+        2. High-Beta Market & AI Growth Leaders
         """
-        candidates = []
-        
-        # 1. Key Sector/Market Benchmark ETFs (Market Health Barometer)
-        benchmarks = ["QQQ", "SPY", "SMH", "IWM"]
-        candidates.extend(benchmarks)
-
-        # 2. High-Momentum Growth & Breakout Leaders (Dynamic Universe Pool)
-        growth_leaders = ["NVDA", "PLTR", "LLY", "VRT", "CRWD", "APP", "AXON", "GEV", "TSLA", "AMD"]
+        candidates = ["QQQ", "SPY", "SMH", "IWM", "DIA"]
+        growth_leaders = ["NVDA", "PLTR", "LLY", "VRT", "CRWD", "APP", "TSLA", "AMD", "META", "AAPL", "MSFT", "AMZN"]
         for sym in growth_leaders:
-            if len(candidates) >= 14:
-                break
             if sym not in candidates:
                 candidates.append(sym)
 
@@ -96,40 +83,52 @@ class PreMarketGapSentinel:
         gap_alerts = []
         held_status = []
 
+        now_ny = datetime.now(pytz.timezone('US/Eastern'))
+        today_ny = now_ny.date()
+
         for sym in all_symbols:
             try:
                 t = yf.Ticker(sym)
                 last_price = 0.0
                 prev_close = 0.0
+                prev_date_str = ""
+                quote_time_str = ""
 
-                # 1. Try 1m intraday with prepost=True for true extended hours live quotes
+                # 1. Daily history for exact previous regular session close
+                try:
+                    df_daily = t.history(period="5d")
+                    if df_daily is not None and not df_daily.empty:
+                        # If the last bar is from today and market is already open
+                        if df_daily.index[-1].date() == today_ny and (now_ny.hour > 9 or (now_ny.hour == 9 and now_ny.minute >= 30)):
+                            prev_close = float(df_daily['Close'].iloc[-2])
+                            prev_date_str = df_daily.index[-2].strftime('%m/%d')
+                        else:
+                            prev_close = float(df_daily['Close'].iloc[-1])
+                            prev_date_str = df_daily.index[-1].strftime('%m/%d')
+                except Exception as e_d:
+                    logger.debug("Daily fetch error for {}: {}", sym, e_d)
+
+                # 2. Try 1m intraday with prepost=True for true extended hours live quotes
                 try:
                     df_intra = t.history(period="1d", interval="1m", prepost=True)
                     if df_intra is not None and not df_intra.empty:
                         last_price = float(df_intra['Close'].iloc[-1])
-                except Exception:
-                    pass
+                        quote_time_str = df_intra.index[-1].strftime('%H:%M EDT')
+                except Exception as e_i:
+                    logger.debug("Intra fetch error for {}: {}", sym, e_i)
 
-                # 2. Daily history for previous close
-                try:
-                    df_daily = t.history(period="5d")
-                    if df_daily is not None and not df_daily.empty:
-                        if len(df_daily) >= 2:
-                            prev_close = float(df_daily['Close'].iloc[-2])
-                        else:
-                            prev_close = float(df_daily['Close'].iloc[-1])
-                        if last_price <= 0:
-                            last_price = float(df_daily['Close'].iloc[-1])
-                except Exception:
-                    pass
+                # 3. Fallback to fast_info if needed
+                if prev_close <= 0:
+                    try:
+                        fast = t.fast_info
+                        prev_close = float(fast.get("previous_close", 0.0) or fast.get("regular_market_previous_close", 0.0) or 0.0)
+                        prev_date_str = "전일"
+                    except Exception:
+                        pass
 
-                # 3. Fallback to fast_info if still zero
-                if last_price <= 0 or prev_close <= 0:
-                    fast = t.fast_info
-                    if last_price <= 0:
-                        last_price = float(fast.get("last_price", 0.0) or 0.0)
-                    if prev_close <= 0:
-                        prev_close = float(fast.get("previous_close", 0.0) or 0.0)
+                if last_price <= 0:
+                    last_price = prev_close
+                    quote_time_str = "체결대기"
 
                 if prev_close > 0 and last_price > 0:
                     gap_pct = ((last_price - prev_close) / prev_close) * 100.0
@@ -140,6 +139,8 @@ class PreMarketGapSentinel:
                         "is_held": is_held,
                         "last_price": last_price,
                         "prev_close": prev_close,
+                        "prev_date": prev_date_str,
+                        "quote_time": quote_time_str,
                         "gap_pct": gap_pct
                     }
 
@@ -150,6 +151,9 @@ class PreMarketGapSentinel:
                         gap_alerts.append(info)
             except Exception as e:
                 logger.debug("Pre-market scan error for {}: {}", sym, e)
+
+        # Sort gap alerts by absolute gap size descending
+        gap_alerts.sort(key=lambda x: abs(x["gap_pct"]), reverse=True)
 
         return {
             "gap_alerts": gap_alerts,
@@ -162,12 +166,14 @@ class PreMarketGapSentinel:
         res = self.scan_gaps()
         now_dt = datetime.now()
         now_str = now_dt.strftime("%Y-%m-%d %H:%M")
+        now_ny = datetime.now(pytz.timezone('US/Eastern')).strftime("%H:%M EDT")
         is_weekend = now_dt.weekday() in (5, 6)  # Saturday or Sunday
 
         lines = [
             f"🌅 <b>[정규장 개장 30분 전 프리마켓 레이더]</b>",
-            f"<i>{now_str} KST (Pre-Market Gap Sentinel)</i>",
-            "━━━━━━━━━━━━━━━━━━━"
+            f"<i>{now_str} KST ({now_ny} 기준)</i>",
+            "━━━━━━━━━━━━━━━━━━━",
+            "📊 <b>데이터 기준:</b> <code>전일 정규장 공식 종가 vs 당일 프리마켓 실시간 체결가</code>\n"
         ]
 
         if is_weekend:
@@ -179,9 +185,9 @@ class PreMarketGapSentinel:
             for h in res["held_status"]:
                 sign = "+" if h["gap_pct"] >= 0 else ""
                 emoji = "🟢" if h["gap_pct"] >= 0 else "🔴"
-                lines.append(f"  • {emoji} <b>{h['symbol']}</b>: ${h['last_price']:.2f} (전일대비 <b>{sign}{h['gap_pct']:.2f}%</b>)")
+                lines.append(f"  • {emoji} <b>{h['symbol']}</b>: ${h['last_price']:.2f} (전일 {h['prev_date']} 종가 대비 <b>{sign}{h['gap_pct']:.2f}%</b>) <i>[{h['quote_time']}]</i>")
         else:
-            lines.append("  • 현재 보유 포지션 없음 (100% 현금 대기)")
+            lines.append("  • 현재 보유 포지션 없음 (100% 현금 대기 중)")
 
         lines.append("\n🚨 <b>급등락 특이 갭(±3.0% 이상) 포착 종목</b>:")
         if res["gap_alerts"]:
@@ -189,9 +195,9 @@ class PreMarketGapSentinel:
                 sign = "+" if g["gap_pct"] >= 0 else ""
                 emoji = "🚀" if g["gap_pct"] > 0 else "⚠️"
                 tag = " [★보유중]" if g["is_held"] else ""
-                lines.append(f"  • {emoji} <b>{g['symbol']}</b>{tag}: <b>{sign}{g['gap_pct']:.2f}%</b> (${g['prev_close']:.2f} ➔ ${g['last_price']:.2f})")
+                lines.append(f"  • {emoji} <b>{g['symbol']}</b>{tag}: <b>{sign}{g['gap_pct']:.2f}%</b> (${g['prev_close']:.2f} ➔ ${g['last_price']:.2f}) <i>[{g['quote_time']}]</i>")
         else:
-            lines.append("  • 특이 갭(±3%) 발생 종목 없음 (안정적 보합 출발 예상)")
+            lines.append("  • 특이 갭(±3.0%) 발생 종목 없음 (안정적 보합 출발 예상)")
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
         if not is_weekend:

@@ -5,6 +5,7 @@ Persistent storage for trades, daily stats, and performance metrics.
 Optimized for Oracle Cloud Free Tier (minimal disk usage).
 """
 
+import os
 import sqlite3
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -60,7 +61,7 @@ class TradeDatabase:
     - positions: Current open positions
     """
     
-    DB_FILE = "trades.db"
+    DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.db")
     
     def __init__(self, db_path: str = None):
         self.db_path = db_path or self.DB_FILE
