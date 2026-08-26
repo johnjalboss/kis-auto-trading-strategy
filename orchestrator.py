@@ -1900,30 +1900,28 @@ class BotOrchestrator:
                                     logger.debug("Telegram BUY receipt fallback: {}", _tr_err)
                                     notifier.trade_entry(symbol, fill_qty, fill_px, reason)
                             else:
+                                entry_p = 0.0
+                                if symbol in self.strategy._positions:
+                                    entry_p = getattr(self.strategy._positions[symbol], 'entry_price', 0.0)
+                                elif hasattr(self, '_last_entry_prices') and symbol in self._last_entry_prices:
+                                    entry_p = self._last_entry_prices[symbol]
+                                else:
+                                    entry_p = fill_px
+                                pnl_pct_val = ((fill_px - entry_p) / entry_p) if entry_p > 0 else 0.0
                                 try:
+                                    import pytz
                                     from telegram_receipt import TelegramReceiptGenerator
-                                    entry_p = 0.0
-                                    if symbol in self.strategy._positions:
-                                        entry_p = getattr(self.strategy._positions[symbol], 'entry_price', 0.0)
-                                    elif hasattr(self, '_last_entry_prices') and symbol in self._last_entry_prices:
-                                        entry_p = self._last_entry_prices[symbol]
-                                    else:
-                                        entry_p = fill_px
-                                    pnl_pct_val = ((fill_px - entry_p) / entry_p) if entry_p > 0 else 0.0
-                                    try:
-                                        import pytz
-                                        from telegram_receipt import TelegramReceiptGenerator
-                                        receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
-                                            symbol=symbol,
-                                            quantity=fill_qty,
-                                            entry_price=entry_p,
-                                            exit_price=fill_px,
-                                            reason=reason
-                                        )
-                                        notifier.send(receipt_msg)
-                                    except Exception as _tr_err:
-                                        logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
-                                        notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
+                                    receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
+                                        symbol=symbol,
+                                        quantity=fill_qty,
+                                        entry_price=entry_p,
+                                        exit_price=fill_px,
+                                        reason=reason
+                                    )
+                                    notifier.send(receipt_msg)
+                                except Exception as _tr_err:
+                                    logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
+                                    notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
                         else:
                             logger.info("Trade alert suppressed for {}: order status={}",
                                        symbol, order.status.value)

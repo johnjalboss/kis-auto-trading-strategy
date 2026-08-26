@@ -77,8 +77,26 @@ class TelegramReceiptGenerator:
                            score: int = 100, tp_price: float = 0.0, sl_price: float = 0.0,
                            atr: float = 0.0, score_breakdown: Optional[List[str]] = None,
                            macro_regime: str = "RISK_ON") -> str:
-        total_cost = quantity * price
-        
+        total_cost = float(quantity * price) if (quantity and price) else 0.0
+        # Safe parameter type guards
+        if isinstance(tp_price, (list, tuple, dict)):
+            if score_breakdown is None:
+                score_breakdown = list(tp_price)
+            tp_price = 0.0
+        try:
+            tp_price = float(tp_price or 0.0)
+        except Exception:
+            tp_price = 0.0
+
+        if isinstance(sl_price, (list, tuple, dict)):
+            if score_breakdown is None:
+                score_breakdown = list(sl_price)
+            sl_price = 0.0
+        try:
+            sl_price = float(sl_price or 0.0)
+        except Exception:
+            sl_price = 0.0
+
         # Calculate stock-specific dynamic ATR targets
         if tp_price > 0:
             tp_pct = (tp_price - price) / price * 100.0 if price > 0 else 0.0

@@ -29,12 +29,7 @@ class DailySettlementReporter:
         if usd_krw_rate and usd_krw_rate > 0:
             self.fx_rate = usd_krw_rate
         else:
-            try:
-                import yfinance as yf
-                t = yf.Ticker("USDKRW=X")
-                self.fx_rate = float(t.fast_info.get("last_price", 1415.0))
-            except Exception:
-                self.fx_rate = 1415.0
+            self.fx_rate = 1415.0
 
     def generate_daily_report(self, target_date: Optional[str] = None) -> Dict[str, Any]:
         """
