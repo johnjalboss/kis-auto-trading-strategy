@@ -74,14 +74,18 @@ class ShadowPaperEngine:
         if symbol in self.state["positions"]:
             return False
 
-        # Allocate 20% of shadow cash per position (up to 5 positions)
-        alloc = min(self.state["cash"] * 0.25, 250.0)
-        if alloc < 20.0 or self.state["cash"] < 20.0:
+        # Dynamic flexible allocation (allows buying even with small remaining cash)
+        avail_cash = self.state["cash"]
+        if avail_cash < 15.0:
             return False
 
+        alloc = min(max(avail_cash * 0.35, 20.0), avail_cash)
         qty = int(alloc / current_price)
         if qty <= 0:
-            qty = 1
+            if avail_cash >= current_price:
+                qty = 1
+            else:
+                return False
 
         cost = qty * current_price
         if self.state["cash"] >= cost:
@@ -100,9 +104,10 @@ class ShadowPaperEngine:
         return False
 
     def update_prices(self, price_map: Dict[str, float]):
-        """Updates prices and triggers trailing stop / take profit for shadow positions."""
+        """Updates prices and triggers trailing stop / take profit / stagnation exit for shadow positions."""
         closed_any = False
         to_close = []
+        now_dt = datetime.now()
 
         for symbol, pos in self.state["positions"].items():
             if symbol in price_map and price_map[symbol] > 0:
@@ -113,15 +118,28 @@ class ShadowPaperEngine:
 
                 entry = pos["entry_price"]
                 pnl_pct = (p - entry) / entry
-
-                # Trailing stop: 4% from peak or take profit at +10%
                 peak_pnl = (pos["peak_price"] - entry) / entry
+
+                # Check holding duration
+                holding_hours = 0.0
+                try:
+                    e_time = datetime.fromisoformat(pos.get("entry_time", now_dt.isoformat()))
+                    holding_hours = (now_dt - e_time).total_seconds() / 3600.0
+                except Exception:
+                    pass
+
+                # 1. Stop loss
                 if pnl_pct <= -0.045:
                     to_close.append((symbol, p, f"SHADOW_STOP_LOSS ({pnl_pct:+.1%})"))
+                # 2. Trailing profit lock
                 elif peak_pnl >= 0.05 and (p <= pos["peak_price"] * 0.97):
                     to_close.append((symbol, p, f"SHADOW_TRAIL_LOCK (+{pnl_pct:+.1%})"))
+                # 3. Aggressive take profit
                 elif pnl_pct >= 0.12:
                     to_close.append((symbol, p, f"SHADOW_TAKE_PROFIT (+{pnl_pct:+.1%})"))
+                # 4. Dead-money stagnation recycle (held > 96 hours with stagnant return)
+                elif holding_hours >= 96.0 and abs(pnl_pct) <= 0.025:
+                    to_close.append((symbol, p, f"SHADOW_STAGNATION_RECYCLE ({holding_hours/24:.1f}d held, {pnl_pct:+.1%})"))
 
         for symbol, exit_p, reason in to_close:
             pos = self.state["positions"].pop(symbol)
