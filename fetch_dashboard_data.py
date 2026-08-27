@@ -283,9 +283,12 @@ try:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         
-        # Get overall net pnl and trading days to calculate CAGR strictly since 2026-08-14 Day 1
+        # Get overall net pnl and trading days to calculate CAGR dynamically from database history
         try:
-            DAY_ZERO_STR = "2026-08-14"
+            from datetime import date, timedelta
+            min_date_row = cur.execute("SELECT MIN(date(created_at)) as min_d FROM trades WHERE created_at IS NOT NULL").fetchone()
+            earliest_d_str = min_date_row["min_d"] if min_date_row and min_date_row["min_d"] else (date.today() - timedelta(days=30)).strftime("%Y-%m-%d")
+
             row = cur.execute("""
                 SELECT SUM(pnl) as net_pnl
                 FROM (
@@ -293,22 +296,25 @@ try:
                     UNION ALL
                     SELECT pnl FROM trades WHERE side = 'SELL' AND date(created_at) >= ? AND pnl IS NOT NULL
                 )
-            """, (DAY_ZERO_STR, DAY_ZERO_STR)).fetchone()
+            """, (earliest_d_str, earliest_d_str)).fetchone()
             
             realized_pnl = float(row["net_pnl"] or 0.0) if row else 0.0
             
-            # Days elapsed since Day 1 (at least 1)
-            from datetime import date
-            day_zero = date(2026, 8, 14)
+            # Days elapsed dynamically since earliest trade
+            try:
+                day_zero = datetime.strptime(earliest_d_str, "%Y-%m-%d").date()
+            except Exception:
+                day_zero = date.today() - timedelta(days=1)
             today_d = datetime.now().date()
             trading_days = max(1, (today_d - day_zero).days + 1)
             
-            # Calculate total net profit (realized since 08-14 + current unrealized)
+            # Calculate total net profit (realized + current unrealized)
             open_unrealized = sum((p["current"] - p["entry"]) * p["qty"] for p in data.get("positions", []))
             total_net_profit = realized_pnl + open_unrealized
             
-            # Baseline capital: $766.49 USD
-            initial_capital = 766.49
+            # Baseline capital dynamically calculated from live portfolio equity
+            tot_val = float(data.get("summary", {}).get("total_eval", 0.0) or 0.0)
+            initial_capital = max(100.0, tot_val - total_net_profit) if tot_val > total_net_profit else (tot_val if tot_val > 0 else 1000.0)
             current_total_value = initial_capital + total_net_profit
             
             if initial_capital > 0:

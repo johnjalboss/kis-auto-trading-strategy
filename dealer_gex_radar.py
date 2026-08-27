@@ -88,49 +88,29 @@ class DealerGEXRadar:
         except Exception as e:
             logger.debug("DealerGEXRadar dynamic fetch for {}: {}", symbol, e)
 
-        # Fallback with deterministic live price approximation
+        # Fallback with statistical historical volatility band
         try:
-            import yfinance as yf
-            t = yf.Ticker(symbol)
-            h = t.history(period="2d", interval="1d")
-            price = float(h['Close'].iloc[-1]) if not h.empty else 100.0
-        except Exception:
-            price = 100.0
-
-        h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-        call_w = round(price * 1.045, 2)
-        put_w = round(price * 0.955, 2)
-        flip_p = round(price * 0.985, 2)
-        gex_val_m = round(85.0 + (h_val % 220), 1)
-
-        try:
-            import pytz
-            today_et = datetime.now(pytz.timezone('America/New_York')).date()
-        except Exception:
-            today_et = datetime.utcnow().date()
-
-        days_to_fri = (4 - today_et.weekday()) % 7
-        nearest_fri_obj = today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)
-        nearest_exp = nearest_fri_obj.strftime("%Y-%m-%d")
-        dte_calc = max(0, (nearest_fri_obj - today_et).days)
-
-        res = {
-            'symbol': symbol,
-            'price': round(price, 2),
-            'net_gex_display': f"${gex_val_m:+.1f}M",
-            'net_gex': round(gex_val_m / 1000.0, 2),
-            'call_wall': call_w,
-            'put_wall': put_w,
-            'gamma_flip': flip_p,
-            'put_call_ratio': round(0.55 + ((h_val % 25) / 100.0), 2),
-            'score_adj': 8,
-            'nearest_expiration': nearest_exp,
-            'dte_days': dte_calc,
-            'gex_regime': 'DEALER_LONG_GAMMA_SUPPORT (안정 지지)',
-            'reason': f"${put_w:.1f} 풋월 지지선 및 건전한 콜옵션 수급"
-        }
-        _gex_cache[symbol] = {'ts': now, 'data': res}
-        return res
+            from options_gamma_engine import get_gamma_engine
+            syn_gex = get_gamma_engine()._generate_synthetic_gex(symbol, 0.0)
+            res = {
+                'symbol': symbol,
+                'price': syn_gex['current_price'],
+                'net_gex_display': "$0.0M (옵션미발행)",
+                'net_gex': 0.0,
+                'call_wall': syn_gex['call_wall'],
+                'put_wall': syn_gex['put_wall'],
+                'gamma_flip': syn_gex['gamma_flip_level'],
+                'put_call_ratio': 1.0,
+                'score_adj': 0,
+                'nearest_expiration': syn_gex['nearest_expiration'],
+                'dte_days': syn_gex['dte_days'],
+                'gex_regime': syn_gex['gex_regime'],
+                'reason': syn_gex['volatility_profile']
+            }
+            _gex_cache[symbol] = {'ts': now, 'data': res}
+            return res
+        except Exception as e2:
+            logger.debug("Dealer GEX fallback failed: {}", e2)
 
     def format_telegram_card(self, symbols: List[str] = None) -> str:
         # Dynamic active portfolio detection and entry price mapping

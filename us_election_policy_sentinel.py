@@ -43,16 +43,24 @@ class ElectionPolicySignal:
 class USElectionPolicySentinel:
     """Monitors US political cycles, legislative uncertainty, and midterm dynamics."""
 
-    # Key political dates
-    MIDTERM_DATE = date(2026, 11, 3)
-
-    # Sector policy sensitivity mapping
-    POLITICAL_SECTORS = {
-        'DEFENSE': {'etf': 'ITA', 'tickers': ['LMT', 'RTX', 'NOC', 'GD', 'VTOL'], 'policy_trend': 'BIPARTISAN_TAILWIND'},
-        'SEMIS_AI': {'etf': 'SMH', 'tickers': ['NVDA', 'TSM', 'AMD', 'PLTR', 'AVGO'], 'policy_trend': 'EXPORT_SCRUTINY_BUT_SECULAR'},
-        'TRAD_ENERGY': {'etf': 'XLE', 'tickers': ['XOM', 'CVX', 'EOG', 'OXY'], 'policy_trend': 'REGULATORY_SENSITIVE'},
-        'HEALTHCARE': {'etf': 'XLV', 'tickers': ['LLY', 'MRK', 'JNJ', 'UNH', 'ABBV'], 'policy_trend': 'DRUG_PRICE_SCRUTINY'},
-    }
+    @staticmethod
+    def get_next_election_info(today: date) -> Tuple[date, str, int]:
+        """Dynamically computes the upcoming US General/Midterm Election Date via statutory calendar rules."""
+        y = today.year if today.year % 2 == 0 else today.year + 1
+        
+        def _calc_election_tuesday(year: int) -> date:
+            nov1 = date(year, 11, 1)
+            first_mon_day = 1 + (7 - nov1.weekday()) % 7 if nov1.weekday() != 0 else 1
+            return date(year, 11, first_mon_day + 1)
+            
+        elec_date = _calc_election_tuesday(y)
+        if (today - elec_date).days > 60:
+            y += 2
+            elec_date = _calc_election_tuesday(y)
+            
+        elec_type = "PRESIDENTIAL" if y % 4 == 0 else "MIDTERM"
+        days_to = (elec_date - today).days
+        return elec_date, elec_type, days_to
 
     def __init__(self):
         from fred_macro import FREDMacroAnalyzer
@@ -65,7 +73,12 @@ class USElectionPolicySentinel:
             if now - ts < _ELECTION_TTL:
                 return sig
 
-        today = datetime.now().date()
+        try:
+            import pytz
+            today = datetime.now(pytz.timezone('America/New_York')).date()
+        except Exception:
+            today = datetime.utcnow().date()
+
         alerts = []
         score_adj = 0
 
@@ -93,18 +106,18 @@ class USElectionPolicySentinel:
         else:
             epu_regime = "MODERATE"
 
-        # 2. Midterm Election Cycle Phase (2026)
-        days_to_midterm = (self.MIDTERM_DATE - today).days
+        # 2. Dynamic Election Cycle Phase
+        elec_date, elec_type, days_to_elec = self.get_next_election_info(today)
 
-        if days_to_midterm > 0 and days_to_midterm <= 90:
-            # Aug - Oct 2026: Pre-Midterm Volatility Window
-            cycle_phase = "MIDTERM_PRE_ELECTION_CHOP"
-            alerts.append(f"🗳️ [MIDTERM_CYCLE] D-{days_to_midterm} to US Midterm Elections. Historical pre-election chop active (Favor high-quality leaders).")
-        elif days_to_midterm <= 0 and days_to_midterm >= -60:
-            # Nov - Dec 2026: Post-Midterm Historical Relief Surge (+15% historical median)
+        if 0 < days_to_elec <= 90:
+            # Pre-Election Volatility Window
+            cycle_phase = f"{elec_type}_PRE_ELECTION_CHOP"
+            alerts.append(f"🗳️ [{elec_type}_CYCLE] D-{days_to_elec} to US {elec_type.capitalize()} Election ({elec_date}). Historical pre-election chop active (Favor high-quality leaders).")
+        elif -60 <= days_to_elec <= 0:
+            # Post-Election Historical Relief Surge
             cycle_phase = "POST_ELECTION_RELIEF_RALLY"
             score_adj += 10
-            alerts.append(f"🚀 [MIDTERM_RELIEF_RALLY] Post-election legislative clarity unlocked! High-Beta momentum boost active.")
+            alerts.append(f"🚀 [ELECTION_RELIEF_RALLY] Post-election legislative clarity unlocked! High-Beta momentum boost active.")
         else:
             cycle_phase = "OFF_YEAR_TREND"
 
@@ -113,7 +126,7 @@ class USElectionPolicySentinel:
 
         summary = (
             f"EPU Index: {epu_val:.1f} ({epu_regime}) | "
-            f"Midterm Cycle: {cycle_phase} (D-{days_to_midterm} days) | "
+            f"Cycle: {cycle_phase} (D-{days_to_elec} days to {elec_date}) | "
             f"Policy Adj: {score_adj:+d} pts"
         )
 
@@ -121,7 +134,7 @@ class USElectionPolicySentinel:
             epu_index=round(epu_val, 1),
             epu_regime=epu_regime,
             election_cycle_phase=cycle_phase,
-            days_to_election=days_to_midterm,
+            days_to_election=days_to_elec,
             score_adjustment=score_adj,
             favored_political_sectors=favored,
             vulnerable_political_sectors=vulnerable,

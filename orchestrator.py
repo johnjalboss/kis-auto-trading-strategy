@@ -1029,86 +1029,33 @@ class BotOrchestrator:
                         logger.debug("Circuit breaker check failed: {}", _cb)
                     
                     # ============================================================
-                    #  SECTOR CONCENTRATION GUARD    2   
+                    # 4. GICS DYNAMIC SECTOR CONCENTRATION GUARD (Max 2 positions per sector)
                     # ============================================================
                     try:
-                        _SECTOR_MAP = {
-                            #  / 
-                            'semiconductors': [
-                                'NVDA','AMD','MU','LRCX','KLAC','ASML','QCOM','ARM','ON',
-                                'AVGO','TXN','AMAT','MRVL','INTC','SWKS','MPWR','SOXL','SOXS',
-                            ],
-                            # 
-                            'big_tech': [
-                                'AAPL','MSFT','AMZN','META','GOOGL','GOOG','ORCL','IBM','DELL','HPQ',
-                            ],
-                            # AI /  / 
-                            'ai_growth': [
-                                'PLTR','DDOG','CRWD','ZS','NET','MDB','PANW','SNOW','AI',
-                                'NOW','WDAY','SNPS','CDNS','FTNT','CHKP','OKTA','TEAM','MNDY',
-                                'FSLY','TTD','BRZE','ASAN','GTLB','DOCN','APP','U',
-                            ],
-                            #  /  / 
-                            'fintech': [
-                                'AFRM','UPST','SOFI','HOOD','COIN','NU','PYPL','XYZ',
-                                'MARA','RIOT','CLSK','MSTR',
-                            ],
-                            #  /  (   )
-                            'banks': [
-                                'JPM','GS','BAC','WFC','C','MS','COF','AXP',
-                                'BLK','SPGI','MCO','CME','ICE','V','MA',
-                            ],
-                            # 
-                            'energy': [
-                                'XOM','CVX','FANG','BKR','COP','SLB','EOG','MPC','VLO','PSX',
-                                'OXY','CCJ','UEC','URA','NEM','FCX','ALB','VST',
-                            ],
-                            #  / 
-                            'biotech': [
-                                'MRNA','GILD','AMGN','VRTX','ISRG','DXCM','PODD','REGN',
-                                'BMY','MRK','PFE','LLY','ABT','ABBV','TMO','DHR',
-                                'SYK','BSX','ZTS','ILMN','UNH','BIIB','HALO','INCY','ALNY','BMRN',
-                            ],
-                            #  / 
-                            'clean_energy': [
-                                'FSLR','ENPH','NEE','DUK','SO','ED','AEP','XEL','WEC',
-                            ],
-                            # EV / 
-                            'ev_auto': [
-                                'TSLA','RIVN','LCID','F','GM','NIO',
-                            ],
-                            #  /  / 
-                            'travel': [
-                                'ABNB','UBER','RCL','CCL','DKNG','MAR','HLT','BKNG','EXPE',
-                                'DAL','UAL','AAL','LUV',
-                            ],
-                            #  / 
-                            'reits': [
-                                'AMT','PLD','EQIX','VTR','PSA','O','SPG','CCI','DLR','SBAC','DOC',
-                            ],
-                            #  / 
-                            'defense_industrial': [
-                                'LMT','RTX','NOC','GD','TDG','LHX','TXT',
-                                'GE','CAT','BA','HON','MMM','DE','PCAR','CMI','ETN','EMR','WM','RSG',
-                            ],
-                            #  / 
-                            'consumer': [
-                                'NKE','SBUX','MCD','DIS','LULU','CMG','DPZ','YUM',
-                                'HD','LOW','WMT','COST','AMZN',
-                            ],
-                            #  /  / 
-                            'media_ad': [
-                                'ROKU','PINS','DUOL','TTD','APP','CELH',
-                            ],
-                        }
-                        _sym_sector = next((sec for sec, syms in _SECTOR_MAP.items() if symbol in syms), None)
-                        if _sym_sector:
-                            _sector_conflict = [s for s in current_positions if any(
-                                s in syms for sec, syms in _SECTOR_MAP.items() if sec == _sym_sector
-                            )]
-                            if _sector_conflict:
-                                logger.info("SECTOR_GUARD: {} ({})   {}   (   )",
-                                            symbol, _sym_sector, _sector_conflict)
+                        def _get_dyn_sector(sym_code: str) -> str:
+                            try:
+                                from sector_fund_flow import get_sector_fund_flow
+                                s_flow = get_sector_fund_flow()
+                                if hasattr(s_flow, 'get_sector'):
+                                    s_val = s_flow.get_sector(sym_code)
+                                    if s_val and s_val != "Unknown":
+                                        return s_val
+                            except Exception:
+                                pass
+                            try:
+                                import kis_data
+                                if hasattr(kis_data, 'get_sector'):
+                                    return kis_data.get_sector(sym_code) or "Unknown"
+                            except Exception:
+                                pass
+                            return "Unknown"
+
+                        _sym_sector = _get_dyn_sector(symbol)
+                        if _sym_sector and _sym_sector != "Unknown":
+                            _same_sector_positions = [s for s in current_positions if _get_dyn_sector(s) == _sym_sector]
+                            if len(_same_sector_positions) >= 2:
+                                logger.info("SECTOR_GUARD: {} ({}) blocked - already holding 2 positions in sector {}: {}",
+                                            symbol, _sym_sector, _sym_sector, _same_sector_positions)
                                 continue
                     except Exception as _sc:
                         logger.debug("Sector concentration guard failed: {}", _sc)

@@ -34,40 +34,27 @@ class MacroEventShockShield:
 
     def _get_annual_event_schedule(self) -> List[Dict[str, Any]]:
         """
-        Calculates/Loads the scheduled high-impact macro event calendar.
-        Can be dynamically updated via Economic Calendar API (Finnhub/FRED) or calibrated calendar.
+        Calculates/Loads the scheduled high-impact macro event calendar dynamically using calendar math.
         """
-        # Calibrated recurring FOMC & CPI/NFP calendar schedule for 2026
-        events = [
-            # August 2026
-            {"name": "Jackson Hole Economic Symposium", "date": "2026-08-21", "time_et": "10:00", "impact": "HIGH"},
-            {"name": "US Core PCE Price Index", "date": "2026-08-28", "time_et": "08:30", "impact": "HIGH"},
-            # September 2026
-            {"name": "Non-Farm Payrolls (NFP)", "date": "2026-09-04", "time_et": "08:30", "impact": "HIGH"},
-            {"name": "US CPI (Consumer Price Index)", "date": "2026-09-11", "time_et": "08:30", "impact": "HIGH"},
-            {"name": "FOMC Rate Decision", "date": "2026-09-16", "time_et": "14:00", "impact": "CRITICAL"},
-            {"name": "FOMC Press Conference", "date": "2026-09-16", "time_et": "14:30", "impact": "CRITICAL"},
-            # October 2026
-            {"name": "Non-Farm Payrolls (NFP)", "date": "2026-10-02", "time_et": "08:30", "impact": "HIGH"},
-            {"name": "US CPI (Consumer Price Index)", "date": "2026-10-14", "time_et": "08:30", "impact": "HIGH"},
-            # November 2026
-            {"name": "FOMC Rate Decision", "date": "2026-11-05", "time_et": "14:00", "impact": "CRITICAL"},
-            {"name": "FOMC Press Conference", "date": "2026-11-05", "time_et": "14:30", "impact": "CRITICAL"},
-            # December 2026
-            {"name": "FOMC Rate Decision", "date": "2026-12-16", "time_et": "14:00", "impact": "CRITICAL"},
-            {"name": "FOMC Press Conference", "date": "2026-12-16", "time_et": "14:30", "impact": "CRITICAL"},
-        ]
-
-        # Try to augment with Finnhub Economic Calendar if available
-        try:
-            from finnhub_client import get_finnhub_client
-            fh = get_finnhub_client()
-            if fh and fh.is_enabled():
-                # Finnhub economic calendar endpoint if integrated
-                pass
-        except Exception:
-            pass
-
+        from macro_event_horizon import get_dynamic_macro_calendar
+        now_et = datetime.now(self.et_tz).date()
+        base_events = get_dynamic_macro_calendar(now_et, months_ahead=3)
+        events = []
+        for ev in base_events:
+            t_str = "14:00" if ev["type"] == "FOMC" else "08:30"
+            events.append({
+                "name": ev["name"],
+                "date": ev["date"],
+                "time_et": t_str,
+                "impact": ev["impact"]
+            })
+            if ev["type"] == "FOMC":
+                events.append({
+                    "name": f"{ev['name']} 기자회견",
+                    "date": ev["date"],
+                    "time_et": "14:30",
+                    "impact": ev["impact"]
+                })
         return events
 
     def check_shock_shield_status(self) -> Dict[str, Any]:

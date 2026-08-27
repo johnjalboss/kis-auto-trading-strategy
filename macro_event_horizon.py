@@ -12,26 +12,56 @@ from typing import Dict, Any, List, Optional
 from loguru import logger
 import config
 
-# Pre-programmed 2026 Key US Macro Events Calendar (Y-M-D)
-MACRO_CALENDAR_2026 = [
-    # CPI Releases (8:30 AM ET)
-    {"date": "2026-08-12", "name": "미국 7월 CPI (소비자물가지수)", "impact": "HIGH", "type": "CPI"},
-    {"date": "2026-09-11", "name": "미국 8월 CPI (소비자물가지수)", "impact": "HIGH", "type": "CPI"},
-    {"date": "2026-10-14", "name": "미국 9월 CPI (소비자물가지수)", "impact": "HIGH", "type": "CPI"},
-    {"date": "2026-11-12", "name": "미국 10월 CPI (소비자물가지수)", "impact": "HIGH", "type": "CPI"},
-    {"date": "2026-12-11", "name": "미국 11월 CPI (소비자물가지수)", "impact": "HIGH", "type": "CPI"},
-    
-    # FOMC Interest Rate Decisions (2:00 PM ET)
-    {"date": "2026-09-16", "name": "FOMC 기준금리 결정 & 점도표 발표", "impact": "CRITICAL", "type": "FOMC"},
-    {"date": "2026-11-05", "name": "FOMC 기준금리 결정", "impact": "CRITICAL", "type": "FOMC"},
-    {"date": "2026-12-16", "name": "FOMC 기준금리 결정 & 경제전망", "impact": "CRITICAL", "type": "FOMC"},
+import calendar
 
-    # Non-Farm Payrolls (First Friday of month, 8:30 AM ET)
-    {"date": "2026-09-04", "name": "미국 8월 비농업 고용보고서 (NFP)", "impact": "HIGH", "type": "NFP"},
-    {"date": "2026-10-02", "name": "미국 9월 비농업 고용보고서 (NFP)", "impact": "HIGH", "type": "NFP"},
-    {"date": "2026-11-06", "name": "미국 10월 비농업 고용보고서 (NFP)", "impact": "HIGH", "type": "NFP"},
-    {"date": "2026-12-04", "name": "미국 11월 비농업 고용보고서 (NFP)", "impact": "HIGH", "type": "NFP"},
-]
+def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[Dict[str, Any]]:
+    """Calculates statutory release schedules for CPI, NFP, and FOMC dynamically using calendar math."""
+    events = []
+    y = start_date.year
+    m = start_date.month
+
+    for _ in range(months_ahead):
+        cal = calendar.monthcalendar(y, m)
+        
+        # 1. Non-Farm Payrolls (NFP): First Friday of each month
+        first_fri = cal[0][4] if cal[0][4] != 0 else cal[1][4]
+        nfp_date = date(y, m, first_fri)
+        events.append({
+            "date": nfp_date.strftime("%Y-%m-%d"),
+            "name": f"미국 {m}월 비농업 고용보고서 (NFP)",
+            "impact": "HIGH",
+            "type": "NFP"
+        })
+
+        # 2. CPI: Second Wednesday of each month
+        wednesdays = [week[2] for week in cal if week[2] != 0]
+        second_wed = wednesdays[1] if len(wednesdays) > 1 else wednesdays[0]
+        cpi_date = date(y, m, second_wed)
+        events.append({
+            "date": cpi_date.strftime("%Y-%m-%d"),
+            "name": f"미국 {m-1 if m > 1 else 12}월 CPI (소비자물가지수)",
+            "impact": "HIGH",
+            "type": "CPI"
+        })
+
+        # 3. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
+        if m in [1, 3, 5, 6, 7, 9, 11, 12]:
+            third_wed = wednesdays[2] if len(wednesdays) > 2 else wednesdays[-1]
+            fomc_date = date(y, m, third_wed)
+            events.append({
+                "date": fomc_date.strftime("%Y-%m-%d"),
+                "name": f"FOMC 기준금리 결정 ({y}년 {m}월)",
+                "impact": "CRITICAL",
+                "type": "FOMC"
+            })
+
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    return sorted(events, key=lambda x: x["date"])
+
 
 class MacroEventHorizon:
     """Calculates macro D-Day countdowns and evaluates portfolio exposure risks."""
@@ -49,10 +79,16 @@ class MacroEventHorizon:
 
     def get_upcoming_macro_events(self, lookahead_days: int = 21) -> List[Dict[str, Any]]:
         """Returns upcoming macro events within the lookahead window."""
-        today = datetime.now().date()
+        try:
+            import pytz
+            today = datetime.now(pytz.timezone('America/New_York')).date()
+        except Exception:
+            today = datetime.utcnow().date()
+
+        macro_events = get_dynamic_macro_calendar(today, months_ahead=3)
         upcoming = []
 
-        for ev in MACRO_CALENDAR_2026:
+        for ev in macro_events:
             try:
                 ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
                 diff = (ev_date - today).days
@@ -79,20 +115,14 @@ class MacroEventHorizon:
             syms = self.holdings
         else:
             syms = ["NVDA", "AAPL", "MSFT", "TSLA"]
-        today = datetime.now().date()
-        earnings_list = []
 
-        # Fallback dictionary for known earnings schedules to guarantee zero API delay
-        static_earnings_estimates = {
-            "VTOL": "2026-11-04",
-            "MDT": "2026-08-20",
-            "MRK": "2026-10-27",
-            "STRC": "2026-11-12",
-            "NVDA": "2026-08-26",
-            "AAPL": "2026-10-29",
-            "MSFT": "2026-10-22",
-            "TSLA": "2026-10-21"
-        }
+        try:
+            import pytz
+            today = datetime.now(pytz.timezone('America/New_York')).date()
+        except Exception:
+            today = datetime.utcnow().date()
+
+        earnings_list = []
 
         for sym in syms:
             sym_upper = sym.upper()
@@ -101,9 +131,10 @@ class MacroEventHorizon:
             # Live lookup from yfinance
             try:
                 import yfinance as yf
+                import pandas as pd
                 t = yf.Ticker(sym_upper)
                 
-                # Method 1: ticker.calendar (dict or DataFrame)
+                # Method 1: ticker.calendar
                 cal = getattr(t, 'calendar', None)
                 if cal is not None:
                     if isinstance(cal, dict):
@@ -121,7 +152,6 @@ class MacroEventHorizon:
                 if not earn_date_str:
                     edates = getattr(t, 'earnings_dates', None)
                     if edates is not None and not edates.empty:
-                        # find next future date or nearest
                         now_dt = pd.to_datetime(today)
                         future_ed = edates[edates.index >= now_dt]
                         if not future_ed.empty:
@@ -139,10 +169,6 @@ class MacroEventHorizon:
 
             except Exception as e:
                 logger.debug("Earnings live fetch error for {}: {}", sym_upper, e)
-
-            # Method 4: Known corporate schedules
-            if not earn_date_str:
-                earn_date_str = static_earnings_estimates.get(sym_upper, "2026-10-28")
 
             if earn_date_str:
                 try:

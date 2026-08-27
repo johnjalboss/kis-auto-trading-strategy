@@ -27,13 +27,13 @@ class DynamicExpectancySizer:
         """
         res = {
             "multiplier": 1.0,
-            "win_rate": 0.0,
-            "avg_win": 0.065,
-            "avg_loss": 0.032,
-            "expectancy": 0.025,
-            "sample_trades": 0,
+            "expectancy": 0.0,
+            "win_rate": 0.5,
+            "avg_win": 0.04,
+            "avg_loss": 0.03,
+            "trade_count": 0,
             "is_baseline": True,
-            "label": "NEW_CYCLE_BASELINE (8/14 리셋 초기 기준선)"
+            "label": "TRAILING_CYCLE_BASELINE (최근 30회 실거래 롤링 표본)"
         }
 
         if not os.path.exists(self.db_path):
@@ -43,9 +43,8 @@ class DynamicExpectancySizer:
             conn = sqlite3.connect(self.db_path)
             query = """
                 SELECT pnl_pct FROM trades 
-                WHERE (date(created_at) >= '2026-08-14' OR date(exit_time) >= '2026-08-14')
-                  AND side = 'SELL' AND pnl_pct IS NOT NULL AND pnl_pct != 0
-                ORDER BY created_at DESC LIMIT 20
+                WHERE side = 'SELL' AND pnl_pct IS NOT NULL AND pnl_pct != 0
+                ORDER BY created_at DESC LIMIT 30
             """
             df = pd.read_sql_query(query, conn)
             conn.close()

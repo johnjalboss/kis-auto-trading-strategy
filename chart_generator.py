@@ -145,26 +145,33 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
-            # True Day 1 Baseline Holdings on 2026-08-14 start:
-            # VTOL (6 shares @ $45.92), STRC (1 share @ $95.26), MDT (2 shares @ $88.75)
-            initial_positions = {
-                'VTOL': {'symbol': 'VTOL', 'quantity': 6, 'avg_price': 45.9246},
-                'STRC': {'symbol': 'STRC', 'quantity': 1, 'avg_price': 95.258},
-                'MDT': {'symbol': 'MDT', 'quantity': 2, 'avg_price': 88.7533}
-            }
-            for sym in initial_positions:
-                all_symbols_set.add(sym)
+            # Dynamic positions from DB positions table
+            initial_positions = {}
+            try:
+                cur.execute("SELECT symbol, quantity, entry_price FROM positions")
+                for p_row in cur.fetchall():
+                    s_sym = p_row['symbol']
+                    initial_positions[s_sym] = {
+                        'symbol': s_sym,
+                        'quantity': int(p_row['quantity'] or 0),
+                        'avg_price': float(p_row['entry_price'] or 0.0)
+                    }
+                    all_symbols_set.add(s_sym)
+            except Exception as pe:
+                logger.debug("Failed loading dynamic positions: {}", pe)
 
-            # Fetch all trades strictly on/after 2026-08-14 in chronological order with strict deduplication
+            # Fetch all trades in rolling lookback window in chronological order with strict deduplication
+            from datetime import date, timedelta
+            lookback_cutoff = (date.today() - timedelta(days=30)).strftime("%Y-%m-%d")
             cur.execute("""
                 SELECT id, symbol, side, quantity, price, pnl, pnl_pct, date(created_at, '-14 hours') as trade_date, created_at
                 FROM (
-                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trade_details WHERE date(created_at) >= '2026-08-14'
+                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trade_details WHERE date(created_at) >= ?
                     UNION ALL
-                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trades WHERE date(created_at) >= '2026-08-14'
+                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trades WHERE date(created_at) >= ?
                 )
                 ORDER BY created_at ASC, id ASC
-            """)
+            """, (lookback_cutoff, lookback_cutoff))
             
             seen_trade_keys = set()
             for r in cur.fetchall():

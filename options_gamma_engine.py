@@ -255,19 +255,7 @@ class OptionsGammaEngine:
             return self._generate_synthetic_gex(symbol, current_price if 'current_price' in locals() and current_price > 0 else 100.0)
 
     def _generate_synthetic_gex(self, symbol: str, current_price: float) -> Dict[str, Any]:
-        """Generates calibrated statistical Volatility Walls when option chain is unavailable"""
-        h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-        
-        call_pct = 4.0 + ((h_val % 30) / 10.0)    # +4.0% ~ +7.0%
-        put_pct = -(4.0 + ((h_val >> 4) % 30) / 10.0)  # -4.0% ~ -7.0%
-
-        call_wall = round(current_price * (1.0 + call_pct / 100.0), 2)
-        put_wall = round(current_price * (1.0 + put_pct / 100.0), 2)
-        gamma_flip = round(put_wall + (call_wall - put_wall) * 0.42, 2)
-        
-        # Dynamic Net GEX estimation ($60M ~ $380M)
-        net_gex = round(65.0 + (h_val % 320), 1)
-
+        """Calculates quantitative statistical volatility bands (1.5-sigma) when option chain is unlisted/unavailable."""
         try:
             import pytz
             today_et = datetime.now(pytz.timezone('America/New_York')).date()
@@ -277,25 +265,51 @@ class OptionsGammaEngine:
         days_to_fri = (4 - today_et.weekday()) % 7
         nearest_fri_obj = today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)
         nearest_exp = nearest_fri_obj.strftime("%Y-%m-%d")
-        dte_calc = max(0, (nearest_fri_obj - today_et).days)
+        dte_calc = max(1, (nearest_fri_obj - today_et).days)
 
-        res = {
+        # 1. Compute actual historical volatility from 20-day price series
+        sigma_ann = 0.25  # default 25% annualized volatility
+        try:
+            import yfinance as yf
+            import numpy as np
+            t = yf.Ticker(symbol)
+            hist = t.history(period="1mo", interval="1d")
+            if not hist.empty and len(hist) >= 5:
+                if current_price <= 0:
+                    current_price = float(hist['Close'].iloc[-1])
+                returns = np.diff(np.log(hist['Close'].values))
+                if len(returns) > 0 and np.std(returns) > 0:
+                    sigma_ann = float(np.std(returns) * np.sqrt(252))
+        except Exception:
+            pass
+
+        if current_price <= 0:
+            current_price = 100.0
+
+        # 2. Derive 1.5-sigma statistical price boundary for remaining DTE
+        sigma_dte = sigma_ann * math.sqrt(dte_calc / 252.0)
+        call_wall = round(current_price * (1.0 + 1.5 * sigma_dte), 2)
+        put_wall = round(current_price * (1.0 - 1.5 * sigma_dte), 2)
+        gamma_flip = round(current_price * (1.0 - 0.5 * sigma_dte), 2)
+
+        result = {
             "symbol": symbol,
             "current_price": round(current_price, 2),
-            "net_gex_millions": net_gex,
+            "net_gex_millions": 0.0,  # 0.0 unlisted/no dealer inventory
             "call_wall": call_wall,
             "put_wall": put_wall,
             "gamma_flip_level": gamma_flip,
-            "call_wall_dist_pct": round(call_pct, 2),
-            "put_wall_dist_pct": round(put_pct, 2),
+            "call_wall_dist_pct": round((call_wall - current_price) / current_price * 100, 2),
+            "put_wall_dist_pct": round((put_wall - current_price) / current_price * 100, 2),
             "nearest_expiration": nearest_exp,
             "dte_days": dte_calc,
-            "gex_regime": "POSITIVE_GAMMA",
-            "volatility_profile": "LOW_VOLATILITY_UPTREND",
+            "gex_regime": "STATISTICAL_VOLATILITY_BAND (HV 통계 밴드)",
+            "volatility_profile": f"HV {sigma_ann*100:.1f}% 1.5σ 표준편차 밴드",
             "is_synthetic": True
         }
-        self._save_cache(symbol, res)
-        return res
+
+        self._save_cache(symbol, result)
+        return result
 
     def format_telegram_card(self, symbol: str = "SPY") -> str:
         """Formats the Options Gamma status for Telegram"""

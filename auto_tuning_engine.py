@@ -102,8 +102,7 @@ class AutoTuningEngine:
             return {"loss_count": 0, "root_causes": {}}
 
         cur = conn.cursor()
-        RESET_DATE = "2026-08-14"
-        since_date = max(RESET_DATE, (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d"))
+        since_date = (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
 
         cur.execute("""
             SELECT symbol, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at 
@@ -222,8 +221,7 @@ class AutoTuningEngine:
             return {}
             
         cur = conn.cursor()
-        RESET_DATE = "2026-08-14"
-        since_date = max(RESET_DATE, (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d"))
+        since_date = (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
         
         cur.execute("""
             SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, regime, created_at,
