@@ -200,7 +200,8 @@ class UnifiedQuantScoringEngine:
             net_gex = float(gex_data.get('net_gex_millions', 0.0))
             phi_gex = float(np.tanh(net_gex / 150.0))
             p3_signals.append(0.35 * phi_gex)
-            breakdown.append(f"• [옵션 딜러 GEX 감마] ${net_gex:+,.1f}M ({gex_data.get('gex_regime')}, 기여 {phi_gex*20.0*0.35:+.1f}pt)")
+            if abs(net_gex) >= 5.0 and abs(phi_gex * 20.0 * 0.35) >= 0.5:
+                breakdown.append(f"• [옵션 딜러 GEX 감마] ${net_gex:+,.1f}M ({gex_data.get('gex_regime')}, 기여 {phi_gex*20.0*0.35:+.1f}pt)")
         except Exception:
             pass
 
@@ -211,6 +212,7 @@ class UnifiedQuantScoringEngine:
             vp_res = VolumeProfilePOCEngine().analyze(df, symbol)
             if vp_res.get('is_poc_bounce', False):
                 phi_poc = 0.85
+                breakdown.append(f"• [매물대 POC 지지 반등] {vp_res.get('poc_price', 0.0):.2f} 지지 확인 (기여 {phi_poc*20.0*0.25:+.1f}pt)")
             else:
                 dist_poc = float(vp_res.get('dist_from_poc_pct', 5.0))
                 phi_poc = float(np.exp(-abs(dist_poc) / 3.0) * 1.5 - 0.5)
@@ -244,6 +246,8 @@ class UnifiedQuantScoringEngine:
             ofi_score = float(ofi_res.get('ofi_score', 0.0))
             phi_ofi = float(np.tanh(ofi_score / 15.0))
             p3_signals.append(0.15 * phi_ofi)
+            if abs(ofi_score) >= 4.0:
+                breakdown.append(f"• [호가 주문 불균형(OFI)] {ofi_res.get('ofi_regime', 'ACCUMULATION')} (기여 {phi_ofi*20.0*0.15:+.1f}pt)")
         except Exception:
             pass
 
@@ -264,7 +268,6 @@ class UnifiedQuantScoringEngine:
                 regime_map = {"EXPANSION": 0.8, "NEUTRAL": 0.2, "CONTRACTION": -0.8}
                 phi_fed = regime_map.get(liq_rep.liquidity_regime, 0.0)
                 p4_signals.append(0.40 * phi_fed)
-                breakdown.append(f"• [연준 순유동성 환경] {liq_rep.liquidity_regime} (${liq_rep.fed_net_liquidity_trillion:.2f}T, 기여 {phi_fed*15.0*0.40:+.1f}pt)")
         except Exception:
             pass
 
