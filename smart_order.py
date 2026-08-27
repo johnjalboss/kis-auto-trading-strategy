@@ -29,6 +29,8 @@ class OrderType(Enum):
 
 class OrderStatus(Enum):
     PENDING = "PENDING"
+    PLACED = "PLACED"
+    SUBMITTED = "SUBMITTED"
     PARTIAL = "PARTIAL"
     FILLED = "FILLED"
     CANCELLED = "CANCELLED"

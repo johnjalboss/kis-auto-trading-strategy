@@ -1791,16 +1791,10 @@ class BotOrchestrator:
                 
                 # Send Trade Notification
                 try:
-                    pnl_pct = 0.0
-                    if action == "SELL" and symbol in self.strategy._positions:
-                        pos = self.strategy._positions[symbol]
-                        if pos.entry_price > 0:
-                            pnl_pct = ((order.avg_fill_price or price) - pos.entry_price) / pos.entry_price
-                            
                     from notification import get_notifier
                     notifier = get_notifier()
-                    # Send trade receipt for FILLED, PLACED, or SUBMITTED orders
-                    is_valid_order = order.status in [OrderStatus.FILLED, OrderStatus.PLACED, OrderStatus.SUBMITTED, OrderStatus.PARTIAL_FILL]
+                    # Send trade receipt for valid orders (FILLED, PARTIAL, PENDING, PLACED, SUBMITTED)
+                    is_valid_order = order.status not in [OrderStatus.REJECTED, OrderStatus.FAILED, OrderStatus.CANCELLED]
                     if is_valid_order:
                         fill_qty = order.filled_quantity if order.filled_quantity > 0 else qty
                         fill_px = order.avg_fill_price or price
@@ -1823,8 +1817,7 @@ class BotOrchestrator:
                                     score_breakdown=sb,
                                     macro_regime=macro_name
                                 )
-                                from watchdog import send_tg
-                                send_tg(receipt_msg)
+                                notifier.send(receipt_msg)
                             except Exception as _tr_err:
                                 logger.warning("Telegram BUY receipt fallback: {}", _tr_err)
                                 notifier.trade_entry(symbol, fill_qty, fill_px, reason)
@@ -1846,16 +1839,15 @@ class BotOrchestrator:
                                     exit_price=fill_px,
                                     reason=reason
                                 )
-                                from watchdog import send_tg
-                                send_tg(receipt_msg)
+                                notifier.send(receipt_msg)
                             except Exception as _tr_err:
                                 logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
                                 notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
                     else:
                         logger.info("Trade alert suppressed for {}: order status={}",
-                                   symbol, order.status.value)
+                                   symbol, getattr(order.status, 'value', str(order.status)))
                 except Exception as ne:
-                    logger.debug("Trade notification failed: {}", ne)
+                    logger.error("Trade notification error for {}: {}", symbol, ne)
 
                 
                 # Record in frequency controller

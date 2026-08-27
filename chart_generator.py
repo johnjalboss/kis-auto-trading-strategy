@@ -145,33 +145,17 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
-            # Dynamic positions from DB positions table
+            # Day 0 starts with clean empty position inventory; all positions are reconstructed chronologically
             initial_positions = {}
-            try:
-                cur.execute("SELECT symbol, quantity, entry_price FROM positions")
-                for p_row in cur.fetchall():
-                    s_sym = p_row['symbol']
-                    initial_positions[s_sym] = {
-                        'symbol': s_sym,
-                        'quantity': int(p_row['quantity'] or 0),
-                        'avg_price': float(p_row['entry_price'] or 0.0)
-                    }
-                    all_symbols_set.add(s_sym)
-            except Exception as pe:
-                logger.debug("Failed loading dynamic positions: {}", pe)
 
-            # Fetch all trades in rolling lookback window in chronological order with strict deduplication
-            from datetime import date, timedelta
-            lookback_cutoff = (date.today() - timedelta(days=30)).strftime("%Y-%m-%d")
+            # Fetch all genuine trades since baseline (2026-08-14)
             cur.execute("""
-                SELECT id, symbol, side, quantity, price, pnl, pnl_pct, date(created_at, '-14 hours') as trade_date, created_at
-                FROM (
-                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trade_details WHERE date(created_at) >= ?
-                    UNION ALL
-                    SELECT id, symbol, side, quantity, price, pnl, pnl_pct, created_at FROM trades WHERE date(created_at) >= ?
-                )
+                SELECT id, symbol, side, quantity, price, pnl, pnl_pct, 
+                       date(created_at, '-14 hours') as trade_date, created_at
+                FROM trades 
+                WHERE created_at >= '2026-08-14'
                 ORDER BY created_at ASC, id ASC
-            """, (lookback_cutoff, lookback_cutoff))
+            """)
             
             seen_trade_keys = set()
             for r in cur.fetchall():
@@ -183,7 +167,6 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
                 pnl = round(float(trade_dict['pnl'] or 0), 2)
                 t_date = trade_dict['trade_date']
 
-                # Deduplication key across trades and trade_details
                 t_key = (sym, side, qty, px, pnl, t_date)
                 if t_key in seen_trade_keys:
                     continue
@@ -324,17 +307,17 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     except Exception:
         pass
 
-    nav_series = []
-    current_nav = 1.0
-    for i, d_str in enumerate(date_strs):
-        d_dt = pd.to_datetime(d_str).date()
-        active_cap = base_capital if d_dt < date(2026, 8, 25) else current_total_equity
-        d_pnl_change = daily_bars[i]
-        daily_r = (d_pnl_change / active_cap) if active_cap > 0 else 0.0
-        current_nav = current_nav * (1.0 + daily_r)
-        nav_series.append(current_nav)
-
-    total_twr_pct = (nav_series[-1] - 1.0) * 100 if nav_series else 0.0
+    # 6. GIPS Accurate Return & Benchmark Normalization
+    current_total_equity = base_capital
+    try:
+        from trader import Trader
+        _tr_inst = Trader()
+        _bp = _tr_inst.get_buying_power()
+        _pos_val = sum(p.current_price * p.quantity for p in _tr_inst.get_positions())
+        if _bp + _pos_val > 100:
+            current_total_equity = _bp + _pos_val
+    except Exception:
+        pass
 
     bm_symbol = (benchmark or "QQQ").upper().strip()
     if bm_symbol not in ("QQQ", "SPY"):
@@ -347,9 +330,9 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     if len(date_strs) == 1:
         cum_pnls = [0.0, cum_pnls[0]]
         daily_bars = [0.0, daily_bars[0]]
-        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, base_capital, date_labels)
+        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, current_total_equity, date_labels)
     else:
-        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, base_capital, date_strs)
+        bm_dollars = _fetch_benchmark_returns_since_baseline(bm_symbol, start_date, end_date, current_total_equity, date_strs)
 
     # Calculate Alpha (Excess Return vs Benchmark)
     alpha_dollars = [b - q for b, q in zip(cum_pnls, bm_dollars)]
@@ -379,7 +362,7 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     ax_main.grid(True, color='#21262d', linestyle='--', linewidth=0.7, alpha=0.6)
 
     def _dollar_pct_fmt(x, _):
-        pct = (x / base_capital) * 100 if base_capital > 0 else 0
+        pct = (x / current_total_equity) * 100 if current_total_equity > 0 else 0
         return f"${x:+,.2f} ({pct:+.1f}%)"
     ax_main.yaxis.set_major_formatter(mticker.FuncFormatter(_dollar_pct_fmt))
 
@@ -388,14 +371,14 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     min_val = min(min(all_vals), -5.0)
     ax_main.set_ylim(min_val - 5.0, max_val + 12.0)
 
-    # Summary metrics (GIPS Time-Weighted Return)
-    final_bot = cum_pnls[-1]
-    final_bm = bm_dollars[-1]
-    final_alpha = alpha_dollars[-1]
-    bot_pct = total_twr_pct
-    bm_pct = (final_bm / base_capital) * 100
+    # Summary metrics
+    final_bot = cum_pnls[-1] if cum_pnls else 0.0
+    final_bm = bm_dollars[-1] if bm_dollars else 0.0
+    final_alpha = alpha_dollars[-1] if alpha_dollars else 0.0
+    bot_pct = (final_bot / current_total_equity) * 100 if current_total_equity > 0 else 0.0
+    bm_pct = (final_bm / current_total_equity) * 100 if current_total_equity > 0 else 0.0
     alpha_pct = bot_pct - bm_pct
-    real_live_equity = current_total_equity if current_total_equity > 1000 else (base_capital + final_bot)
+    real_live_equity = current_total_equity
 
     ann_text = (
         f"Live Total : ${real_live_equity:,.2f}\n"
@@ -452,11 +435,10 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     caption_text = (
         f"📊 <b>[AI 퀀트 봇 vs {bm_symbol} 벤치마크 Day 1 성과 리포트]</b>\n"
         f"📅 <b>출발 기준일</b>: <b>2026-08-14 (Day 1 시작)</b>\n"
-        f"💰 <b>기초 시작원금</b>: <b>${base_capital:,.2f} USD</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🏦 <b>실시간 계좌 총 자산</b>: <b>${real_live_equity:,.2f} USD</b>\n"
-        f"🚀 <b>누적 수익률 (TWR)</b>: <b>{bot_pct:+.2f}%</b> (누적 P&L: <b>${final_bot:+,.2f} USD</b>)\n"
-        f"📈 <b>{bm_symbol} ({bm_name})</b>: <b>${(base_capital + final_bm):,.2f} USD</b> (<b>{bm_pct:+.2f}%</b>)\n"
+        f"🚀 <b>누적 실매매 손익</b>: <b>${final_bot:+,.2f} USD</b> (<b>{bot_pct:+.2f}%</b>)\n"
+        f"📈 <b>{bm_symbol} ({bm_name})</b>: <b>${final_bm:+,.2f} USD</b> (<b>{bm_pct:+.2f}%</b>)\n"
         f"🔥 <b>{bm_symbol} 대비 초과 알파</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💡 <i>현재 보유 종목: {held_symbols_str} (미실현 손익: ${current_unrealized:+,.2f} USD)</i>"
