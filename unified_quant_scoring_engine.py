@@ -25,14 +25,14 @@ from loguru import logger
 
 
 class UnifiedQuantScoringEngine:
-    """Institutional Multi-Factor Quantitative Scoring Engine"""
+    """Institutional Multi-Factor Quantitative Scoring Engine (Swing Trading Horizon: 3-10 Days)"""
 
-    # 5 Orthogonal Factor Pillar Weights (Sum = 1.00)
-    WEIGHT_TREND = 0.25
-    WEIGHT_INSTITUTIONAL = 0.25
-    WEIGHT_MICROSTRUCTURE = 0.20
-    WEIGHT_MACRO = 0.15
-    WEIGHT_CATALYST = 0.15
+    # 5 Factor Pillar Weights calibrated for Swing Alpha (Sum = 1.00)
+    WEIGHT_TREND = 0.35           # Primary driver: Price momentum, Kalman velocity, RS alpha
+    WEIGHT_MICROSTRUCTURE = 0.30  # Volume surge, Order flow imbalance (OFI), Volume profile POC
+    WEIGHT_CATALYST = 0.20        # Earnings PEAD surprise drift, News sentiment catalyst
+    WEIGHT_MACRO = 0.10           # VIX term structure & Multi-timeframe trend confluence
+    WEIGHT_INSTITUTIONAL = 0.05   # Auxiliary background sponsorship (13F / Form 4 confirmation)
 
     def __init__(self):
         self._cache = {}
@@ -55,7 +55,7 @@ class UnifiedQuantScoringEngine:
         pillar_details = {}
 
         # -------------------------------------------------------------
-        # PILLAR 1: Trend & Dynamic Price Momentum (Weight: 25.0%)
+        # PILLAR 1: Trend & Dynamic Price Momentum (Weight: 35.0%)
         # -------------------------------------------------------------
         p1_signals = []
         
@@ -68,7 +68,7 @@ class UnifiedQuantScoringEngine:
             phi_kalman = float(np.tanh(kalman_vel / 1.25))
             p1_signals.append(0.30 * phi_kalman)
             if abs(phi_kalman) > 0.15:
-                breakdown.append(f"• [칼만 무지연 속도] {kalman_vel:+.2f}%/일 (기여 {phi_kalman*25.0*0.30:+.1f}pt)")
+                breakdown.append(f"• [칼만 무지연 속도] {kalman_vel:+.2f}%/일 (기여 {phi_kalman*35.0*0.30:+.1f}pt)")
         except Exception:
             pass
 
@@ -107,7 +107,7 @@ class UnifiedQuantScoringEngine:
                 phi_rs = float(np.tanh(rs_alpha / 0.05))
                 p1_signals.append(0.15 * phi_rs)
                 if abs(rs_alpha) >= 0.03:
-                    breakdown.append(f"• [SPY 대비 상대강도 RS] 초과수익 {rs_alpha*100:+.1f}% (기여 {phi_rs*25.0*0.15:+.1f}pt)")
+                    breakdown.append(f"• [SPY 대비 상대강도 RS] 초과수익 {rs_alpha*100:+.1f}% (기여 {phi_rs*35.0*0.15:+.1f}pt)")
         except Exception:
             pass
 
@@ -126,61 +126,36 @@ class UnifiedQuantScoringEngine:
         pillar_details["Trend_Momentum"] = round(p1_composite, 3)
 
         # -------------------------------------------------------------
-        # PILLAR 2: Institutional Flow & Smart Money (Weight: 25.0%)
+        # PILLAR 2: Auxiliary Institutional Sponsorship (Weight: 5.0%)
         # -------------------------------------------------------------
         p2_signals = []
 
-        # 2.1 13F Institutional Ownership Sweet-Spot Curve (Gaussian peak at 68%, Crowded trade dampener at 100%)
+        # 2.1 13F Institutional Sponsorship
         phi_inst = 0.0
         try:
             from smart_money_footprint import SmartMoneyFootprint
             sm_res = SmartMoneyFootprint().analyze_ticker(symbol)
             inst_pct = float(sm_res.get('institutional_pct', 50.0))
             inst_clamped = min(100.0, max(0.0, inst_pct))
-            # Gaussian bell curve centered at 68.0% (optimal sweet spot 55%-78%), damped at >85% (crowded trade risk)
             phi_inst = float(np.exp(-((inst_clamped - 68.0) ** 2) / (2 * (22.0 ** 2))))
-            p2_signals.append(0.35 * phi_inst)
-            if inst_pct >= 90.0:
-                breakdown.append(f"• [기관 지분 포화도(13F)] {inst_pct:.1f}% (과밀 포지션 감쇄 적용, 기여 {phi_inst*25.0*0.35:+.1f}pt)")
-            else:
-                breakdown.append(f"• [기관 지분 포화도(13F)] {inst_pct:.1f}% (최적 스폰서십 구간, 기여 {phi_inst*25.0*0.35:+.1f}pt)")
+            p2_signals.append(0.60 * phi_inst)
+            if inst_pct >= 40.0:
+                breakdown.append(f"• [기관 지분 스폰서십(13F)] {inst_pct:.1f}% (기여 {phi_inst*5.0*0.60:+.1f}pt)")
         except Exception:
             pass
 
-        # 2.2 SEC Form 4 Insider Net Buy Conviction
+        # 2.2 SEC Form 4 Real Open-Market Buying (Positive bias only; routine 10b5-1 sales do not penalize short swings)
         phi_insider = 0.0
         try:
             from sec_form4_insider_radar import SECForm4InsiderRadar
             ins_res = SECForm4InsiderRadar().analyze_insider_activity(symbol)
             ins_bonus = float(ins_res.get('strategy_bonus', 0.0))
-            phi_insider = float(np.tanh(ins_bonus / 7.5))
-            p2_signals.append(0.30 * phi_insider)
             if ins_bonus > 0:
-                breakdown.append(f"• [SEC 내부자 순매수] {ins_res.get('cluster_desc', '매수')} (기여 {phi_insider*25.0*0.30:+.1f}pt)")
-            elif ins_bonus < 0:
-                breakdown.append(f"• [SEC 내부자 매도 감지] {ins_res.get('cluster_desc', '매도')} (감점 {phi_insider*25.0*0.30:+.1f}pt)")
-        except Exception:
-            pass
-
-        # 2.3 Dark Pool / ATS Block Flow
-        phi_dp = 0.0
-        try:
-            from dark_pool_block_radar import DarkPoolBlockRadar
-            dp_res = DarkPoolBlockRadar().analyze(symbol)
-            dp_score = float(dp_res.get('score_adj', 0.0))
-            phi_dp = float(np.tanh(dp_score / 15.0))
-            p2_signals.append(0.20 * phi_dp)
-        except Exception:
-            pass
-
-        # 2.4 Amihud Liquidity Pressure (PIE Z-Score)
-        phi_amihud = 0.0
-        try:
-            from amihud_liquidity_pressure import AmihudLiquidityPressureEngine
-            ami_res = AmihudLiquidityPressureEngine().analyze(df, symbol=symbol)
-            pie_z = float(ami_res.get('pie_zscore', 0.0))
-            phi_amihud = float(np.tanh(pie_z / 1.5))
-            p2_signals.append(0.15 * phi_amihud)
+                phi_insider = float(np.tanh(ins_bonus / 7.5))
+                p2_signals.append(0.40 * phi_insider)
+                breakdown.append(f"• [SEC 내부자 실매수 확인] {ins_res.get('cluster_desc', '매수')} (기여 {phi_insider*5.0*0.40:+.1f}pt)")
+            else:
+                p2_signals.append(0.0)
         except Exception:
             pass
 
@@ -200,8 +175,8 @@ class UnifiedQuantScoringEngine:
             net_gex = float(gex_data.get('net_gex_millions', 0.0))
             phi_gex = float(np.tanh(net_gex / 150.0))
             p3_signals.append(0.35 * phi_gex)
-            if abs(net_gex) >= 5.0 and abs(phi_gex * 20.0 * 0.35) >= 0.5:
-                breakdown.append(f"• [옵션 딜러 GEX 감마] ${net_gex:+,.1f}M ({gex_data.get('gex_regime')}, 기여 {phi_gex*20.0*0.35:+.1f}pt)")
+            if abs(net_gex) >= 5.0 and abs(phi_gex * 30.0 * 0.35) >= 0.5:
+                breakdown.append(f"• [옵션 딜러 GEX 감마] ${net_gex:+,.1f}M ({gex_data.get('gex_regime')}, 기여 {phi_gex*30.0*0.35:+.1f}pt)")
         except Exception:
             pass
 
@@ -212,7 +187,7 @@ class UnifiedQuantScoringEngine:
             vp_res = VolumeProfilePOCEngine().analyze(df, symbol)
             if vp_res.get('is_poc_bounce', False):
                 phi_poc = 0.85
-                breakdown.append(f"• [매물대 POC 지지 반등] {vp_res.get('poc_price', 0.0):.2f} 지지 확인 (기여 {phi_poc*20.0*0.25:+.1f}pt)")
+                breakdown.append(f"• [매물대 POC 지지 반등] {vp_res.get('poc_price', 0.0):.2f} 지지 확인 (기여 {phi_poc*30.0*0.25:+.1f}pt)")
             else:
                 dist_poc = float(vp_res.get('dist_from_poc_pct', 5.0))
                 phi_poc = float(np.exp(-abs(dist_poc) / 3.0) * 1.5 - 0.5)
@@ -228,10 +203,10 @@ class UnifiedQuantScoringEngine:
             if short_pct >= 10.0:
                 if is_above_sma:
                     phi_short = float(np.tanh((short_pct - 8.0) / 8.0))
-                    breakdown.append(f"• [숏스퀴즈 점화 조건] 공매도 {short_pct:.1f}% + 정배열 (기여 {phi_short*20.0*0.25:+.1f}pt)")
+                    breakdown.append(f"• [숏스퀴즈 점화 조건] 공매도 {short_pct:.1f}% + 정배열 (기여 {phi_short*30.0*0.25:+.1f}pt)")
                 else:
                     phi_short = -float(np.tanh((short_pct - 8.0) / 8.0)) * 1.2
-                    breakdown.append(f"• [공매도 하방 압박] 공매도 {short_pct:.1f}% + 역배열 (기여 {phi_short*20.0*0.25:+.1f}pt)")
+                    breakdown.append(f"• [공매도 하방 압박] 공매도 {short_pct:.1f}% + 역배열 (기여 {phi_short*30.0*0.25:+.1f}pt)")
             else:
                 phi_short = 0.1  # Clean low short pressure
             p3_signals.append(0.25 * phi_short)
@@ -247,7 +222,7 @@ class UnifiedQuantScoringEngine:
             phi_ofi = float(np.tanh(ofi_score / 15.0))
             p3_signals.append(0.15 * phi_ofi)
             if abs(ofi_score) >= 4.0:
-                breakdown.append(f"• [호가 주문 불균형(OFI)] {ofi_res.get('ofi_regime', 'ACCUMULATION')} (기여 {phi_ofi*20.0*0.15:+.1f}pt)")
+                breakdown.append(f"• [호가 주문 불균형(OFI)] {ofi_res.get('ofi_regime', 'ACCUMULATION')} (기여 {phi_ofi*30.0*0.15:+.1f}pt)")
         except Exception:
             pass
 
@@ -255,7 +230,7 @@ class UnifiedQuantScoringEngine:
         pillar_details["Microstructure_GEX"] = round(p3_composite, 3)
 
         # -------------------------------------------------------------
-        # PILLAR 4: Macroeconomic, Liquidity & Regime Matrix (Weight: 15.0%)
+        # PILLAR 4: Macroeconomic, Liquidity & Regime Matrix (Weight: 10.0%)
         # -------------------------------------------------------------
         p4_signals = []
 
@@ -302,7 +277,7 @@ class UnifiedQuantScoringEngine:
         pillar_details["Macro_Regime"] = round(p4_composite, 3)
 
         # -------------------------------------------------------------
-        # PILLAR 5: Fundamental Catalyst & PEAD Drift (Weight: 15.0%)
+        # PILLAR 5: Fundamental Catalyst & PEAD Drift (Weight: 20.0%)
         # -------------------------------------------------------------
         p5_signals = []
 
@@ -313,7 +288,7 @@ class UnifiedQuantScoringEngine:
             pead_active, pead_surp = PEADEarningsRadar().check_pead_breakout(symbol)
             if pead_active and pead_surp > 0:
                 phi_pead = float(np.tanh(pead_surp / 15.0))
-                breakdown.append(f"• [PEAD 어닝 서프라이즈] EPS +{pead_surp:.1f}% (기여 {phi_pead*15.0*0.55:+.1f}pt)")
+                breakdown.append(f"• [PEAD 어닝 서프라이즈] EPS +{pead_surp:.1f}% (기여 {phi_pead*20.0*0.55:+.1f}pt)")
             p5_signals.append(0.55 * phi_pead)
         except Exception:
             pass
