@@ -42,6 +42,23 @@ class OptionsGammaEngine:
                 with open(cpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if time.time() - data.get("timestamp", 0) < self.cache_ttl:
+                    # Dynamically ensure nearest_expiration and dte_days are fresh based on US Eastern Time
+                    try:
+                        import pytz
+                        today_et = datetime.now(pytz.timezone('America/New_York')).date()
+                    except Exception:
+                        today_et = datetime.utcnow().date()
+
+                    if not data.get("nearest_expiration"):
+                        days_to_fri = (4 - today_et.weekday()) % 7
+                        data["nearest_expiration"] = (today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)).strftime("%Y-%m-%d")
+
+                    try:
+                        exp_obj = datetime.strptime(data["nearest_expiration"], "%Y-%m-%d").date()
+                        data["dte_days"] = max(0, (exp_obj - today_et).days)
+                    except Exception:
+                        data["dte_days"] = 1
+
                     return data
             except Exception as e:
                 logger.debug("Failed loading GEX cache for {}: {}", symbol, e)
