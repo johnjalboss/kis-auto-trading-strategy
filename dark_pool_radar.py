@@ -8,7 +8,6 @@ Tracks Off-Exchange ATS (Alternative Trading System) volume and FINRA daily shor
 """
 
 import time
-import hashlib
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import numpy as np
@@ -64,41 +63,39 @@ class DarkPoolRadar:
                 ret_5d = float(close.iloc[-1] / close.iloc[0] - 1.0)
                 intraday_range = float(((high - low) / close).tail(5).mean())
 
-                # Hash-based micro seed for deterministic consistency
-                h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-                micro_seed = (h_val % 100) / 100.0  # 0.0 ~ 1.0
+                # Close Location Value (CLV): -1.0 (Close at Low) to +1.0 (Close at High)
+                hl_range = float(high.iloc[-1] - low.iloc[-1]) + 1e-9
+                clv = float(((close.iloc[-1] - low.iloc[-1]) - (high.iloc[-1] - close.iloc[-1])) / hl_range)
 
-                # Dark pool ratio estimation (US Equities average 45%~60% ATS share)
-                base_dp = 48.0 + (micro_seed * 8.0)  # 48.0 ~ 56.0%
-                if rvol > 1.3 and ret_5d >= 0:
-                    base_dp += 4.5  # Institutional block accumulation surge
-                elif rvol > 1.5 and ret_5d < 0:
-                    base_dp += 2.0  # Institutional absorption of selloff
+                # Institutional Dark Pool Flow Index derived from RVOL and CLV
+                base_dp = 45.0 + (clv * 10.0)
+                if rvol > 1.2 and clv > 0.3:
+                    base_dp += 8.0  # High-volume accumulation at high end of candle
+                elif rvol > 1.5 and clv < -0.3:
+                    base_dp -= 6.0  # Heavy volume distribution
+                dp_pct = round(float(np.clip(base_dp, 25.0, 75.0)), 1)
 
-                dp_pct = round(float(np.clip(base_dp, 38.0, 68.5)), 1)
+                # Real short interest from ticker info
+                info = getattr(ticker, 'info', {}) or {}
+                short_float_val = float(info.get('shortPercentOfFloat', 0.0) or 0.0) * 100.0
+                if short_float_val <= 0:
+                    short_float_val = float(info.get('shortRatio', 0.0) or 0.0) * 4.0
+                short_pct = round(float(np.clip(short_float_val if short_float_val > 0 else 5.0, 0.5, 60.0)), 1)
 
-                # FINRA short volume ratio estimation (Typically 35%~55%)
-                base_short = 38.0 + ((1.0 - micro_seed) * 9.0)
-                if ret_5d < -0.03:
-                    base_short += 5.0
-                elif ret_5d > 0.05:
-                    base_short -= 3.0
-                short_pct = round(float(np.clip(base_short, 28.0, 58.0)), 1)
-
-                stealth_accum = (dp_pct >= 51.0)
+                stealth_accum = (dp_pct >= 53.0 and rvol > 1.1)
                 
                 if dp_pct >= 55.0:
                     label = "INSTITUTIONAL_STEALTH_BUY"
-                    score_adj = 8 if ret_5d >= 0 else 6
+                    score_adj = 6 if ret_5d >= 0 else 4
                     summary = f"장외 다크풀(ATS) {dp_pct}% 집중 매집 포착 (기관 블록 딜 주도)"
-                elif short_pct >= 50.0:
+                elif short_pct >= 20.0:
                     label = "HIGH_SHORT_COVERING_PRESSURE"
-                    score_adj = 5
-                    summary = f"다크풀 {dp_pct}% 및 숏 비중 {short_pct}%로 숏커버링 랠리 압력 대기"
+                    score_adj = 4
+                    summary = f"다크풀 {dp_pct}% 및 숏 비중 {short_pct}%로 숏스퀴즈 압력 대기"
                 else:
                     label = "STABLE_INSTITUTIONAL_FLOW"
-                    score_adj = 6
-                    summary = f"다크풀 {dp_pct}% 및 숏 {short_pct}%로 안정적 기관 유동성 유지"
+                    score_adj = 0
+                    summary = f"다크풀 {dp_pct}% 및 숏 {short_pct}%로 정상 기관 유동성 유지"
 
                 sig = DarkPoolSignal(
                     symbol=symbol,
@@ -115,19 +112,15 @@ class DarkPoolRadar:
         except Exception as e:
             logger.debug("Live dark pool fetch error for {}: {}", symbol, e)
 
-        # Fallback with ticker-specific deterministic hash variance
-        h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-        dp_pct = round(48.5 + (h_val % 120) / 10.0, 1)   # 48.5 ~ 60.5%
-        short_pct = round(36.0 + ((h_val >> 4) % 110) / 10.0, 1)  # 36.0 ~ 47.0%
-        
+        # Honest neutral fallback with 0 score adjustment (No MD5 seed!)
         sig = DarkPoolSignal(
             symbol=symbol,
-            dark_pool_volume_pct=dp_pct,
-            finra_short_volume_pct=short_pct,
-            stealth_accumulation=(dp_pct >= 50.0),
-            score_adjustment=7 if dp_pct >= 52.0 else 5,
-            signal_label="INSTITUTIONAL_STEALTH_BUY" if dp_pct >= 50.0 else "STABLE_INSTITUTIONAL_FLOW",
-            summary=f"장외 다크풀 {dp_pct}% 및 숏 {short_pct}% 정상 기관 유동성"
+            dark_pool_volume_pct=45.0,
+            finra_short_volume_pct=0.0,
+            stealth_accumulation=False,
+            score_adjustment=0,
+            signal_label="STABLE_INSTITUTIONAL_FLOW",
+            summary=f"{symbol} 정상 기관 유동성 유지 (중립)"
         )
         _DARK_POOL_CACHE[symbol] = (now, sig)
         return sig

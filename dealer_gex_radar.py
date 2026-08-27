@@ -10,7 +10,6 @@ Calculates Dealer Net Gamma Exposure across option strikes, Institutional Walls 
 
 import time
 import math
-import hashlib
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional
 import pandas as pd
@@ -47,11 +46,10 @@ class DealerGEXRadar:
             flip_p = gex_data['gamma_flip_level']
             regime = gex_data['gex_regime']
 
-            # Ticker specific Put/Call ratio approximation from chain
-            h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-            micro_pcr = round(0.52 + ((h_val % 35) / 100.0), 2)  # 0.52 ~ 0.86
+            # Put/Call ratio from actual GEX data or neutral 0.85
+            micro_pcr = float(gex_data.get('put_call_ratio', 0.85) or 0.85)
 
-            score_adj = 8 if regime == "POSITIVE_GAMMA" else 5
+            score_adj = 6 if regime == "POSITIVE_GAMMA" else (0 if gex_data.get('is_synthetic') else 3)
             
             # Format GEX in Billions if large (like SPY/NVDA) or Millions
             if abs(net_gex_m) >= 1000:

@@ -7,7 +7,6 @@ Parses live institutional news headlines (Bloomberg, Reuters, Dow Jones, Yahoo) 
 """
 
 import time
-import hashlib
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import numpy as np
@@ -63,43 +62,45 @@ class AINewsSentimentEngine:
             bullish_keywords = ["surge", "jump", "beat", "upgrade", "growth", "record", "gain", "soar", "profit", "expansion", "fda", "partner", "buyback", "rally", "strong", "outperform"]
             bearish_keywords = ["fall", "drop", "miss", "downgrade", "loss", "probe", "investigation", "cut", "warning", "slide", "slump", "weak", "lawsuit", "decline", "layoff", "risk"]
 
-            sentiment = 0.60
+            sentiment = 0.50
             h_lower = headline.lower() if headline else ""
             
             bull_hits = sum(1 for w in bullish_keywords if w in h_lower)
             bear_hits = sum(1 for w in bearish_keywords if w in h_lower)
 
             if bull_hits > bear_hits:
-                sentiment = min(0.92, 0.72 + (bull_hits * 0.06))
+                sentiment = min(0.92, 0.65 + (bull_hits * 0.08))
             elif bear_hits > bull_hits:
-                sentiment = max(-0.80, 0.40 - (bear_hits * 0.20))
+                sentiment = max(0.10, 0.45 - (bear_hits * 0.15))
             else:
-                # Modulate sentiment slightly with ticker hash
-                h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-                sentiment = 0.65 + ((h_val % 18) / 100.0)  # 0.65 ~ 0.83
+                sentiment = 0.50  # Neutral when balanced or no keyword match
 
-            # Analyst upgrades estimation
-            upgrades = max(1, int(sentiment * 5))
+            # Real analyst rating query from ticker info
+            try:
+                rec = getattr(ticker, 'recommendations', None)
+                upgrades = int(len(rec)) if rec is not None and not rec.empty else (1 if sentiment > 0.65 else 0)
+            except Exception:
+                upgrades = 1 if sentiment > 0.65 else 0
             
-            if sentiment >= 0.80:
+            if sentiment >= 0.75:
                 label = "VERY_BULLISH"
                 rating = "STRONG_BUY"
-                score_adj = 8
-            elif sentiment >= 0.65:
+                score_adj = 6
+            elif sentiment >= 0.60:
                 label = "BULLISH"
                 rating = "BUY"
-                score_adj = 6
-            elif sentiment >= 0.45:
+                score_adj = 4
+            elif sentiment >= 0.40:
                 label = "NEUTRAL"
                 rating = "HOLD"
-                score_adj = 3
+                score_adj = 0
             else:
                 label = "BEARISH"
                 rating = "UNDERPERFORM"
-                score_adj = -10
+                score_adj = -6
 
             if not headline:
-                headline = f"{symbol} 글로벌 기관 자금 유입 및 실적 모멘텀 유지"
+                headline = f"{symbol} 최근 24시간 특별 공시/뉴스 없음 (중립 수급)"
 
             sig = NewsSentimentScore(
                 symbol=symbol,
@@ -116,18 +117,15 @@ class AINewsSentimentEngine:
         except Exception as e:
             logger.debug("Failed live news fetch for {}: {}", symbol, e)
 
-        # Fallback with ticker-specific hash
-        h_val = int(hashlib.md5(symbol.encode()).hexdigest()[:6], 16)
-        sentiment = round(0.68 + (h_val % 15) / 100.0, 2)
-        
+        # Honest neutral fallback with 0 score adjustment (No fake headlines!)
         sig = NewsSentimentScore(
             symbol=symbol,
-            sentiment_score=sentiment,
-            sentiment_label="BULLISH",
-            analyst_upgrades=2,
-            consensus_rating="BUY",
-            key_headline=f"{symbol} 기관 목표주가 상향 및 안정적 실적 가이던스 유지",
-            score_adjustment=6
+            sentiment_score=0.50,
+            sentiment_label="NEUTRAL",
+            analyst_upgrades=0,
+            consensus_rating="HOLD",
+            key_headline=f"{symbol} 실시간 뉴스 수신 대기 (중립)",
+            score_adjustment=0
         )
         _SENTIMENT_CACHE[symbol] = (now, sig)
         return sig
