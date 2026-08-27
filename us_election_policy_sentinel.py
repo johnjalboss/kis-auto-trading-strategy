@@ -15,7 +15,7 @@ import os
 import time
 from datetime import datetime, date
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 import numpy as np
 from loguru import logger
