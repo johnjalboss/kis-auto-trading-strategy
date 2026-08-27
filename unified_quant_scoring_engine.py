@@ -157,6 +157,8 @@ class UnifiedQuantScoringEngine:
             p2_signals.append(0.30 * phi_insider)
             if ins_bonus > 0:
                 breakdown.append(f"• [SEC 내부자 순매수] {ins_res.get('cluster_desc', '매수')} (기여 {phi_insider*25.0*0.30:+.1f}pt)")
+            elif ins_bonus < 0:
+                breakdown.append(f"• [SEC 내부자 매도 감지] {ins_res.get('cluster_desc', '매도')} (감점 {phi_insider*25.0*0.30:+.1f}pt)")
         except Exception:
             pass
 

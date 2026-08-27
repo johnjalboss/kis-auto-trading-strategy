@@ -68,8 +68,10 @@ class SECForm4InsiderRadar:
             return cached
 
         purchases = []
+        sales = []
         c_suite_buyers = []
         total_bought_val = 0.0
+        total_sold_val = 0.0
 
         # ── Tier 1: Try Finnhub ──
         try:
@@ -81,14 +83,16 @@ class SECForm4InsiderRadar:
                     for tx in raw_data:
                         code = tx.get("transactionCode", "").upper()
                         change = tx.get("change", 0)
-                        if code == "P" or change > 0:
-                            name = tx.get("name", "Insider")
-                            role = tx.get("role", "Director/Officer")
-                            shares = abs(change)
-                            price = tx.get("transactionPrice", 0.0) or 0.0
-                            val = shares * price
-                            total_bought_val += val
+                        price = tx.get("transactionPrice", 0.0) or 0.0
+                        name = tx.get("name", "Insider")
+                        role = tx.get("role", "Director/Officer")
+                        shares = abs(change)
+                        val = shares * price
 
+                        # STRICT: Code "P" is the ONLY genuine open-market purchase with real cash.
+                        # Exclude Code "A" (Grant/Award), "M" (Option Conversion), "F" (Tax Withholding), "G" (Gift)
+                        if code == "P" and change > 0 and price > 0.0:
+                            total_bought_val += val
                             purchases.append({
                                 "name": name,
                                 "role": role,
@@ -99,17 +103,27 @@ class SECForm4InsiderRadar:
                             })
                             if any(r in role.upper() for r in ["CEO", "CFO", "PRESIDENT", "DIRECTOR", "CHIEF"]):
                                 c_suite_buyers.append(f"{name} ({role})")
+                        elif code in ["S", "D"] or change < 0:
+                            total_sold_val += val
+                            sales.append({
+                                "name": name,
+                                "role": role,
+                                "shares": shares,
+                                "price": round(price, 2),
+                                "value_usd": round(val, 2),
+                                "date": tx.get("transactionDate", "")
+                            })
         except Exception as e:
             logger.debug("Finnhub insider lookup failed for {}: {}", symbol, e)
 
         # ── Tier 2: Yahoo Finance Insider Roster / Purchases ──
-        if not purchases:
+        if not purchases and not sales:
             try:
                 import yfinance as yf
                 t = yf.Ticker(symbol)
                 ins_df = t.insider_transactions
                 if ins_df is not None and not ins_df.empty:
-                    for _, row in ins_df.head(10).iterrows():
+                    for _, row in ins_df.head(15).iterrows():
                         text = str(row.get("Text", "")).upper()
                         shares = float(row.get("Shares", 0) or 0)
                         val = float(row.get("Value", 0) or 0)
@@ -117,8 +131,10 @@ class SECForm4InsiderRadar:
                         pos_title = str(row.get("Position", "Officer"))
                         t_date = str(row.get("Start Date", ""))[:10]
 
-                        # Look for Purchases
-                        if "PURCHASE" in text or "BUY" in text or shares > 0:
+                        is_real_buy = ("PURCHASE" in text or "BUY" in text) and not any(k in text for k in ["SALE", "SELL", "OPTION", "GRANT", "AWARD", "GIFT", "TAX"]) and val > 0 and shares > 0
+                        is_real_sell = ("SALE" in text or "SELL" in text or "DISPOSITION" in text) and val > 0 and shares > 0
+
+                        if is_real_buy:
                             total_bought_val += val
                             purchases.append({
                                 "name": insider_name,
@@ -130,6 +146,16 @@ class SECForm4InsiderRadar:
                             })
                             if any(r in pos_title.upper() for r in ["CEO", "CFO", "PRESIDENT", "DIRECTOR", "CHIEF"]):
                                 c_suite_buyers.append(f"{insider_name} ({pos_title})")
+                        elif is_real_sell:
+                            total_sold_val += val
+                            sales.append({
+                                "name": insider_name,
+                                "role": pos_title,
+                                "shares": shares,
+                                "price": round(val / shares, 2) if shares > 0 else 0.0,
+                                "value_usd": round(val, 2),
+                                "date": t_date
+                            })
             except Exception as e:
                 logger.debug("Yahoo insider lookup failed for {}: {}", symbol, e)
 
@@ -164,7 +190,7 @@ class SECForm4InsiderRadar:
         c_suite_roles = ["CEO", "CHIEF EXECUTIVE", "CFO", "CHIEF FINANCIAL", "CHAIRMAN", "PRESIDENT"]
         has_csuite = any(any(csr in p.get("role", "").upper() for csr in c_suite_roles) for p in purchases)
 
-        # ── Mathematical Quant Alpha Bonus (0 ~ 15 pts max for strategy.py) ──
+        # ── Mathematical Quant Alpha Bonus (-10 ~ +15 pts for strategy.py) ──
         strategy_bonus = 0
         if is_cluster and has_csuite:
             strategy_bonus = 15
@@ -181,12 +207,18 @@ class SECForm4InsiderRadar:
         elif purchases:
             strategy_bonus = 5
             cluster_desc = f"일반 장내 매수 (${total_bought_val/1e3:,.0f}K, +5pt)"
+        elif sales and total_sold_val >= whale_threshold:
+            strategy_bonus = -8
+            cluster_desc = f"내부자 대규모 장내 순매도 감지 (-${total_sold_val/1e3:,.0f}K, -8pt)"
+        elif sales:
+            strategy_bonus = -4
+            cluster_desc = f"내부자 소규모 장내 매도 (-${total_sold_val/1e3:,.0f}K, -4pt)"
         else:
             strategy_bonus = 0
-            cluster_desc = "최근 90일 장내 순매수 없음"
+            cluster_desc = "최근 90일 장내 순매수/매도 없음"
 
         # General Conviction Score (0 ~ 100)
-        conviction_score = min(100, strategy_bonus * 6 + (20 if purchases else 0))
+        conviction_score = max(0, min(100, 50 + strategy_bonus * 3))
 
         result = {
             "symbol": symbol,
@@ -199,6 +231,7 @@ class SECForm4InsiderRadar:
             "purchase_count": len(purchases),
             "distinct_insider_count": cluster_count,
             "total_bought_usd": round(total_bought_val, 2),
+            "total_sold_usd": round(total_sold_val, 2),
             "is_cluster_buying": is_cluster,
             "is_whale_buying": is_whale,
             "has_csuite_buyer": has_csuite,
