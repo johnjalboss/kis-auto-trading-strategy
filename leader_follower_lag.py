@@ -40,7 +40,8 @@ class LeaderFollowerLagEngine:
     def __init__(self):
         pass
 
-    def analyze(self, follower_symbol: str) -> Dict[str, Any]:
+    def analyze(self, follower_symbol: str = None, symbol: str = None) -> Dict[str, Any]:
+        follower_symbol = follower_symbol or symbol or "SPY"
         now = time.time()
         if follower_symbol in _LAG_CACHE:
             ts, res = _LAG_CACHE[follower_symbol]

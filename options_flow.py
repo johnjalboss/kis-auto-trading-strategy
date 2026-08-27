@@ -34,7 +34,7 @@ import threading
 
 from loguru import logger
 
-def _run_with_timeout(func, args=(), kwargs={}, timeout=2.0):
+def _run_with_timeout(func, args=(), kwargs={}, timeout=8.0):
     """Run a function in a background thread and return its result, or None if it times out."""
     result = [None]
     exception = [None]
@@ -173,7 +173,7 @@ def get_vix_snapshot() -> VixSnapshot:
         if ticker is None:
             return snap
 
-        info = _run_with_timeout(lambda: ticker.fast_info, timeout=2.0)
+        info = _run_with_timeout(lambda: ticker.fast_info, timeout=6.0)
         vix = None
         if info:
             vix = getattr(info, 'last_price', None) or getattr(info, 'regularMarketPrice', None)
@@ -247,7 +247,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     # ── Current price ──
     try:
-        fi = _run_with_timeout(lambda: ticker.fast_info, timeout=2.0)
+        fi = _run_with_timeout(lambda: ticker.fast_info, timeout=6.0)
         price = 0
         if fi:
             price = getattr(fi, 'last_price', 0) or getattr(fi, 'regularMarketPrice', 0)
@@ -261,7 +261,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     # ── Options chain ──
     try:
-        expiries = _run_with_timeout(lambda: ticker.options, timeout=5.0)
+        expiries = _run_with_timeout(lambda: ticker.options, timeout=8.0)
     except Exception as e:
         logger.debug("options.options list failed for {}: {}", symbol, e)
         snap.reason = "no_expiries"
@@ -285,7 +285,7 @@ def _compute_options_snapshot(symbol: str) -> OptionsSnapshot:
 
     try:
         import pandas as pd
-        chain = _run_with_timeout(lambda: ticker.option_chain(target_expiry), timeout=5.0)
+        chain = _run_with_timeout(lambda: ticker.option_chain(target_expiry), timeout=8.0)
         if chain is None:
             raise TimeoutError("options chain download timed out")
         calls = chain.calls
@@ -674,15 +674,13 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
             score -= 20                         # Below Gamma Flip: High Downside Volatility Crash Zone!
             reasons.append(f"BELOW_GAMMA_FLIP_DANGER(${snap.gamma_flip:.0f})")
 
-    # ── 2. Max Pain Magnet on Expiry Week ──
+    # ── 2. Max Pain Magnet on Expiry Week (Continuous Tanh / Linear Clamp) ──
     if snap.is_expiry_week and price > 0 and snap.max_pain > 0:
         mp_dev = abs(price - snap.max_pain) / price
-        if mp_dev < 0.015:          # Within 1.5% of max pain → dealer pin risk
-            score -= 8
-            reasons.append(f"MaxPain_pin(${snap.max_pain:.0f})")
-        elif mp_dev < 0.03:
-            score -= 4
-            reasons.append(f"NearMaxPain(${snap.max_pain:.0f})")
+        if mp_dev < 0.03:
+            pin_penalty = float(-8.0 * (1.0 - (mp_dev / 0.03)))
+            score += int(pin_penalty)
+            reasons.append(f"MaxPain_pin_risk({pin_penalty:.1f}pt, ${snap.max_pain:.0f})")
         elif price > snap.max_pain * 1.03:
             score += 5              # Price well above max pain → bullish momentum
             reasons.append(f"AboveMaxPain(${snap.max_pain:.0f})")
@@ -690,28 +688,19 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
             score += 8              # Dealers pulling price UP to Max Pain before Friday expiry
             reasons.append(f"MaxPainUpwardPull(${snap.max_pain:.0f})")
 
-    # ── 2. Gamma Exposure & Gamma Squeeze Surge ──
+    # ── 2. Gamma Exposure & Gamma Squeeze Surge (Continuous Tanh) ──
     pcr = snap.put_call_ratio
-    if snap.gex < -3.0 and pcr < 0.65:
-        score += 10                 # Gamma Squeeze Surge: Forced Dealer Buying
-        reasons.append(f"GammaSqueezeSurge(${snap.gex:.1f}M)")
-    elif snap.gex > 5.0:             # Strong positive GEX → price pin / low volatility
-        score += 4
-        reasons.append(f"GEX_stable(${snap.gex:.1f}M)")
-    elif snap.gex < -5.0:            # Negative GEX without call surge → vol risk
-        score -= 4
-        reasons.append(f"GEX_volatile(${snap.gex:.1f}M)")
-
-    # ── 2. [v5.0 INSTITUTIONAL DEALER PINNING BOX (가두리 장세)] ──
     if snap.is_dealer_pinning_box:
         score -= 15                 # Trapped in Dealer Box: Avoid breakout entries!
         reasons.append("DEALER_PINNING_BOX(가두리장세)")
     elif snap.gex < -3.0 and pcr < 0.65:
         score += 10                 # Gamma Squeeze Surge: Forced Dealer Buying
         reasons.append(f"GammaSqueezeSurge(${snap.gex:.1f}M)")
-    elif snap.gex > 5.0:             # Strong positive GEX → price pin / low volatility
-        score += 4
-        reasons.append(f"GEX_stable(${snap.gex:.1f}M)")
+    else:
+        gex_score = float(6.0 * math.tanh(snap.gex / 5.0))
+        score += int(gex_score)
+        if abs(gex_score) >= 2.0:
+            reasons.append(f"GEX_flow({gex_score:+.1f}pt, ${snap.gex:.1f}M)")
 
     # ── 3. [v5.0 INSTITUTIONAL ORDER FLOW & SKEW] ──
     if snap.iv_skew < -0.03:
@@ -737,27 +726,24 @@ def _score_options(snap: OptionsSnapshot) -> Tuple[int, str]:
         score -= 18                 # Aggressive Downside Crash Bet!
         reasons.append(f"BUYER_PUT_CRASH_SWEEP({snap.put_sweep_ratio:.1f}x)")
 
-    # ── 4. IV Rank & IV Crush Shield ──
-    if snap.iv_rank < 25:
-        score += 5                  # Low IV = underpriced vol = calm market
-        reasons.append(f"IV_low({snap.iv_rank:.0f}%)")
-    elif snap.iv_rank > 80:
-        score -= 8                  # High IV = IV Crush Shield active
+    # ── 4. IV Rank (Continuous Tanh S-Curve) ──
+    iv_score = float(6.0 * math.tanh((45.0 - snap.iv_rank) / 25.0))
+    score += int(iv_score)
+    if snap.iv_rank > 80:
         reasons.append(f"IV_Crush_Risk({snap.iv_rank:.0f}%)")
+    elif snap.iv_rank < 25:
+        reasons.append(f"IV_low({snap.iv_rank:.0f}%)")
 
-    # ── 4. Put/Call Ratio ──
+    # ── 5. Put/Call Ratio (Continuous Tanh) ──
     pcr = snap.put_call_ratio
+    pcr_score = float(6.0 * math.tanh((0.80 - pcr) / 0.25))
+    score += int(pcr_score)
     if pcr < 0.5:
-        score -= 3                  # Euphoria: excessive call buying
         reasons.append(f"PCR_euphoria({pcr:.2f})")
-    elif 0.5 <= pcr < 0.7:
-        score += 5                  # Moderate bullish sentiment
-        reasons.append(f"PCR_bullish({pcr:.2f})")
-    elif 0.7 <= pcr <= 1.0:
-        score += 2                  # Neutral-slightly bullish
     elif pcr > 1.2:
-        score -= 4                  # Fear → potential oversold bounce, but risky entry
         reasons.append(f"PCR_fear({pcr:.2f})")
+    elif 0.5 <= pcr < 0.7:
+        reasons.append(f"PCR_bullish({pcr:.2f})")
 
     # ── 5. Sigma band breach (is price extended?) ──
     if price > 0 and snap.sigma_high_1 > 0:

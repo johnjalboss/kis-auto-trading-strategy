@@ -377,27 +377,31 @@ class StrategyEngine:
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
 
-        # 4. Insider Dump Guard
+        # 4. Insider Dump Guard (Strict Quantitative Panic Dump Filter)
+        # Routine insider sales (10b5-1 tax, diversification) are normal.
+        # Only hard-block on genuine massive dumping (>0.50% of MC or >$50M net dump).
         try:
             from insider_tracker import get_insider_tracker
             insider = get_insider_tracker()
             ins_result = insider.analyze(symbol)
             if ins_result.insider_sentiment == "SELLING":
-                # Market-cap-tiered threshold: infer MC from net_value/net_pct, then apply per-tier %
                 _net_val = ins_result.insider_net_value   # negative for selling
-                _net_pct = ins_result.insider_net_pct     # already as % of MC (e.g., -0.034)
+                _net_pct = ins_result.insider_net_pct     # % of MC (e.g. -0.15)
                 _implied_mc = abs(_net_val) / (abs(_net_pct) / 100.0) if _net_pct != 0 else 10_000_000_000
-                # Stricter threshold for small caps; lenient for mega-caps (routine option exercises)
+                
+                # Realistic dump threshold: >0.50% of MC or >$50M single-direction dump
                 if _implied_mc >= 100_000_000_000:   # ≥$100B mega-cap
-                    _block_threshold = -0.20          # Need >0.20% of MC dumped to block
+                    _block_threshold = -0.60          # >0.60% of MC
                 elif _implied_mc >= 10_000_000_000:  # $10-100B large-cap
-                    _block_threshold = -0.12          # >0.12% of MC
+                    _block_threshold = -0.50          # >0.50% of MC
                 elif _implied_mc >= 2_000_000_000:   # $2-10B mid-cap
-                    _block_threshold = -0.08          # >0.08% of MC
+                    _block_threshold = -0.40          # >0.40% of MC
                 else:                                 # <$2B small-cap
-                    _block_threshold = -0.05          # >0.05% of MC
-                if _net_pct < _block_threshold:
-                    return EntrySignal("HOLD", 0, f"INSIDER_GUARD: MC-tiered dump | {_net_pct:.3f}% of ~${_implied_mc/1e9:.0f}B MC (threshold: {_block_threshold:.2f}%) Net: ${_net_val/1e6:.1f}M", 0)
+                    _block_threshold = -0.35          # >0.35% of MC
+                
+                # Hard block ONLY if massive dump exceeds threshold AND exceeds $10M absolute net sale
+                if _net_pct < _block_threshold and abs(_net_val) >= 10_000_000:
+                    return EntrySignal("HOLD", 0, f"INSIDER_GUARD: Genuine panic dump | {_net_pct:.3f}% of ~${_implied_mc/1e9:.1f}B MC (threshold: {_block_threshold:.2f}%) Net: ${_net_val/1e6:.1f}M", 0)
         except Exception as _ins_err:
             logger.debug("Insider guard check failed for {}: {}", symbol, _ins_err)
 
@@ -806,6 +810,9 @@ class StrategyEngine:
         if not hasattr(self, '_last_score_breakdown'):
             self._last_score_breakdown = {}
         self._last_score_breakdown[symbol] = score_breakdown
+        if not hasattr(self, '_last_scores'):
+            self._last_scores = {}
+        self._last_scores[symbol] = int(round(confidence))
 
         logger.info("🎯 ENTRY SIGNAL TRIGGERED [2026 SOTA]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
         return EntrySignal("BUY", confidence, setup_reason, current_price, indicators, score_breakdown=score_breakdown)
@@ -823,24 +830,21 @@ class StrategyEngine:
         if not is_inverse and ind.adx < cfg.min_adx:
             failed.append(f"ADX:{ind.adx:.0f}<{cfg.min_adx}")
         
-        # RSI - Not extreme (Exempt inverse ETFs)
-        if not is_inverse and (ind.rsi < 30 or ind.rsi > 75):
+        # RSI - Extreme Climax Guard (Allow momentum up to 80, block climax > 80)
+        max_rsi_allowed = float(getattr(config, 'MAX_RSI_ENTRY', 78))
+        if not is_inverse and (ind.rsi < 28 or ind.rsi > max_rsi_allowed):
             failed.append(f"RSI:{ind.rsi:.0f}")
         
-        # Bollinger - Not overbought (Exempt inverse ETFs)
-        if not is_inverse and ind.bollinger.percent_b > 0.95:
+        # Bollinger - Climax Overextension Guard (Allow breakout up to 1.10, block runaway spike > 1.12)
+        if not is_inverse and ind.bollinger.percent_b > 1.12:
             failed.append(f"BB%:{ind.bollinger.percent_b:.2f}")
         
         # OBV Volume Trend - Require non-down volume trend for non-inverse entries
         obv_tr = getattr(ind, 'obv_trend', 'NEUTRAL')
         if not is_inverse and obv_tr == 'DOWN':
             failed.append("OBV:DOWN")
-        if not is_inverse and (not ind.macd.is_bullish and ind.stoch_rsi > 0.7):
+        if not is_inverse and (not ind.macd.is_bullish and ind.stoch_rsi > 0.75):
             failed.append("MACD_bearish+StochRSI_high")
-        
-        # OBV trend (Exempt inverse ETFs)
-        if not is_inverse and ind.obv_trend == "DOWN":
-            failed.append("OBV_down")
         
         # Options: Block entry when pinned at max pain on expiry week
         if symbol and price > 0:
@@ -1275,15 +1279,19 @@ class StrategyEngine:
         else:
             stop_price = pos.entry_price * 0.95
             
-        # Regime-aware hard stop:
-        # [CRITICAL FIX] config.py에 정의된 손절률(7%)을 강제로 존중하도록 연동. 
-        # 이전에는 config에서 7%로 늘렸으나 내부 하드코딩 5%/4%에 막혀 오동작 중이었음.
-        # [v3.4.0 ULTRA-TIGHT RISK GUARD]
-        # Strict -3.0% Hard Stop-Loss (Prevents losses from expanding past -3%)
+        # Regime-aware hard stop with Cluster-Specific Auto-Tuned Parameters:
+        try:
+            from auto_tuning_engine import get_symbol_tuned_parameters
+            atr_pct = (pos.atr_at_entry / pos.entry_price) if (pos.atr_at_entry > 0 and pos.entry_price > 0) else None
+            sym_params = get_symbol_tuned_parameters(pos.symbol, atr_pct)
+            base_stop_pct = sym_params['stop_loss_pct']
+        except Exception:
+            base_stop_pct = float(getattr(config, 'STOP_LOSS_PCT', 0.038))
+
         if current_regime in bear_regimes:
-            hard_stop_pct = float(getattr(config, 'BEAR_HARD_STOP_PCT', 0.035))  # -3.5% in bear markets
+            hard_stop_pct = min(base_stop_pct, float(getattr(config, 'BEAR_HARD_STOP_PCT', 0.035)))
         else:
-            hard_stop_pct = float(getattr(config, 'STOP_LOSS_PCT', 0.030))       # -3.0% strict stop loss
+            hard_stop_pct = base_stop_pct
         
         hard_stop_price = pos.entry_price * (1 - hard_stop_pct)
         effective_stop = max(stop_price, hard_stop_price)
@@ -1295,7 +1303,7 @@ class StrategyEngine:
         if price <= effective_stop:
             reason = f"STOP: ${price:.2f} <= ${effective_stop:.2f} (ATR={pos.atr_at_entry:.2f})"
             if effective_stop == hard_stop_price:
-                reason = f"HARD_STOP: P&L {pnl_pct:+.1%} <= -{hard_stop_pct:.0%}"
+                reason = f"HARD_STOP: P&L {pnl_pct:+.1%} <= -{hard_stop_pct:.1%}"
                 
             return ExitSignal("SELL_ALL", reason, price, pnl_pct)
             
@@ -1327,17 +1335,25 @@ class StrategyEngine:
             
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
         
-        # Exponential Chandelier Hook 
-        dynamic_atr_mult = cfg.trailing_atr
+        # Exponential Chandelier Hook with Cluster-Specific Trailing ATR:
+        try:
+            from auto_tuning_engine import get_symbol_tuned_parameters
+            atr_pct = (pos.atr_at_entry / pos.entry_price) if (pos.atr_at_entry > 0 and pos.entry_price > 0) else None
+            sym_params = get_symbol_tuned_parameters(pos.symbol, atr_pct)
+            base_trailing_mult = sym_params['trailing_atr']
+        except Exception:
+            base_trailing_mult = cfg.trailing_atr
+
+        dynamic_atr_mult = base_trailing_mult
         breakeven_hook = False
         
-        if pnl_pct_high > 0.10:
-            dynamic_atr_mult = min(dynamic_atr_mult, 0.2)
-        elif pnl_pct_high > 0.06:
+        if pnl_pct_high > 0.12:
             dynamic_atr_mult = min(dynamic_atr_mult, 0.4)
-            breakeven_hook = True
-        elif pnl_pct_high > 0.03:
+        elif pnl_pct_high > 0.07:
             dynamic_atr_mult = min(dynamic_atr_mult, 0.8)
+            breakeven_hook = True
+        elif pnl_pct_high > 0.035:
+            dynamic_atr_mult = min(dynamic_atr_mult, 1.2)
             
         trailing_stop = pos.high_since_entry - (atr * dynamic_atr_mult)
         
@@ -1409,17 +1425,27 @@ class StrategyEngine:
         target_15r = pos.entry_price + (1.5 * scaled_risk_1r)
         target_30r = pos.entry_price + (3.0 * scaled_risk_1r)
         
-        # [ATR-Adaptive TP] Min/Max TP derived from each stock's own volatility at entry
-        # High-vol stocks (ATR 5%+) get higher TP targets; low-vol stocks (ATR 1-2%) get lower targets
-        max_tp_pct = 0.22  # Hard cap: never target >22% (take money and run)
-        atr_at_entry = getattr(pos, 'atr_at_entry', 0.0)
-        if atr_at_entry > 0.0 and pos.entry_price > 0.0:
-            atr_pct = atr_at_entry / pos.entry_price
-            # Min TP = 1.5x ATR: meaningful target relative to the stock's natural daily range
-            # Floor at 2% (avoid noise), cap at 12% (stay realistic for swing trades)
-            min_tp_pct = max(0.02, min(0.12, 1.5 * atr_pct))
+        # [Cluster-Adaptive TP] Derived from each stock's cluster profile & own volatility
+        try:
+            from auto_tuning_engine import get_symbol_tuned_parameters
+            atr_pct = (pos.atr_at_entry / pos.entry_price) if (pos.atr_at_entry > 0 and pos.entry_price > 0) else None
+            sym_params = get_symbol_tuned_parameters(pos.symbol, atr_pct)
+            cluster_tp = sym_params['take_profit_pct']
+            c_name = sym_params['cluster']
+        except Exception:
+            cluster_tp = 0.090
+            c_name = "MID_VOL_MOMENTUM"
+
+        if c_name == "HIGH_VOL_GROWTH":
+            max_tp_pct = 0.28   # Cap at 28% for hyper-growth runners
+            min_tp_pct = max(0.08, cluster_tp * 0.70)
+        elif c_name == "LOW_VOL_DEFENSIVE":
+            max_tp_pct = 0.085  # Cap at 8.5% for defensive low-beta stocks
+            min_tp_pct = max(0.025, cluster_tp * 0.70)
         else:
-            min_tp_pct = 0.04  # Fallback if ATR not stored
+            max_tp_pct = 0.18
+            min_tp_pct = max(0.040, cluster_tp * 0.70)
+
         target_30r_pct = (target_30r - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
         
         if target_30r_pct > max_tp_pct:

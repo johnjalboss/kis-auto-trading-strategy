@@ -141,6 +141,10 @@ class TelegramInteractiveBot:
                     {"text": "📊 보유종목 캔들 차트 (원클릭 생성)", "callback_data": "cmd_stock_charts_menu"}
                 ],
                 [
+                    {"text": "📝 매도 종목 1~2주 오답노트", "callback_data": "cmd_post_exit_note"},
+                    {"text": "🚀 급등락 특이갭 레이더", "callback_data": "cmd_unusual_gaps"}
+                ],
+                [
                     {"text": "🌐 실시간 웹 대시보드 열기", "url": dash_url}
                 ],
                 [
@@ -270,6 +274,10 @@ class TelegramInteractiveBot:
                                     _run_async(self._handle_dark_pool)
                                 elif cb_data == "cmd_cboe_options":
                                     _run_async(self._handle_cboe_options)
+                                elif cb_data == "cmd_post_exit_note":
+                                    _run_async(self._handle_post_exit_note)
+                                elif cb_data == "cmd_unusual_gaps":
+                                    _run_async(self._handle_unusual_gaps)
                                 elif cb_data == "cmd_gex_radar":
                                     _run_async(self._handle_gex_radar)
                                 elif cb_data == "cmd_congress_trades":
@@ -1553,6 +1561,26 @@ class TelegramInteractiveBot:
         except Exception as e:
             logger.error("Failed macro shock shield handler: {}", e)
             self._send_reply(f"⚠️ 거시경제 쉴드 조회 실패: {e}")
+
+    def _handle_post_exit_note(self):
+        """매도 종목 1~2주 사후 주가 추적 & 오답노트 조회"""
+        try:
+            from post_exit_tracker import get_post_exit_tracker
+            card = get_post_exit_tracker().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed post exit note handler: {}", e)
+            self._send_reply(f"⚠️ 매도 오답노트 조회 실패: {e}")
+
+    def _handle_unusual_gaps(self):
+        """실시간 급등락 특이갭 & 어닝 서프라이즈 레이더 조회"""
+        try:
+            from premarket_gap_sniper import PreMarketGapSniper
+            card = PreMarketGapSniper().format_telegram_card()
+            self._send_reply(card)
+        except Exception as e:
+            logger.error("Failed unusual gaps handler: {}", e)
+            self._send_reply(f"⚠️ 특이갭 레이더 조회 실패: {e}")
 
     def _handle_full_system_diagnosis(self):
         """Perform comprehensive full-stack system health diagnostic and report to Telegram"""

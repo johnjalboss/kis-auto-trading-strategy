@@ -207,48 +207,21 @@ class CompositeSignalEngine:
         if not pending_analyzers:
             return score, signals
             
-        timed_out_names = []
         try:
-            # Reduced workers: 10 symbols × 8 workers = 80 max threads on VPS.
-            # Previous 12 workers × 10 symbols = 120 threads overwhelmed 1 vCPU.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-                future_to_analyzer = {
-                    executor.submit(analyzer.analyze, df, **kwargs): analyzer 
-                    for analyzer in pending_analyzers
-                }
-                # Use as_completed with per-analyzer timeout instead of a single
-                # category-level timeout. Each analyzer has 15s to finish.
-                # Slow analyzers are skipped; fast ones are collected immediately.
-                deadline = time.time() + PER_ANALYZER_TIMEOUT
-                for future in concurrent.futures.as_completed(future_to_analyzer.keys(),
-                                                               timeout=PER_ANALYZER_TIMEOUT):
-                    analyzer = future_to_analyzer[future]
-                    try:
-                        result = future.result(timeout=0)  # result is already done
-                        
-                        # Update cache with thread lock
-                        is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
-                        cache_key = (getattr(analyzer, 'name', analyzer.__class__.__name__), symbol if is_dep_inner else 'GLOBAL')
-                        with self._cache_lock:
-                            self._cache[cache_key] = (result, now)
-                        
-                        score += result.get('score', 0)
-                        signals.extend(result.get('signals', []))
-                    except Exception as e:
-                        ana_name = getattr(analyzer, 'name', analyzer.__class__.__name__)
-                        logger.debug(f"Analyzer {ana_name} raised: {e}")
-        except concurrent.futures.TimeoutError:
-            # Identify which analyzers didn't finish
-            done_set = {f for f in future_to_analyzer if f.done()}
-            for f, ana in future_to_analyzer.items():
-                if f not in done_set:
-                    timed_out_names.append(getattr(ana, 'name', ana.__class__.__name__))
-                    f.cancel()
+            for analyzer in pending_analyzers:
+                try:
+                    result = analyzer.analyze(df, **kwargs)
+                    is_dep_inner = getattr(analyzer, 'is_symbol_dependent', True)
+                    cache_key = (getattr(analyzer, 'name', analyzer.__class__.__name__), symbol if is_dep_inner else 'GLOBAL')
+                    with self._cache_lock:
+                        self._cache[cache_key] = (result, now)
+                    score += result.get('score', 0)
+                    signals.extend(result.get('signals', []))
+                except Exception as e:
+                    ana_name = getattr(analyzer, 'name', analyzer.__class__.__name__)
+                    logger.debug(f"Analyzer {ana_name} raised: {e}")
         except Exception as e:
             logger.error(f"Exception in Category {category_key} analysis: {e}")
-
-        if timed_out_names:
-            logger.warning(f"Category {category_key}: {len(timed_out_names)} slow analyzers skipped (>{PER_ANALYZER_TIMEOUT:.0f}s): {timed_out_names}")
             
         return score, signals
     

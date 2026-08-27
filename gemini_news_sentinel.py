@@ -51,8 +51,26 @@ class GeminiNewsSentinel:
                 _NEWS_CACHE[symbol] = (now, res)
                 return res
 
-            headlines = [n.title for n in raw_news_items[:5] if hasattr(n, 'title') and n.title]
-            combined_text = " | ".join(headlines)
+            headlines_raw = [n.title for n in raw_news_items[:20] if hasattr(n, 'title') and n.title]
+            
+            # Deduplicate headlines using Jaccard token overlap
+            import re
+            unique_headlines = []
+            seen_token_sets = []
+            for h in headlines_raw:
+                tokens = set(re.findall(r'\b[a-zA-Z]{3,}\b', h.lower()))
+                is_dup = False
+                for seen in seen_token_sets:
+                    if tokens and seen and (len(tokens & seen) / len(tokens | seen)) >= 0.45:
+                        is_dup = True
+                        break
+                if not is_dup:
+                    unique_headlines.append(h)
+                    seen_token_sets.append(tokens)
+                if len(unique_headlines) >= 12:
+                    break
+
+            combined_text = " | ".join(unique_headlines)
 
             if not combined_text:
                 _NEWS_CACHE[symbol] = (now, res)

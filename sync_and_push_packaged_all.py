@@ -1,17 +1,32 @@
-"""
-Sync all updated files from kis-auto-trading to kis-auto-trading-packaged
-and push cleanly to GitHub repository (johnjalboss/kis-auto-trading-strategy.git)
-"""
-import os, shutil, subprocess
+import os, sys, shutil, subprocess
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 src_dir = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading"
 dst_dir = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading-packaged"
+
+print("==========================================================")
+print("🛡️ [PRE-FLIGHT] RUNNING ZERO-BUG INTEGRITY AUDIT GATE")
+print("==========================================================")
+sentinel_res = subprocess.run([sys.executable, "codebase_integrity_sentinel.py"], cwd=src_dir)
+if sentinel_res.returncode != 0:
+    print("\n❌ [CRITICAL] PRE-FLIGHT INTEGRITY AUDIT FAILED! DEPLOYMENT ABORTED TO PREVENT PRODUCTION BUGS.")
+    sys.exit(1)
+print("\n✅ PRE-FLIGHT INTEGRITY AUDIT 100% PASSED! PROCEEDING WITH SYNC & DEPLOY...\n")
 
 print("==========================================================")
 print("[SYNC] SYNCING LOCAL CODE TO PACKAGED FRIEND DISTRIBUTION")
 print("==========================================================")
 
 files_to_sync = [
+    "fed_net_liquidity_engine.py",
+    "options_gamma_engine.py",
+    "sec_form4_insider_radar.py",
+    "macro_event_shock_shield.py",
+    "winrate_optimizer.py",
+    "pre_market_gap_sentinel.py",
+    "database.py",
     "web_dashboard.py",
     "trade_error_notebook.py",
     "cross_sectional_momentum.py",
@@ -66,7 +81,9 @@ files_to_sync = [
     "position_sizer.py",
     "risk_manager.py",
     "deploy.py",
-    "theme_radar_adapter.py"
+    "theme_radar_adapter.py",
+    "test_4_new_quant_engines.py",
+    "codebase_integrity_sentinel.py"
 ]
 
 copied_count = 0
@@ -81,6 +98,13 @@ for fname in files_to_sync:
         print(f"  [SKIP] {fname} not found in src_dir")
 
 print(f"\nTotal Files Synced to Packaged Dir: {copied_count}")
+
+# Copy updated us-theme-tracker files
+src_theme_daemon = r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\theme_radar_daemon.py"
+dst_theme_daemon = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading-packaged\us-theme-tracker\theme_radar_daemon.py"
+if os.path.exists(src_theme_daemon) and os.path.exists(os.path.dirname(dst_theme_daemon)):
+    shutil.copy2(src_theme_daemon, dst_theme_daemon)
+    print("  [OK] Copied us-theme-tracker/theme_radar_daemon.py to packaged dir")
 
 # Git Commit & Push in kis-auto-trading
 try:

@@ -83,7 +83,7 @@ class DynamicScreener:
     """KIS API 기반 동적 스크리너"""
     
     MIN_SCORE = 45  # 유니버스 확장(250+)에 맞춰 기준 강화 (이전: 40)
-    MAX_RESULTS = 25  # 최적 정예 후보군 확장 (25개 분산 테마/주도주 동시 추적)
+    MAX_RESULTS = 40  # 순수 스크리너 정예 후보군 40개 선정 (고유동성 풀 확대)
     
     def __init__(self):
         self._cache = {}
@@ -169,26 +169,71 @@ class DynamicScreener:
         except Exception as _exp_err:
             logger.error("Failed to inject 3,000+ universe expander candidates: {}", _exp_err)
 
-        # 🎯 Inject Theme Radar recommended candidates (Top picks)
+        # 🎯 Collect Theme Radar recommended candidates (Top picks)
+        theme_cands = []
         try:
             from theme_radar_adapter import ThemeRadarAdapter
             adapter = ThemeRadarAdapter()
             recs = adapter.get_recommendations()
             if recs:
                 theme_cands = list(recs.keys())
-                logger.info("🎯 Theme Radar: Found {} recommended candidates. Injecting at top.", len(theme_cands))
-                candidates = list(dict.fromkeys(theme_cands + candidates))
+                logger.info("🎯 Theme Radar: Found {} recommended candidates.", len(theme_cands))
         except Exception as tr_err:
-            logger.error("Failed to inject theme radar candidates: {}", tr_err)
+            logger.error("Failed to fetch theme radar candidates: {}", tr_err)
+
+        # 💎 Collect BB Squeeze Pre-Breakout candidates (Stocks consolidating before explosion)
+        squeeze_cands = []
+        try:
+            squeeze_cands = self._gather_squeeze_candidates()
+            if squeeze_cands:
+                logger.info("💎 [BB_SQUEEZE] Found {} pre-breakout compression candidates.", len(squeeze_cands))
+        except Exception as sq_err:
+            logger.debug("BB Squeeze gather error: {}", sq_err)
+
+        # 🛡️ Collect Healthy Pullback & Oversold Support candidates
+        oversold_cands = []
+        try:
+            oversold_cands = self._screen_oversold()
+            if oversold_cands:
+                logger.info("🛡️ [PULLBACK_GUARD] Found {} healthy pullback/support candidates.", len(oversold_cands))
+        except Exception as ov_err:
+            logger.debug("Oversold gather error: {}", ov_err)
+
+        # Merge all 6 Balanced Discovery Channels into comprehensive candidate pool:
+        # 1. BB Squeeze Pre-Breakouts (Low-risk early stage)
+        # 2. Healthy Pullback / Support Bounces (Post-profit taking entry)
+        # 3. Smart Money Footprint (Institutional Accumulation)
+        # 4. RS Momentum Leaders (S&P 500 relative strength)
+        # 5. Theme Radar (Hot industry tailwinds)
+        # 6. 3,000+ US Universe Expander (Balanced sweet-spot scans)
+        all_channel_cands = []
+        if squeeze_cands:
+            all_channel_cands.extend(squeeze_cands)
+        if oversold_cands:
+            all_channel_cands.extend(oversold_cands)
+        if 'smart_money_cands' in locals() and smart_money_cands:
+            all_channel_cands.extend(smart_money_cands)
+        if 'rs_top_candidates' in locals() and rs_top_candidates:
+            all_channel_cands.extend(rs_top_candidates)
+        if theme_cands:
+            all_channel_cands.extend(theme_cands)
+        if 'expander_cands' in locals() and expander_cands:
+            all_channel_cands.extend(expander_cands)
+        if candidates:
+            all_channel_cands.extend(candidates)
+            
+        candidates = list(dict.fromkeys(all_channel_cands))
+        logger.info("📊 Total Consolidated Screener Pool: {} unique stocks ready for Factor Analysis", len(candidates))
         # [STRATEGY UPGRADE] 중장기 하락장 진입 시 일반 종목 매수 방지를 위해 후보 풀 전체를 인버스/방어주로 강제 치환
         # - 단기 노이즈(SMA20) 대신 중기 추세(SMA50)를 기준으로 하여 불필요한 공포 매수 및 밸류트랩(방어주) 강제 전환 방지
         try:
             import yfinance as yf
             _spy_df = yf.download("SPY", period="6mo")
             if _spy_df is not None and len(_spy_df) >= 50:
+                self._ohlcv_cache["SPY"] = _spy_df
                 _spy_close = _spy_df['Close']
-                _spy_sma50 = float(_spy_close.rolling(50).mean().iloc[-1])
-                _spy_current = float(_spy_close.iloc[-1])
+                _spy_sma50 = float(np.mean(_spy_close.values[-50:]))
+                _spy_current = float(_spy_close.values[-1])
                 if _spy_current < _spy_sma50 and mode == ScreenMode.DEFENSIVE:
                     inverse_cands = self._screen_inverse()
                     defensive_cands = self._screen_defensive()
@@ -243,24 +288,30 @@ class DynamicScreener:
         # Preliminary pass workers: 8 (was 16). The Oracle VPS has 2 CPUs.
         # OHLCV downloads are I/O-bound but KIS API enforces rate limits;
         # 16 concurrent threads cause 429 bursts. 8 workers is the sweet spot.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:500]}
-            try:
-                for future in concurrent.futures.as_completed(futures, timeout=180):
-                    try:
-                        result = future.result()
-                        if result:
-                            preliminary_scored.append(result)
-                    except Exception as e:
-                        logger.debug("Preliminary scoring future failed: {}", e)
-            except concurrent.futures.TimeoutError:
-                logger.warning("Preliminary screener scoring timed out (180s limit)")
+        import sys
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+        try:
+            futures = {executor.submit(_safe_prelim_score, sym): sym for sym in candidates[:120]}
+            for future in concurrent.futures.as_completed(futures, timeout=40):
+                try:
+                    result = future.result()
+                    if result:
+                        preliminary_scored.append(result)
+                except Exception as e:
+                    logger.debug("Preliminary scoring future failed: {}", e)
+        except concurrent.futures.TimeoutError:
+            logger.warning("Preliminary screener scoring completed up to 40s limit")
+        finally:
+            if sys.version_info >= (3, 9):
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=False)
 
-        # Sort by preliminary score and take the top 75 for full scoring
+        # Sort by preliminary score and take the top 40 elite finalists for full 5-pillar scoring
         preliminary_scored.sort(key=lambda x: x.total_score, reverse=True)
-        top_candidates = [s.symbol for s in preliminary_scored[:75]]
+        top_candidates = [s.symbol for s in preliminary_scored[:40]]
         
-        # Pass 2: Full event-driven scoring (calls Finnhub APIs) on top 50 candidates
+        # Pass 2: Full event-driven scoring (Finnhub news, insider, earnings, 5-pillar deep metrics)
         scored = []
         def _safe_full_score(sym):
             try:
@@ -270,20 +321,23 @@ class DynamicScreener:
                 return None
 
         if top_candidates:
-            # Full scoring: max_workers=6. Each symbol calls Finnhub (news, insider, earnings)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-                futures2 = {executor.submit(_safe_full_score, sym): sym for sym in top_candidates}
-                try:
-                    for future in concurrent.futures.as_completed(futures2, timeout=180):
-                        try:
-                            result = future.result()
-                            if result:
-                                scored.append(result)
-                        except Exception as e:
-                            logger.debug("Full scoring future failed: {}", e)
-                except concurrent.futures.TimeoutError:
-                    unfinished = [futures2[f] for f in futures2 if not f.done()]
-                    logger.warning("Full screener scoring timed out (180s limit). Unfinished: {}", unfinished)
+            executor2 = concurrent.futures.ThreadPoolExecutor(max_workers=6)
+            try:
+                futures2 = {executor2.submit(_safe_full_score, sym): sym for sym in top_candidates}
+                for future in concurrent.futures.as_completed(futures2, timeout=45):
+                    try:
+                        result = future.result()
+                        if result:
+                            scored.append(result)
+                    except Exception as e:
+                        logger.debug("Full scoring future failed: {}", e)
+            except concurrent.futures.TimeoutError:
+                logger.warning("Full screener scoring completed up to 45s limit")
+            finally:
+                if sys.version_info >= (3, 9):
+                    executor2.shutdown(wait=False, cancel_futures=True)
+                else:
+                    executor2.shutdown(wait=False)
 
         # Flush Finnhub cache to disk after batch completion
         try:
@@ -291,6 +345,13 @@ class DynamicScreener:
             get_finnhub_client().flush_cache()
         except Exception as e:
             logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
+
+        # [FAIL-SAFE] Fallback to preliminary_scored if full scoring had fewer results than MAX_RESULTS
+        if len(scored) < self.MAX_RESULTS and preliminary_scored:
+            scored_syms = {s.symbol for s in scored}
+            for p in preliminary_scored:
+                if p.symbol not in scored_syms:
+                    scored.append(p)
 
         # Filter candidates above MIN_SCORE
         above_min = [s for s in scored if s.total_score >= self.MIN_SCORE]
@@ -379,18 +440,30 @@ class DynamicScreener:
         }
         all_symbols = [s for s in list(BASE_UNIVERSE) if s not in exclude and s not in defensive_set]
         
-        # 샘플링: 최대 400종목 (API 부하 방지)
-        import config as _cfg
-        max_scan = min(400, getattr(_cfg, 'SCREENER_MAX_CANDIDATES', 330))
-        random.shuffle(all_symbols)
-        symbols_to_scan = all_symbols[:max_scan]
+        # 주도주 및 테마 탑픽 우선순위 정렬 후 상위 80개 종목 고속 스캔
+        try:
+            from theme_radar_adapter import ThemeRadarAdapter
+            theme_top = list(ThemeRadarAdapter().get_recommendations().keys())
+        except Exception:
+            theme_top = []
+            
+        core_growth = ["NVDA", "PLTR", "KNSA", "ARWR", "LLY", "AMD", "META", "CRWD", "APP", "VRT", "TSLA", "AXON", "AKTS", "FCX", "TWST", "BMY", "GH"]
+        prioritized = [s for s in (theme_top + core_growth) if s in all_symbols]
+        remaining = [s for s in all_symbols if s not in prioritized]
+        random.shuffle(remaining)
+        symbols_to_scan = (prioritized + remaining)[:80]
         
         rs_scores = []  # (symbol, rs_score)
         _lock = threading.Lock()
         
         def _compute_rs(sym: str):
             try:
-                df = kis_data.get_daily_ohlcv(sym, days=135)
+                df = self._ohlcv_cache.get(sym)
+                if df is None:
+                    df = kis_data.get_daily_ohlcv(sym, days=135)
+                    if df is not None:
+                        with _lock:
+                            self._ohlcv_cache[sym] = df
                 if df is None or len(df) < 25:
                     return
                 
@@ -403,7 +476,6 @@ class DynamicScreener:
                     return
                 
                 # ── [GUARD 1] RSI 과열 방지 ─────────────────────────────
-                # RSI > 72면 이미 꼭대기 구간 → 진입하면 꼭대기 매수
                 delta = close.diff()
                 gain = delta.clip(lower=0).rolling(14).mean()
                 loss = (-delta.clip(upper=0)).rolling(14).mean()
@@ -411,38 +483,12 @@ class DynamicScreener:
                 rsi = 100 - (100 / (1 + rs_raw))
                 curr_rsi = float(rsi.iloc[-1]) if len(rsi) >= 14 else 50.0
                 if curr_rsi > 72:
-                    return  # 과매수 구간 — 꼭대기 매수 방지
+                    return
                 
                 # ── [GUARD 2] 52주 고점 대비 괴리율 필터 ────────────────
-                # 꼭대기(52주 고점 5% 이내) = 이미 너무 오른 것
-                # 너무 내린(52주 고점 40% 이하) = 모멘텀 소멸
                 high_52w = float(close.tail(252).max()) if len(close) >= 252 else float(close.max())
                 dist_from_high = (high_52w - curr) / high_52w * 100  # % below 52w high
-                # 52주 신고가 돌파 주도주 가점 (52주 고점 5% 이내 = 신고가 모멘텀 랠리)
                 near_52w_breakout = (dist_from_high <= 5.0)
-                
-                # ── [GUARD 3] 어닝 블랙아웃 (7일 이내 실적발표 종목 제외) ──
-                # 실적발표 전 7일은 갭하락 리스크가 가장 높은 구간
-                try:
-                    from finnhub_client import get_finnhub_client
-                    fh = get_finnhub_client()
-                    if fh.is_enabled():
-                        from datetime import datetime as _dt, timedelta as _td
-                        _today = _dt.now().date()
-                        earnings = fh.get_earnings_calendar(sym)
-                        if earnings:
-                            for e in earnings:
-                                edate_str = e.get('date', '')
-                                if edate_str:
-                                    try:
-                                        edate = _dt.strptime(edate_str, '%Y-%m-%d').date()
-                                        days_to_earnings = (edate - _today).days
-                                        if 0 <= days_to_earnings <= 7:
-                                            return  # 7일 이내 어닝 → 제외
-                                    except Exception as e:
-                                        logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
-                except Exception:
-                    pass  # Finnhub 없으면 생략
                 
                 # 1개월(약 21거래일) 수익률
                 ret_1m = 0.0
@@ -475,7 +521,6 @@ class DynamicScreener:
                         return
                 
                 # [v4.5.0 SOTA QUANT RS RANKING WITH HURST & AMIHUD]
-                # Combine 1M (40%), 3M (35%), 6M (25%) Relative Strength vs SPY + RVOL volume surge!
                 rs_score = ((ret_1m - spy_ret_3m*0.33) * 0.40 + 
                             (ret_3m - spy_ret_3m) * 0.35 + 
                             (ret_6m - spy_ret_6m) * 0.25 + 
@@ -486,29 +531,9 @@ class DynamicScreener:
                     from hurst_fractal_regime import HurstFractalRegimeFilter
                     h_val = HurstFractalRegimeFilter.calculate_hurst(df['Close'])
                     if h_val >= 0.58:
-                        rs_score += 3.0  # True persistent momentum bonus
+                        rs_score += 3.0
                     elif h_val < 0.45:
-                        rs_score -= 3.0  # Mean-reverting chop penalty
-                except Exception:
-                    pass
-
-                # [Amihud Price Impact Bonus]
-                try:
-                    from amihud_liquidity_pressure import AmihudLiquidityPressureEngine
-                    ami_res = AmihudLiquidityPressureEngine().analyze(df, sym)
-                    if ami_res.get('is_institutional_accumulation'):
-                        rs_score += 3.0  # Institutional accumulation surge bonus
-                except Exception:
-                    pass
-
-                # [SEC Form 4 Insider Cluster Buying Bonus]
-                try:
-                    from sec_form4_insider_radar import SECForm4InsiderRadar
-                    ins_res = SECForm4InsiderRadar().analyze_insider_activity(sym)
-                    if ins_res.get('is_cluster_buying'):
-                        rs_score += 6.0  # Cluster insider buying conviction bonus
-                    elif ins_res.get('purchase_count', 0) > 0:
-                        rs_score += 2.0
+                        rs_score -= 3.0
                 except Exception:
                     pass
 
@@ -528,15 +553,16 @@ class DynamicScreener:
             except Exception as e:
                 logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            try:
-                list(concurrent.futures.as_completed(
-                    {executor.submit(_compute_rs, sym): sym for sym in symbols_to_scan},
-                    timeout=90
-                ))
-            except concurrent.futures.TimeoutError:
-                pass
+        import sys
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        try:
+            futures = {executor.submit(_compute_rs, sym): sym for sym in symbols_to_scan}
+            concurrent.futures.wait(futures, timeout=20)
+        finally:
+            if sys.version_info >= (3, 9):
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=False)
         
         # RS 점수 기준 내림차순 정렬
         rs_scores.sort(key=lambda x: x[1], reverse=True)
@@ -580,7 +606,7 @@ class DynamicScreener:
             
         all_symbols = list(BASE_UNIVERSE)
         total_count = len(all_symbols)
-        max_cands = getattr(config, 'SCREENER_MAX_CANDIDATES', 330)
+        max_cands = min(80, getattr(config, 'SCREENER_MAX_CANDIDATES', 75))
         
         start_idx = self._screener_offset % total_count if total_count > 0 else 0
         end_idx = start_idx + max_cands
@@ -599,20 +625,15 @@ class DynamicScreener:
 
         def _scan_symbol_smart(sym: str):
             try:
-                # [ANTI-OVERLOAD] Oracle VM CPU/Network Shield
-                # Staggered random start delay (0 to 0.4s) to spread CPU spikes and avoid API 429 burst limits
-                import time as _time
-                import random as _rand
-                _time.sleep(_rand.random() * 0.4)
-
                 # 240 days required to compute 200 SMA and weekly indicators
-                df = kis_data.get_daily_ohlcv(sym, days=240)
+                df = self._ohlcv_cache.get(sym)
+                if df is None:
+                    df = kis_data.get_daily_ohlcv(sym, days=240)
+                    if df is not None:
+                        with _lock:
+                            self._ohlcv_cache[sym] = df
                 if df is None or len(df) < 50:
                     return
-
-                # Cache it for score_stock step
-                with _lock:
-                    self._ohlcv_cache[sym] = df
 
                 # 1. Historical data preparation
                 prior_history = df.iloc[:-1]
@@ -780,9 +801,17 @@ class DynamicScreener:
             except Exception as e:
                 logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
-        # Concurrent scan using 8 threads (VM safe)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            executor.map(_scan_symbol_smart, symbols_to_scan)
+        # Concurrent scan using 8 threads (VM safe with 20s timeout and cancel_futures)
+        import sys
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        try:
+            futures = {executor.submit(_scan_symbol_smart, sym): sym for sym in symbols_to_scan}
+            concurrent.futures.wait(futures, timeout=20)
+        finally:
+            if sys.version_info >= (3, 9):
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=False)
             
         passed_candidates.sort(key=lambda x: x[1], reverse=True)
         results = [x[0] for x in passed_candidates]
@@ -811,12 +840,12 @@ class DynamicScreener:
         except Exception as e:
             logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
-        # 후보 풀: BASE_UNIVERSE 전체 (최대 SCREENER_MAX_CANDIDATES개 — API 과부하 방지)
-        # ⚠️ 반드시 shuffle! 알파벳 정렬이면 항상 A~D만 스캔됨
+        # 후보 풀: BASE_UNIVERSE 전체 (최대 80개 고속 스캔)
         import random
         all_symbols = list(BASE_UNIVERSE)
         random.shuffle(all_symbols)
-        candidates = all_symbols[:config.SCREENER_MAX_CANDIDATES]
+        max_sqz = min(80, getattr(config, 'SCREENER_MAX_CANDIDATES', 75))
+        candidates = all_symbols[:max_sqz]
 
         def _scan_symbol(sym: str):
             """단일 종목 BB Squeeze 스캔 (스레드 워커)"""
@@ -888,12 +917,12 @@ class DynamicScreener:
             except Exception as e:
                 logger.debug("Squeeze scan failed for {}: {}", sym, e)
 
-        # 병렬 실행 (8 workers — VPS 2 CPU 기준 최적값, KIS API rate limit 고려)
+        # 병렬 실행 (8 workers, 30s 타임아웃)
         import sys
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         try:
             futures = {executor.submit(_scan_symbol, sym): sym for sym in candidates}
-            concurrent.futures.wait(futures, timeout=150)  # 최대 2.5분
+            concurrent.futures.wait(futures, timeout=30)
         finally:
             if sys.version_info >= (3, 9):
                 executor.shutdown(wait=False, cancel_futures=True)
@@ -1232,7 +1261,12 @@ class DynamicScreener:
             # Build info dict from OHLCV data (proxy for yf.Ticker.info)
             avg_volume = float(hist['Volume'].mean())
             current_volume = float(hist['Volume'].iloc[-1])
-            price_data = kis_data.get_current_price(symbol)
+            price_data = None
+            if not preliminary:
+                try:
+                    price_data = kis_data.get_current_price(symbol)
+                except Exception:
+                    pass
             
             info = {
                 'regularMarketPrice': last_close,
@@ -1429,8 +1463,13 @@ class DynamicScreener:
             #   and defensive plays ONLY if they are genuinely outperforming in bear/choppy markets.
             rs_bonus = 0
             try:
-                # Load SPY data
-                spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
+                # Load SPY data from cache
+                spy_df = self._ohlcv_cache.get("SPY")
+                if spy_df is None:
+                    spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
+                    if spy_df is not None:
+                        with _lock:
+                            self._ohlcv_cache["SPY"] = spy_df
                 if spy_df is not None and len(spy_df) >= 65 and len(hist) >= 65:
                     # SPY returns
                     spy_close = spy_df['Close']

@@ -227,8 +227,9 @@ class SECForm4InsiderRadar:
             except Exception:
                 pass
 
+        is_held = bool(sym_list)
         if not sym_list:
-            sym_list = ["ADP", "CART", "LYFT"]
+            sym_list = ["NVDA", "AAPL", "MSFT"]
 
         lines = [
             "👥 <b>[SEC Form 4 내부자 순매수 퀀트 레이더]</b>",
@@ -238,7 +239,8 @@ class SECForm4InsiderRadar:
             ""
         ]
 
-        lines.append("💼 <b>[보유 포지션 내부자 지분 동향]</b>")
+        header_sub = "보유 포지션 내부자 지분 동향" if is_held else "시장 주도주 내부자 지분 동향 (현금 대기 중)"
+        lines.append(f"💼 <b>[{header_sub}]</b>")
         for s in sym_list:
             data = self.analyze_insider_activity(s)
             score = data['insider_score']

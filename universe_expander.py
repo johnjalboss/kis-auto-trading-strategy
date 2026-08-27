@@ -34,15 +34,54 @@ _EXPANDED_TICKER_POOL = [
     "ACHR", "ASTS", "LUNR", "RKLB", "RXRX", "DNA", "CRSP", "EDIT", "NTLA", "BEAM"
 ]
 
+import os
+import sqlite3
+
+def _load_full_3000_universe() -> List[str]:
+    """Dynamically loads all clean investable US common stocks from stock_metadata DB."""
+    db_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "us-theme-tracker", "us_stocks_data.db"),
+        r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\us_stocks_data.db",
+        "/home/ubuntu/us-theme-tracker/us_stocks_data.db",
+        "/home/ubuntu/kis-auto-trading/us_stocks_data.db"
+    ]
+    for dbp in db_paths:
+        if os.path.exists(dbp):
+            try:
+                conn = sqlite3.connect(dbp)
+                cur = conn.cursor()
+                cur.execute("SELECT ticker FROM stock_metadata WHERE ticker IS NOT NULL AND ticker != ''")
+                rows = cur.fetchall()
+                conn.close()
+                tickers = []
+                for r in rows:
+                    sym = r[0].strip().upper()
+                    if not sym:
+                        continue
+                    if len(sym) <= 4 and sym.isalpha():
+                        tickers.append(sym)
+                    elif len(sym) == 5 and sym.endswith(('A', 'B')) and sym[:4].isalpha():
+                        tickers.append(sym)
+                tickers = list(dict.fromkeys(tickers))
+                if len(tickers) >= 500:
+                    logger.info("🏛️ [UNIVERSE_EXPANDER] Loaded {} clean investable US common stocks from {}", len(tickers), os.path.basename(dbp))
+                    return tickers
+            except Exception as e:
+                logger.debug("Failed loading DB universe: {}", e)
+    return _EXPANDED_TICKER_POOL
+
 _EXPANDER_CACHE = {}
-_EXPANDER_TTL = 14400  # 4 hours
+_EXPANDER_TTL = 7200  # 2 hours (4 full 3,000-stock sweeps per US trading session)
 
 
 class UniverseExpander:
     def __init__(self, pool: List[str] = None):
-        self.pool = list(set(pool or _EXPANDED_TICKER_POOL))
+        if pool:
+            self.pool = list(set(pool))
+        else:
+            self.pool = _load_full_3000_universe()
 
-    def get_top_super_candidates(self, top_n: int = 300) -> List[str]:
+    def get_top_super_candidates(self, top_n: int = 500) -> List[str]:
         now = time.time()
         if 'cached_candidates' in _EXPANDER_CACHE:
             ts, candidates = _EXPANDER_CACHE['cached_candidates']
@@ -50,41 +89,68 @@ class UniverseExpander:
                 return candidates[:top_n]
 
         try:
-            logger.info("⚡ [v8.0 UNIVERSE_EXPANDER] Bulk scanning {} US Market stocks...", len(self.pool))
+            logger.info("⚡ [v8.0 UNIVERSE_EXPANDER] Bulk scanning {} Full US Market stocks in batches...", len(self.pool))
             
-            data = yf.download(self.pool, period='5d', progress=False, group_by='ticker')
+            chunk_size = 100
             scored_candidates = []
+            scan_targets = self.pool
+            import gc
             
-            for sym in self.pool:
+            for i in range(0, len(scan_targets), chunk_size):
+                chunk = scan_targets[i:i + chunk_size]
                 try:
-                    if sym in data:
-                        df_sym = data[sym].dropna()
-                    else:
+                    data = yf.download(chunk, period='5d', progress=False, group_by='ticker', threads=True)
+                    if data is None or data.empty:
                         continue
+                        
+                    for sym in chunk:
+                        try:
+                            if sym in data:
+                                df_sym = data[sym].dropna()
+                            else:
+                                continue
 
-                    if df_sym.empty or len(df_sym) < 3:
-                        continue
+                            if df_sym.empty or len(df_sym) < 3:
+                                continue
 
-                    close = df_sym['Close'].values.flatten()
-                    volume = df_sym['Volume'].values.flatten()
+                            close = df_sym['Close'].values.flatten()
+                            volume = df_sym['Volume'].values.flatten()
 
-                    cur_price = float(close[-1])
-                    if cur_price < 3.0:  # Skip penny junk
-                        continue
+                            cur_price = float(close[-1])
+                            if cur_price < 5.0:  # Skip penny junk
+                                continue
 
-                    avg_vol_5d = float(np.mean(volume[-5:]))
-                    dollar_vol = cur_price * avg_vol_5d
+                            avg_vol_5d = float(np.mean(volume[-5:]))
+                            dollar_vol = cur_price * avg_vol_5d
 
-                    if dollar_vol < 2_000_000:  # Minimum $2M daily volume
-                        continue
+                            if dollar_vol < 2_000_000:  # Minimum $2M daily volume (liquidity filter)
+                                continue
 
-                    ret_5d = (close[-1] - close[0]) / close[0] * 100.0
-                    rvol = volume[-1] / (avg_vol_5d + 1.0)
+                            ret_5d = (close[-1] - close[0]) / close[0] * 100.0
+                            rvol = volume[-1] / (avg_vol_5d + 1.0)
 
-                    score = ret_5d * 2.0 + rvol * 10.0 + min(50, dollar_vol / 1_000_000.0)
-                    scored_candidates.append((score, sym))
-                except Exception:
-                    continue
+                            # Balanced Trend & Pullback Sweet-Spot Scoring:
+                            # 1. Early-stage Breakout (+2% ~ +10% 5D return): Ideal entry zone
+                            # 2. Healthy Pullback / Base (-3% ~ +2% 5D return): Safe accumulation zone
+                            # 3. Parabolic Blow-off Penalty (>15% 5D return): Prevent chasing tops before profit taking
+                            if 2.0 <= ret_5d <= 10.0:
+                                trend_score = ret_5d * 3.5  # +7 to +35 pts (optimal breakout momentum)
+                            elif -3.0 <= ret_5d < 2.0:
+                                trend_score = 20.0  # +20 pts (golden pullback to base/support)
+                            elif ret_5d > 10.0:
+                                # Heavily penalize overextended blow-off spikes (e.g. +30% drops to 0 pts)
+                                trend_score = max(0.0, 35.0 - (ret_5d - 10.0) * 3.0)
+                            else:
+                                trend_score = max(0.0, 10.0 + ret_5d * 2.0)  # Heavy selloffs (< -5%) get 0 pts
+
+                            score = trend_score + min(30.0, rvol * 10.0) + min(35.0, dollar_vol / 2_000_000.0)
+                            scored_candidates.append((score, sym))
+                        except Exception:
+                            continue
+                    del data
+                    gc.collect()
+                except Exception as chunk_err:
+                    logger.debug("Chunk download failed for batch {}: {}", i, chunk_err)
 
             scored_candidates.sort(key=lambda x: x[0], reverse=True)
             top_candidates = [sym for _, sym in scored_candidates[:top_n]]
@@ -92,7 +158,9 @@ class UniverseExpander:
             if not top_candidates:
                 top_candidates = self.pool[:top_n]
 
-            logger.info("✅ [v8.0 UNIVERSE_EXPANDER] Filtered {} Top Super-Candidates in <3s!", len(top_candidates))
+            elapsed = time.time() - now
+            logger.info("✅ [v8.0 UNIVERSE_EXPANDER] Filtered {} Top Super-Candidates from {} total stocks in {:.1f}s!", 
+                        len(top_candidates), len(self.pool), elapsed)
             _EXPANDER_CACHE['cached_candidates'] = (now, top_candidates)
             return top_candidates
         except Exception as e:

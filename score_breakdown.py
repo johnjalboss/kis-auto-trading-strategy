@@ -3,7 +3,7 @@ import kis_data
 
 screener = DynamicScreener()
 
-symbols = ["MRK", "MDT", "VTOL", "STRC", "NVDA", "AAPL", "PLTR", "LLY", "ABBV", "TSLA"]
+symbols = ["ADP", "CART", "LYFT", "NVDA", "AAPL", "PLTR", "LLY", "TSLA"]
 
 print("=== STOCK SCORING BREAKDOWN ===")
 for sym in symbols:

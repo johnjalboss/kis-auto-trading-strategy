@@ -62,29 +62,42 @@ class EarningsCalendar:
                     dates = calendar.loc['Earnings Date']
                     earnings_date = dates.iloc[0] if hasattr(dates, 'iloc') else dates
             
-            if earnings_date is None:
+            # Convert to datetime / date
+            from datetime import date
+            today = date.today()
+            
+            earnings_d = None
+            if hasattr(earnings_date, 'date'):
+                earnings_d = earnings_date.date()
+            elif isinstance(earnings_date, date):
+                earnings_d = earnings_date
+            elif isinstance(earnings_date, str):
+                try:
+                    earnings_d = datetime.strptime(earnings_date[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            
+            if earnings_d is None:
                 return EarningsInfo(symbol, False, None, 999, "CLEAR")
             
-            # Convert to datetime
-            if hasattr(earnings_date, 'date'):
-                earnings_dt = earnings_date
-            else:
-                earnings_dt = datetime.now()
+            days_until = (earnings_d - today).days
             
-            days_until = (earnings_dt - datetime.now()).days
+            # If earnings date is in the past, the event has already passed -> CLEAR
+            if days_until < 0:
+                return EarningsInfo(symbol, False, str(earnings_d), days_until, "CLEAR")
             
-            # Determine recommendation
-            if days_until <= self.CLOSE_DAYS:
+            # Determine recommendation for UPCOMING earnings
+            if 0 <= days_until <= self.CLOSE_DAYS:
                 recommendation = "AVOID"
-            elif days_until <= self.AVOID_DAYS:
+            elif 0 <= days_until <= self.AVOID_DAYS:
                 recommendation = "CAUTION"
             else:
                 recommendation = "CLEAR"
             
             return EarningsInfo(
                 symbol=symbol,
-                has_earnings_soon=days_until <= self.AVOID_DAYS,
-                earnings_date=str(earnings_dt.date()) if hasattr(earnings_dt, 'date') else None,
+                has_earnings_soon=(days_until <= self.AVOID_DAYS),
+                earnings_date=str(earnings_d),
                 days_until=days_until,
                 recommendation=recommendation
             )

@@ -178,7 +178,7 @@ class SmartMoneyFootprint:
             except Exception:
                 pass
 
-        syms = symbols if symbols and len(symbols) > 0 else ["ADP", "CART", "LYFT", "SPY", "NVDA"]
+        syms = symbols if symbols and len(symbols) > 0 else ["NVDA", "AAPL", "MSFT", "SPY"]
         lines = []
         has_over_100 = False
         for s in syms:

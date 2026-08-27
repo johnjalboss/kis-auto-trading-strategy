@@ -95,7 +95,10 @@ def _get_updates(offset: int) -> list:
 
 def _handle_status() -> str:
     lines = ["🤖 <b>스윙봇 실시간 모니터링</b>"]
-    lines.append(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    import pytz
+    now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime('%Y-%m-%d %H:%M:%S KST')
+    now_edt = datetime.now(pytz.timezone('US/Eastern')).strftime('%H:%M:%S EDT')
+    lines.append(f"⏰ <code>{now_kst} ({now_edt})</code>")
     
     # 1. 일시정지 상태 표시
     if os.path.exists("/tmp/kis_trading_paused"):

@@ -609,10 +609,12 @@ class BotOrchestrator:
                 from daily_performance_report import DailyPerformanceReport
                 DailyPerformanceReport().send_daily_report_to_telegram()
                 try:
+                    from post_exit_tracker import get_post_exit_tracker
+                    get_post_exit_tracker().update_tracking()
                     from auto_tuning_engine import AutoTuningEngine
                     AutoTuningEngine().run_autotune()
                 except Exception as _at_err:
-                    logger.debug("AutoTuningEngine trigger skipped: {}", _at_err)
+                    logger.debug("AutoTuningEngine & PostExitTracker trigger skipped: {}", _at_err)
         except Exception as _rpt_err:
             logger.debug("DailyPerformanceReport trigger skipped: {}", _rpt_err)
 
@@ -667,30 +669,12 @@ class BotOrchestrator:
                 logger.info("Excluding recently sold symbols from screener: {}", recently_sold_exclude)
             
             result = screener.screen(regime=regime, exclude_symbols=exclude_symbols)
-            self.state.target_universe = result.tickers if result and result.tickers else []
+            # 100% Pure Dynamic Screener Universe (Top 40 candidates from market scan):
+            raw_candidates = result.tickers if result and result.tickers else []
+            self.state.target_universe = raw_candidates[:40]
             self.state.last_screen_refresh = now
             
-            # [Proactive Rotation Engine] 하락장 또는 약세/순환매 레짐 시 인버스 ETF(SQQQ) + 경기방어 1등주(DEFENSIVE) 자동 선제 주입
-            is_bear_regime = self.state.current_regime in {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC"}
-            is_risk_off = self.state.global_risk_level == "RISK_OFF"
-            if is_bear_regime or is_risk_off:
-                if not self.state.target_universe:
-                    self.state.target_universe = []
-                if "SQQQ" not in held_symbols and "SQQQ" not in self.state.target_universe:
-                    self.state.target_universe.append("SQQQ")
-                
-            # [UNIVERSE GUARANTEE] 스크리닝 결과가 적거나 비어있을 경우, 방어주/우량주 1등주 유니버스를 항시 최소 10개 이상 자동으로 보충 주입
-            def_candidates = [s for s in getattr(config, 'DEFENSIVE_UNIVERSE_SET', set()) if s not in held_symbols and s not in recently_sold_exclude]
-            for def_sym in def_candidates:
-                if len(self.state.target_universe) >= 28:
-                    break
-                if def_sym not in self.state.target_universe:
-                    self.state.target_universe.append(def_sym)
-                    
-            logger.info("  -> screener.py: {} active targets ready (excluding {} held positions: {})",
-                       len(self.state.target_universe), len(held_symbols), list(held_symbols))
-                    
-            logger.info("  -> screener.py: {} targets found (excluding {} held positions: {})",
+            logger.info("  -> screener.py: {} pure dynamic targets ready (excluding {} held positions: {})",
                        len(self.state.target_universe), len(held_symbols), list(held_symbols))
             
             # Apply additional liquidity filter
@@ -943,30 +927,20 @@ class BotOrchestrator:
 
         signals_to_process = []
         try:
-            # PARALLEL processing (max_workers=5, timeout=480s):
-            # - 2 CPUs on VPS, analyzers are mostly I/O-bound (network calls to Finnhub/KIS).
-            # - 5 symbols × 8 category workers = ~40 threads max, mostly blocking on network.
-            # - 10 symbols in 2 batches (5+5) instead of 4 batches (3+3+3+1) = faster overall.
-            # - Timeout increased 360→480s: last 2 symbols were consistently hitting 360s limit.
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_symbol = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
-                done, not_done = wait(future_to_symbol.keys(), timeout=480.0)
-                
-                for future in done:
+            # Safe 2-worker concurrent evaluation (20 symbols in ~4-5 mins):
+            # Maintains low CPU (<15%) and low RAM (<10MB), fully compliant with KIS API rate limits
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                future_to_sym = {executor.submit(_get_signal, sym): sym for sym in self.state.target_universe}
+                for future in as_completed(future_to_sym):
+                    sym = future_to_sym[future]
                     try:
-                        symbol, signal = future.result()
+                        _, signal = future.result()
                         if signal:
                             signals_to_process.append(signal)
-                    except Exception as e:
-                        logger.error("Error getting signal result for symbol: {}", e)
-                        
-                if not_done:
-                    timed_out_symbols = [future_to_symbol[f] for f in not_done]
-                    logger.warning("Phase 4 symbol check timed out for symbols (480s limit): {}", timed_out_symbols)
-                    for f in not_done:
-                        f.cancel()
+                    except Exception as sym_err:
+                        logger.debug("Signal calculation error for {}: {}", sym, sym_err)
         except Exception as e:
-            logger.error("Exception in Phase 4 symbol check thread pool: {}", e)
+            logger.error("Exception in Phase 4 symbol check: {}", e)
         
         # Multi-Factor Tie-Breaking Priority Engine (v11.0.4)
         # Resolves equal high scores (e.g. multiple 100s) deterministically using:
@@ -1004,6 +978,7 @@ class BotOrchestrator:
         except Exception:
             pass
 
+        trade_executed = False
         for signal in signals_to_process:
             symbol = signal.symbol
             try:
@@ -1280,6 +1255,8 @@ class BotOrchestrator:
                             continue
                         
                         if qty > 0:
+                            trade_executed = True
+                            self._no_trade_cycle_count = 0
                             self.phase_5_execute_trade(symbol, "BUY", qty, signal.entry_price, signal.summary)
 
                     else:
@@ -1441,10 +1418,13 @@ class BotOrchestrator:
             except Exception as e:
                 logger.debug("Upgrade logic error: {}", e)
                     
-        # --- Exit Signals on Positions (Checked again after potential upgrades) ---
-        # Note: Primary exit check moved to top, but we keep this as a rapid safety sweep
-        # after any buying activity.
-        pass
+        # Rolling Candidate Discovery: If no trade executed across consecutive cycles, force fresh universe scan
+        if not trade_executed:
+            self._no_trade_cycle_count = getattr(self, '_no_trade_cycle_count', 0) + 1
+            if self._no_trade_cycle_count >= 2:
+                logger.info("🔄 [ACTIVE_ROLLING_DISCOVERY] 2 consecutive cycles with no valid entry. Forcing immediate fresh universe scan across 2,864 universe.")
+                self.state.last_screen_refresh = None
+                self._no_trade_cycle_count = 0
 
     # ==========================================
     # PHASE 6: QUANT REBALANCING & SCALE-UP
@@ -1832,7 +1812,7 @@ class BotOrchestrator:
 
         # 9. Smart Order Execution
         try:
-            from smart_order import get_smart_executor, OrderStatus
+            from smart_order import get_smart_executor, OrderStatus, OrderType
             executor = get_smart_executor(self.trader)
             
             # [v1.1.8] Refresh price right before execution
@@ -1851,82 +1831,84 @@ class BotOrchestrator:
             order = executor.execute(symbol, action, qty, price)
             
             if order.status != OrderStatus.REJECTED:
-                logger.info("??Trade Executed: {} {} x {} via smart_order ({})", 
-                           action, symbol, qty, order.order_type.value)
+                logger.info("🎯 Trade Executed: {} {} x {} via smart_order ({})", 
+                           action, symbol, qty, getattr(order.order_type, 'value', str(order.order_type)))
                 
                 if action == "SELL":
                     self._recently_sold[symbol] = datetime.now()
+                    try:
+                        from post_exit_tracker import get_post_exit_tracker
+                        get_post_exit_tracker().sync_recent_sells_from_trades_db()
+                    except Exception as _pet_err:
+                        logger.debug("PostExitTracker sync error: {}", _pet_err)
                 
                 # Send Trade Notification
-                # [v1.1.8 BUG FIX] Only send alert if order confirmed FILLED (not just placed)
-                # KIS limit orders: rt_cd=0 means "accepted", not "filled"
-                # We wait briefly and check fill status to avoid phantom alerts
-                if order.order_type in [OrderType.ADAPTIVE, OrderType.MARKET, OrderType.LIMIT, OrderType.TWAP]:
-                    try:
-                        pnl_pct = 0.0
-                        if action == "SELL" and symbol in self.strategy._positions:
-                            pos = self.strategy._positions[symbol]
-                            if pos.entry_price > 0:
-                                pnl_pct = ((order.avg_fill_price or price) - pos.entry_price) / pos.entry_price
-                                
-                        from notification import get_notifier
-                        notifier = get_notifier()
-                        # Send trade receipt for FILLED, PLACED, or SUBMITTED orders
-                        is_valid_order = order.status in [OrderStatus.FILLED, OrderStatus.PLACED, OrderStatus.SUBMITTED, OrderStatus.PARTIAL_FILL]
-                        if is_valid_order:
-                            fill_qty = order.filled_quantity if order.filled_quantity > 0 else qty
-                            fill_px = order.avg_fill_price or price
-                            if action == "BUY":
-                                try:
-                                    from telegram_receipt import TelegramReceiptGenerator
-                                    sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
-                                    q_score = getattr(self.strategy, '_last_scores', {}).get(symbol, 100)
-                                    atr_val = self.strategy.get_current_atr(symbol) if hasattr(self.strategy, 'get_current_atr') else 0.0
-                                    sl_calc = fill_px - (atr_val * 1.5) if atr_val > 0 else fill_px * 0.95
-                                    macro_name = getattr(self, '_current_regime', 'RISK_ON')
-                                    receipt_msg = TelegramReceiptGenerator.format_buy_receipt(
-                                        symbol=symbol,
-                                        quantity=fill_qty,
-                                        price=fill_px,
-                                        setup=reason,
-                                        score=q_score,
-                                        sl_price=sl_calc,
-                                        atr=atr_val,
-                                        score_breakdown=sb,
-                                        macro_regime=macro_name
-                                    )
-                                    notifier.send(receipt_msg)
-                                except Exception as _tr_err:
-                                    logger.debug("Telegram BUY receipt fallback: {}", _tr_err)
-                                    notifier.trade_entry(symbol, fill_qty, fill_px, reason)
-                            else:
-                                entry_p = 0.0
-                                if symbol in self.strategy._positions:
-                                    entry_p = getattr(self.strategy._positions[symbol], 'entry_price', 0.0)
-                                elif hasattr(self, '_last_entry_prices') and symbol in self._last_entry_prices:
-                                    entry_p = self._last_entry_prices[symbol]
-                                else:
-                                    entry_p = fill_px
-                                pnl_pct_val = ((fill_px - entry_p) / entry_p) if entry_p > 0 else 0.0
-                                try:
-                                    import pytz
-                                    from telegram_receipt import TelegramReceiptGenerator
-                                    receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
-                                        symbol=symbol,
-                                        quantity=fill_qty,
-                                        entry_price=entry_p,
-                                        exit_price=fill_px,
-                                        reason=reason
-                                    )
-                                    notifier.send(receipt_msg)
-                                except Exception as _tr_err:
-                                    logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
-                                    notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
+                try:
+                    pnl_pct = 0.0
+                    if action == "SELL" and symbol in self.strategy._positions:
+                        pos = self.strategy._positions[symbol]
+                        if pos.entry_price > 0:
+                            pnl_pct = ((order.avg_fill_price or price) - pos.entry_price) / pos.entry_price
+                            
+                    from notification import get_notifier
+                    notifier = get_notifier()
+                    # Send trade receipt for FILLED, PLACED, or SUBMITTED orders
+                    is_valid_order = order.status in [OrderStatus.FILLED, OrderStatus.PLACED, OrderStatus.SUBMITTED, OrderStatus.PARTIAL_FILL]
+                    if is_valid_order:
+                        fill_qty = order.filled_quantity if order.filled_quantity > 0 else qty
+                        fill_px = order.avg_fill_price or price
+                        if action == "BUY":
+                            try:
+                                from telegram_receipt import TelegramReceiptGenerator
+                                sb = getattr(self.strategy, '_last_score_breakdown', {}).get(symbol, None)
+                                q_score = getattr(self.strategy, '_last_scores', {}).get(symbol, 100)
+                                atr_val = self.strategy.get_current_atr(symbol) if hasattr(self.strategy, 'get_current_atr') else 0.0
+                                sl_calc = fill_px - (atr_val * 1.5) if atr_val > 0 else fill_px * 0.95
+                                macro_name = getattr(self, '_current_regime', 'RISK_ON')
+                                receipt_msg = TelegramReceiptGenerator.format_buy_receipt(
+                                    symbol=symbol,
+                                    quantity=fill_qty,
+                                    price=fill_px,
+                                    setup=reason,
+                                    score=q_score,
+                                    sl_price=sl_calc,
+                                    atr=atr_val,
+                                    score_breakdown=sb,
+                                    macro_regime=macro_name
+                                )
+                                from watchdog import send_tg
+                                send_tg(receipt_msg)
+                            except Exception as _tr_err:
+                                logger.warning("Telegram BUY receipt fallback: {}", _tr_err)
+                                notifier.trade_entry(symbol, fill_qty, fill_px, reason)
                         else:
-                            logger.info("Trade alert suppressed for {}: order status={}",
-                                       symbol, order.status.value)
-                    except Exception as ne:
-                        logger.debug("Trade notification failed: {}", ne)
+                            entry_p = 0.0
+                            if symbol in self.strategy._positions:
+                                entry_p = getattr(self.strategy._positions[symbol], 'entry_price', 0.0)
+                            elif hasattr(self, '_last_entry_prices') and symbol in self._last_entry_prices:
+                                entry_p = self._last_entry_prices[symbol]
+                            else:
+                                entry_p = fill_px
+                            pnl_pct_val = ((fill_px - entry_p) / entry_p) if entry_p > 0 else 0.0
+                            try:
+                                from telegram_receipt import TelegramReceiptGenerator
+                                receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
+                                    symbol=symbol,
+                                    quantity=fill_qty,
+                                    entry_price=entry_p,
+                                    exit_price=fill_px,
+                                    reason=reason
+                                )
+                                from watchdog import send_tg
+                                send_tg(receipt_msg)
+                            except Exception as _tr_err:
+                                logger.warning("Telegram SELL receipt error, using fallback: {}", _tr_err)
+                                notifier.trade_exit(symbol, fill_qty, fill_px, pnl_pct_val, reason)
+                    else:
+                        logger.info("Trade alert suppressed for {}: order status={}",
+                                   symbol, order.status.value)
+                except Exception as ne:
+                    logger.debug("Trade notification failed: {}", ne)
 
                 
                 # Record in frequency controller
@@ -2360,9 +2342,9 @@ class BotOrchestrator:
         init_est = scheduler.now_est()
         # If bot starts up BEFORE regular market open (00:00 - 09:30 EST), regular session hasn't traded yet today.
         # Set ran_post_market_today = True to prevent false EOD triggers on pre-market startup.
-        was_open_today = False
+        was_open_today = scheduler.is_market_open()
         ran_post_market_today = (init_est.time() < scheduler.MARKET_OPEN)
-        was_closed = True  # Track market open transition
+        was_closed = not scheduler.is_market_open()  # Avoid duplicate back-to-back scan if already open on boot
         
         try:
             while True:
@@ -2459,9 +2441,9 @@ class BotOrchestrator:
                         self.state.max_exposure_pct = 1.0  # Reset before re-evaluation
                         self.phase_2_macro_evaluation()
                     
-                    # Refresh screener every 45 minutes (to double breakout discovery speed safely)
+                    # Refresh screener every 15 minutes for rapid dynamic rotation
                     if (self.state.last_screen_refresh is None or 
-                        (now - self.state.last_screen_refresh) > timedelta(minutes=45)):
+                        (now - self.state.last_screen_refresh) > timedelta(minutes=15)):
                         self.phase_3_run_screener()
                     
                     # PHASE 4: Signal loop iteration

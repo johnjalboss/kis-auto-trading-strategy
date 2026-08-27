@@ -15,6 +15,10 @@ from loguru import logger
 import pandas as pd
 import time
 import threading
+try:
+    import config
+except ImportError:
+    config = None
 
 # ============================================================
 # PART 1: yf.download() Shim (기존)
@@ -88,10 +92,18 @@ def _proxy_download(tickers, *args, **kwargs):
     cache_key = f"{tickers_key}_{period}_{interval}_{auto_adjust}"
     now = time.time()
     
+    # Dynamic Interval-Aware TTL: High-frequency minute bars expire fast (40s) for live freshness!
+    if interval in ['1m', '2m', '5m']:
+        effective_expiry = 40
+    elif interval in ['15m', '30m', '60m', '1h']:
+        effective_expiry = 120
+    else:
+        effective_expiry = _cache_expiry  # 300s for daily/historical
+    
     # 1. Cache Check FIRST (Lock-free, fast path)
     if cache_key in _cache:
         cached_df, timestamp = _cache[cache_key]
-        if now - timestamp < _cache_expiry:
+        if now - timestamp < effective_expiry:
             return cached_df.copy()
             
     # Get or create lock for this specific cache_key
@@ -105,7 +117,7 @@ def _proxy_download(tickers, *args, **kwargs):
         # Double-check cache inside the lock
         if cache_key in _cache:
             cached_df, timestamp = _cache[cache_key]
-            if now - timestamp < _cache_expiry:
+            if now - timestamp < effective_expiry:
                 return cached_df.copy()
                 
         # Check if we should bypass KIS for specific macro/FX tickers
@@ -134,7 +146,7 @@ def _proxy_download(tickers, *args, **kwargs):
             # Double-check cache under lock
             if cache_key in _cache:
                 cached_df, timestamp = _cache[cache_key]
-                if now - timestamp < _cache_expiry:
+                if now - timestamp < effective_expiry:
                     return cached_df.copy()
                     
             df = _safe_original_yf_download(tickers, *args, **kwargs)
@@ -142,8 +154,8 @@ def _proxy_download(tickers, *args, **kwargs):
                 _cache[cache_key] = (df.copy(), now)
                 return df
 
-            # [FAIL-SAFE REDUNDANCY] 복수 티커 다운로드 실패 시 개별 분해 복구 및 재조립 적용
-            if (df is None or df.empty) and isinstance(tickers, list) and len(tickers) > 1:
+            # [FAIL-SAFE REDUNDANCY] 복수 티커 다운로드 실패 시 개별 분해 복구 (소규모 매크로 티커 <= 15개만 허용)
+            if (df is None or df.empty) and isinstance(tickers, list) and 1 < len(tickers) <= 15:
                 logger.warning(f"⚠️ Multiple tickers download failed for {tickers}. Decomposing to individual fallbacks...")
                 sub_dfs = {}
                 for t in tickers:
@@ -378,10 +390,17 @@ class KISTickerProxy:
         resolved_layer = "default"
         
         # Layer 1: Live original yfinance (Skip for ETFs to avoid yfinance 404 errors)
+        inverse_etfs = set()
+        try:
+            import config
+            inverse_etfs = getattr(config, 'INVERSE_ETFS', set())
+        except Exception:
+            pass
+
         IS_ETF = symbol in {
             "SQQQ", "TQQQ", "SPY", "QQQ", "DIA", "IWM", "SOXL", "SOXS", "UVXY", "VIXY", 
             "GLD", "SLV", "USO", "UNG", "TLT", "IEF", "SHY", "HYG", "LQD", "BIL"
-        } or symbol in getattr(config, 'INVERSE_ETFS', set())
+        } or symbol in inverse_etfs
         
         if not IS_ETF:
             try:
@@ -459,34 +478,35 @@ class KISTickerProxy:
             except Exception as e:
                 logger.debug(f"Layer 3 (KIS detail) failed for {symbol}: {e}")
 
-        # Layer 4: KIS Current Price (Supplement details anyway)
-        try:
-            import kis_data
-            price_data = kis_data.get_current_price(symbol)
-            if price_data:
-                info['regularMarketPrice'] = price_data.get('last', 0.0)
-                info['previousClose'] = price_data.get('base', 0.0)
-                info['volume'] = price_data.get('tvol', 0.0)
-                
-            df = kis_data.download(symbol, period="1mo", progress=False)
-            if df is not None and not df.empty:
-                close = df['Close']
-                info['averageVolume'] = float(df['Volume'].mean())
-                if info['fiftyTwoWeekHigh'] <= 0:
-                    info['fiftyTwoWeekHigh'] = float(close.max())
-                if info['fiftyTwoWeekLow'] <= 0:
-                    info['fiftyTwoWeekLow'] = float(close.min())
-                if info['marketCap'] <= 0:
-                    info['marketCap'] = float(close.iloc[-1]) * info['averageVolume'] * 20
-                if info['earningsGrowth'] <= 0 and len(df) >= 20:
-                    info['earningsGrowth'] = float(close.iloc[-1] / close.iloc[0] - 1)
-                    info['revenueGrowth'] = info['earningsGrowth'] * 0.6
-                
-                returns = close.pct_change().dropna()
-                if len(returns) > 15:
-                    info['beta'] = float(returns.std() * (252 ** 0.5) / 0.16)
-        except Exception as e:
-            logger.debug(f"Layer 4 (KIS Price supplement) failed for {symbol}: {e}")
+        # Layer 4: KIS Current Price (Supplement details anyway, skip index tickers)
+        if not symbol.startswith('^'):
+            try:
+                import kis_data
+                price_data = kis_data.get_current_price(symbol)
+                if price_data:
+                    info['regularMarketPrice'] = price_data.get('last', 0.0)
+                    info['previousClose'] = price_data.get('base', 0.0)
+                    info['volume'] = price_data.get('tvol', 0.0)
+                    
+                df = kis_data.download(symbol, period="1mo", progress=False)
+                if df is not None and not df.empty:
+                    close = df['Close']
+                    info['averageVolume'] = float(df['Volume'].mean())
+                    if info['fiftyTwoWeekHigh'] <= 0:
+                        info['fiftyTwoWeekHigh'] = float(close.max())
+                    if info['fiftyTwoWeekLow'] <= 0:
+                        info['fiftyTwoWeekLow'] = float(close.min())
+                    if info['marketCap'] <= 0:
+                        info['marketCap'] = float(close.iloc[-1]) * info['averageVolume'] * 20
+                    if info['earningsGrowth'] <= 0 and len(df) >= 20:
+                        info['earningsGrowth'] = float(close.iloc[-1] / close.iloc[0] - 1)
+                        info['revenueGrowth'] = info['earningsGrowth'] * 0.6
+                    
+                    returns = close.pct_change().dropna()
+                    if len(returns) > 15:
+                        info['beta'] = float(returns.std() * (252 ** 0.5) / 0.16)
+            except Exception as e:
+                logger.debug(f"Layer 4 (KIS Price supplement) failed for {symbol}: {e}")
 
         logger.info(f"Fundamental data resolved for {symbol} via Layer: [{resolved_layer}] (PE={info['trailingPE']:.2f}, PB={info['priceToBook']:.2f}, ROE={info['returnOnEquity']*100:.1f}%)")
 
@@ -563,6 +583,104 @@ class KISTickerProxy:
         """배당금 — KIS API 미지원"""
         return pd.Series(dtype=float)
     
+    @property
+    def fast_info(self):
+        """fast_info proxy supporting both dict and attribute access"""
+        info = self.info
+        curr_price = float(info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose') or 0.0)
+        prev_close = float(info.get('previousClose') or info.get('regularMarketPreviousClose') or curr_price)
+        open_price = float(info.get('regularMarketOpen') or info.get('open') or prev_close)
+        day_high = float(info.get('dayHigh') or curr_price)
+        day_low = float(info.get('dayLow') or curr_price)
+
+        class FastInfoProxy(dict):
+            _KEY_ALIASES = {
+                'last_price': 'regularMarketPrice',
+                'regular_market_price': 'regularMarketPrice',
+                'previous_close': 'regularMarketPreviousClose',
+                'regular_market_previous_close': 'regularMarketPreviousClose',
+                'open': 'regularMarketOpen',
+                'regular_market_open': 'regularMarketOpen',
+                'day_high': 'dayHigh',
+                'day_low': 'dayLow',
+                'last_volume': 'regularMarketVolume',
+                'regular_market_volume': 'regularMarketVolume',
+                'market_cap': 'marketCap',
+                'year_high': 'fiftyTwoWeekHigh',
+                'year_low': 'fiftyTwoWeekLow',
+                'fifty_two_week_high': 'fiftyTwoWeekHigh',
+                'fifty_two_week_low': 'fiftyTwoWeekLow',
+                'fifty_day_average': 'fiftyDayAverage',
+                'two_hundred_day_average': 'twoHundredDayAverage',
+                'shares': 'sharesOutstanding',
+                'shares_outstanding': 'sharesOutstanding',
+            }
+
+            def _resolve_key(self, key):
+                if key in self:
+                    return key
+                mapped = self._KEY_ALIASES.get(key)
+                if mapped and mapped in self:
+                    return mapped
+                for k, v in self._KEY_ALIASES.items():
+                    if v == key and k in self:
+                        return k
+                return None
+
+            def __getitem__(self, key):
+                resolved = self._resolve_key(key)
+                if resolved:
+                    return dict.__getitem__(self, resolved)
+                if key in info:
+                    return info[key]
+                return 0.0
+
+            def get(self, key, default=None):
+                resolved = self._resolve_key(key)
+                if resolved:
+                    return dict.get(self, resolved, default)
+                if key in info:
+                    return info[key]
+                return default
+
+            def __getattr__(self, name):
+                if name.startswith('_'):
+                    raise AttributeError(name)
+                resolved = self._resolve_key(name)
+                if resolved:
+                    return self[resolved]
+                if name in info:
+                    return info[name]
+                return 0.0
+
+        data = {
+            'last_price': curr_price,
+            'regularMarketPrice': curr_price,
+            'previous_close': prev_close,
+            'regularMarketPreviousClose': prev_close,
+            'open': open_price,
+            'regularMarketOpen': open_price,
+            'day_high': day_high,
+            'dayHigh': day_high,
+            'day_low': day_low,
+            'dayLow': day_low,
+            'market_cap': info.get('marketCap', 0),
+            'marketCap': info.get('marketCap', 0),
+            'year_high': float(info.get('fiftyTwoWeekHigh') or day_high),
+            'fiftyTwoWeekHigh': float(info.get('fiftyTwoWeekHigh') or day_high),
+            'year_low': float(info.get('fiftyTwoWeekLow') or day_low),
+            'fiftyTwoWeekLow': float(info.get('fiftyTwoWeekLow') or day_low),
+            'fifty_day_average': float(info.get('fiftyDayAverage') or curr_price),
+            'fiftyDayAverage': float(info.get('fiftyDayAverage') or curr_price),
+            'two_hundred_day_average': float(info.get('twoHundredDayAverage') or curr_price),
+            'twoHundredDayAverage': float(info.get('twoHundredDayAverage') or curr_price),
+            'shares_outstanding': info.get('sharesOutstanding', 0),
+            'sharesOutstanding': info.get('sharesOutstanding', 0),
+            'currency': 'USD',
+            'timezone': 'America/New_York'
+        }
+        return FastInfoProxy(data)
+
     @property
     def splits(self) -> pd.Series:
         """주식 분할 — KIS API 미지원"""

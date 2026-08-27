@@ -1,9 +1,33 @@
 {
-  "MIN_ENTRY_SCORE": 80,
-  "STOP_LOSS_PCT": 0.045,
-  "TAKE_PROFIT_PCT": 0.09,
-  "MAX_POSITION_PCT": 0.2,
+  "MIN_ENTRY_SCORE": 84,
+  "STOP_LOSS_PCT": 0.03,
+  "TAKE_PROFIT_PCT": 0.06,
+  "MAX_POSITION_PCT": 0.3,
   "RVOL_MIN": 1.5,
-  "TUNED_AT": "2026-08-14 22:51:11",
-  "REASON": "Baseline Optimization"
+  "MAX_RSI_ENTRY": 72,
+  "TUNED_AT": "2026-08-27 21:55:16",
+  "REASON": "노이즈 방어(IC=-0.22 ➔ 84점) + 알파 집중 모드(승률 75.0%)",
+  "CLUSTERS": {
+    "HIGH_VOL_GROWTH": {
+      "label": "🚀 고변동 성장주",
+      "TAKE_PROFIT_PCT": 0.15,
+      "STOP_LOSS_PCT": 0.05,
+      "TRAILING_ATR": 2.8,
+      "MIN_HOLD_HOURS": 24.0
+    },
+    "MID_VOL_MOMENTUM": {
+      "label": "⚖️ 중변동 표준주",
+      "TAKE_PROFIT_PCT": 0.09,
+      "STOP_LOSS_PCT": 0.038,
+      "TRAILING_ATR": 2.0,
+      "MIN_HOLD_HOURS": 12.0
+    },
+    "LOW_VOL_DEFENSIVE": {
+      "label": "🛡️ 저변동 방어주",
+      "TAKE_PROFIT_PCT": 0.055,
+      "STOP_LOSS_PCT": 0.028,
+      "TRAILING_ATR": 1.4,
+      "MIN_HOLD_HOURS": 6.0
+    }
+  }
 }

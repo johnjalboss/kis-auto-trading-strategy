@@ -140,6 +140,7 @@ class InsiderInstitutionalTracker:
         # Institutional ownership & Securities Lending Overhang Filter
         inst_pct = info.get('heldPercentInstitutions', 0) or 0
         inst_pct = inst_pct * 100 if inst_pct < 1 else inst_pct
+        inst_change = float(info.get('heldPercentInstitutionsPriorQuarter', 0.0) or 0.0)
         
         if inst_pct > 90:
             details.append("HIGH_INST_OWNERSHIP_MAX")

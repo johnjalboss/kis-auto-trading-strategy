@@ -71,7 +71,9 @@ BLACKLIST_PATTERNS = [
     # Utility and verification scripts that shouldn't be loaded as adapters
     'validate', 'ultimate_module_check', 'auto_tuner', 'chart_generator',
     'research_discovery', 'release_valuation_fix', 'scan_overseas_apis',
-    'trigger_reports_server', 'download_log', 'print_report', 'query_db'
+    'trigger_reports_server', 'download_log', 'print_report', 'query_db',
+    'sentinel', 'integrity', 'codebase', 'seed', 'settlement', 'reporter',
+    'notebook', 'mortem', 'receipt', 'telegram', 'watchdog', 'audit'
 ]
 
 # Modules that are pure infrastructure — loaded by orchestrator, never signal adapters

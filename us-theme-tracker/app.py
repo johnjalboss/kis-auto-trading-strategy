@@ -510,7 +510,9 @@ def get_cache_mtime():
 
 
 def sync_from_vps():
-    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
+    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\oracle_key"
+    if not os.path.exists(key_file):
+        key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
     if not os.path.exists(key_file):
         return False
         
@@ -585,6 +587,18 @@ def _load_theme_cache_from_disk(cache_path, mtime):
             results = json.load(f)
         if results:
             df = pd.DataFrame(results)
+            if "velocity_icon" not in df.columns:
+                df["velocity_icon"] = "― 유지"
+            if "is_volume_breakout" not in df.columns:
+                df["is_volume_breakout"] = False
+            if "above_ma_pct" not in df.columns:
+                df["above_ma_pct"] = 50.0
+            if "breadth_1d" not in df.columns:
+                df["breadth_1d"] = 50.0
+            if "quality" not in df.columns:
+                df["quality"] = 50
+            if "factors" not in df.columns:
+                df["factors"] = [{"rvol": 10, "momentum": 10, "breadth": 10, "trend": 10, "persistence": 2}] * len(df)
             df = df.sort_values("quality", ascending=False).reset_index(drop=True)
             return df
     except Exception as e:
@@ -599,7 +613,9 @@ def compute_theme_signals(max_themes=80, force_refresh=False, cache_mtime=0):
     로컬 환경의 경우, VPS로부터 최신 시그널 및 가격 DB/캐시를 즉시 동기화(Sync)합니다.
     """
     cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme_radar_cache.json")
-    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
+    key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\oracle_key"
+    if not os.path.exists(key_file):
+        key_file = r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\id_rsa"
     
     run_local_batch = False
     

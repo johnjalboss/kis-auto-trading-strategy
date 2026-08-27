@@ -28,13 +28,7 @@ class FinnhubClient:
         return True
 
     def _load_cache(self) -> dict:
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load Finnhub cache: {e}")
-        return {
+        default_cache = {
             "company-news": {}, 
             "insider-transactions": {}, 
             "earnings-surprises": {},
@@ -42,6 +36,23 @@ class FinnhubClient:
             "company-profile": {},
             "candles": {}
         }
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        for k in default_cache:
+                            if k not in data:
+                                data[k] = {}
+                        return data
+        except Exception as e:
+            logger.warning(f"Finnhub cache corrupt/invalid ({e}) -> self-healing fresh cache initialized")
+            try:
+                if os.path.exists(self.cache_file):
+                    os.remove(self.cache_file)
+            except Exception:
+                pass
+        return default_cache
 
     def _prune_expired_entries(self):
         # Category TTLs
@@ -70,10 +81,14 @@ class FinnhubClient:
                 return
             self._last_save_time = now
             self._prune_expired_entries()
-            with open(self.cache_file, "w", encoding="utf-8") as f:
-                json.dump(self.cache, f, ensure_ascii=False, indent=2)
+            
+            # Atomic File Write to prevent JSON corruption during concurrent reads/writes
+            temp_file = f"{self.cache_file}.tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(self.cache, f, ensure_ascii=False)
+            os.replace(temp_file, self.cache_file)
         except Exception as e:
-            logger.error(f"Failed to save Finnhub cache: {e}")
+            logger.error(f"Failed to atomically save Finnhub cache: {e}")
 
     def _get_cached(self, endpoint: str, symbol: str) -> Optional[list]:
         symbol = symbol.upper()
@@ -144,6 +159,8 @@ class FinnhubClient:
 
     def _request(self, endpoint: str, params: dict = None) -> Optional[dict]:
         if not self.is_enabled():
+            return None
+        if params and str(params.get("symbol", "")).startswith("^"):
             return None
         
         # Enforce thread-safe rate limiting (sleep outside the lock to prevent serializing parallel threads)

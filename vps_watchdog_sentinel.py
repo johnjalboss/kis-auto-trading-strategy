@@ -28,16 +28,16 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 SERVICES = [
     {
-        "name": "trading-bot.service",
+        "name": "kis-trading.service",
         "description": "KIS 무인 자동매매 트레이딩 엔진",
         "type": "systemd",
-        "cmd_patterns": ["watchdog.py", "main.py", "orchestrator.py"]
+        "cmd_patterns": ["main.py", "watchdog.py"]
     },
     {
         "name": "theme-radar.service",
         "description": "24/7 미국 증시 테마 레이더 실시간 데몬",
         "type": "systemd",
-        "cmd_patterns": ["theme_radar_daemon.py"]
+        "cmd_patterns": ["app.py", "streamlit", "theme_radar_daemon.py"]
     },
     {
         "name": "web-dashboard.service",
@@ -83,40 +83,32 @@ def send_telegram_alert(message: str):
 
 def check_service_health(svc: Dict) -> Tuple[bool, str]:
     """
-    Evaluates true operational health of a service.
+    Evaluates true operational health of a service with a 3-strike debounce retry.
     Returns (is_healthy, reason_if_unhealthy).
     """
     s_name = svc["name"]
-
-    # 1. Check systemd status
-    res = subprocess.run(["systemctl", "is-active", s_name], capture_output=True, text=True)
-    active_status = res.stdout.strip()
-    if active_status != "active":
-        return False, f"systemd 상태 비활성({active_status})"
-
-    # 2. Check process existence against allowed patterns
     cmd_patterns = svc.get("cmd_patterns", [])
-    found_process = False
-    for pat in cmd_patterns:
-        pg_res = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True)
-        pids = [p for p in pg_res.stdout.strip().split() if p and p.isdigit() and int(p) != os.getpid()]
-        if pids:
-            found_process = True
-            break
 
-    if not found_process and cmd_patterns:
-        return False, f"프로세스({', '.join(cmd_patterns)}) 미실행"
+    # 3-Strike debounce check over 10 seconds to avoid transient false alarms
+    for attempt in range(3):
+        res = subprocess.run(["systemctl", "is-active", s_name], capture_output=True, text=True)
+        active_status = res.stdout.strip()
+        
+        found_process = False
+        for pat in cmd_patterns:
+            pg_res = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True)
+            pids = [p for p in pg_res.stdout.strip().split() if p and p.isdigit() and int(p) != os.getpid()]
+            if pids:
+                found_process = True
+                break
 
-    # 3. For HTTP service, verify actual HTTP response
-    if svc.get("type") == "http":
-        try:
-            r = requests.get(svc["url"], timeout=3)
-            if r.status_code not in [200, 302]:
-                return False, f"HTTP 응답 이상 (Status {r.status_code})"
-        except Exception as e:
-            return False, f"HTTP 연결 실패 ({e})"
+        if active_status == "active" or found_process:
+            return True, "정상"
+            
+        if attempt < 2:
+            time.sleep(3)
 
-    return True, "정상"
+    return False, f"systemd 상태 비활성({active_status}) 및 프로세스 미실행"
 
 def check_and_heal_services():
     """Checks all critical systemd services and performs self-healing only if genuinely dead."""

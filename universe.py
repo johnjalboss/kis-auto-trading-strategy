@@ -3874,7 +3874,7 @@ def get_all_symbols() -> list:
             logger.error("Dynamic fetch failed: {}", e)
     
     # 3) 폴백
-    if not symbols or len(symbols) < 50000:
+    if not symbols or len(symbols) < 50000000:
         logger.warning("Using core universe fallback ({} symbols)", len(CORE_UNIVERSE))
         symbols = MASTER_3500_UNIVERSE.copy()
     

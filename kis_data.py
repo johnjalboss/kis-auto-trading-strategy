@@ -73,9 +73,9 @@ def _save_blacklist_symbol(sym: str):
 
 _load_blacklist()
 
-# Rate limiter — KIS API는 초당 ~2건
+# Rate limiter — KIS API 초당 호출 제한 최적화 (실계좌 한도 20건/초 대비 안전 마진 8건/초)
 _last_call_time = 0.0
-_MIN_INTERVAL = 0.55  # seconds between calls
+_MIN_INTERVAL = 0.12  # seconds between calls
 _rate_limit_lock = threading.Lock()
 
 
@@ -267,24 +267,25 @@ def get_current_price(symbol: str, exchange: str = None) -> Optional[Dict]:
             logger.debug("Price fetch error for {}@{}: {}", symbol, excd, e)
             continue
     
-    # Fallback to yfinance if all KIS attempts returned 0
+    # Fallback to direct yfinance download if all KIS attempts returned 0 (avoids data_proxy circular recursion)
     try:
-        import yfinance as yf
-        t = yf.Ticker(symbol)
-        fast_p = getattr(t.fast_info, 'last_price', 0.0)
-        if fast_p and float(fast_p) > 0:
-            p = float(fast_p)
-            prev_close = getattr(t.fast_info, 'previous_close', p) or p
+        from data_proxy import _safe_original_yf_download
+        df_fb = _safe_original_yf_download(symbol, period="5d")
+        if df_fb is not None and not df_fb.empty:
+            close_s = df_fb['Close']
+            p = float(close_s.iloc[-1])
+            prev_close = float(close_s.iloc[-2]) if len(close_s) >= 2 else p
+            vol = int(df_fb['Volume'].iloc[-1]) if 'Volume' in df_fb.columns else 0
             return {
                 "symbol": symbol,
                 "exchange": "AUTO",
                 "last": p,
-                "open": p,
-                "high": p,
-                "low": p,
+                "open": float(df_fb['Open'].iloc[-1]) if 'Open' in df_fb.columns else p,
+                "high": float(df_fb['High'].iloc[-1]) if 'High' in df_fb.columns else p,
+                "low": float(df_fb['Low'].iloc[-1]) if 'Low' in df_fb.columns else p,
                 "base": float(prev_close),
-                "tvol": int(getattr(t.fast_info, 'last_volume', 0) or 0),
-                "pvol": int(getattr(t.fast_info, 'last_volume', 0) or 0),
+                "tvol": vol,
+                "pvol": vol,
                 "diff": p - float(prev_close),
                 "rate": ((p - float(prev_close)) / float(prev_close) * 100) if prev_close else 0.0,
                 "ordy": "Y",
@@ -437,7 +438,10 @@ def get_daily_ohlcv(symbol: str, exchange: str = None,
     if os.getenv("DISABLE_YFINANCE_FALLBACK", "true").lower() == "true" and symbol.upper() not in macro_whitelist:
         return None
 
-    logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
+    if symbol.upper() in macro_whitelist:
+        logger.debug("Retrieving macro benchmark {} via authoritative Yahoo Finance feed", symbol)
+    else:
+        logger.warning("Could not fetch daily OHLCV for {} via KIS API, falling back to yfinance", symbol)
 
     # KIS 심볼 → yfinance 심볼 변환 (e.g. BRKB → BRK-B)
     YF_SYMBOL_MAP = {"BRKB": "BRK-B", "BRKB": "BRK-B"}

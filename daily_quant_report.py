@@ -16,8 +16,13 @@ import config
 class DailyQuantReportCard:
     """Delivers daily closing performance scorecard to Telegram"""
 
-    def __init__(self, db_path: str = "trades.db"):
-        self.db_path = db_path if os.path.exists(db_path) else "/home/ubuntu/kis-auto-trading/trades.db"
+    def __init__(self, db_path: str = None):
+        if not db_path:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            cand = os.path.join(script_dir, "trades.db")
+            self.db_path = cand if os.path.exists(cand) else "/home/ubuntu/kis-auto-trading/trades.db"
+        else:
+            self.db_path = db_path
         self.bot_token = getattr(config, 'TELEGRAM_BOT_TOKEN', '')
         self.chat_id = getattr(config, 'TELEGRAM_CHAT_ID', '')
 
@@ -54,7 +59,7 @@ class DailyQuantReportCard:
         total_pos_val = sum(p.quantity * p.current_price for p in positions)
         total_equity = buying_power + total_pos_val
 
-        # Query today's realized trades from DB
+        # Query today's realized trades from DB using US Eastern Trading Date offset
         today_trades = []
         today_realized_pnl = 0.0
         wins = 0
@@ -63,23 +68,43 @@ class DailyQuantReportCard:
             try:
                 conn = sqlite3.connect(self.db_path)
                 cur = conn.cursor()
-                today_str = date.today().isoformat()
+                import pytz
+                today_us = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+                now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+                now_et = datetime.now(pytz.timezone('US/Eastern'))
+                diff_sec = (now_kst.replace(tzinfo=None) - now_et.replace(tzinfo=None)).total_seconds()
+                offset_hours = int(round(diff_sec / 3600.0))
+                offset_modifier = f"-{offset_hours} hours"
+
                 rows = cur.execute("""
-                    SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, exit_time
+                    SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, created_at
+                    FROM trade_details
+                    WHERE side = 'SELL' AND date(created_at, ?) = ?
+                    UNION ALL
+                    SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, created_at
                     FROM trades
-                    WHERE DATE(exit_time) = ? OR DATE(created_at) = ?
-                    ORDER BY id DESC
-                """, (today_str, today_str)).fetchall()
+                    WHERE side = 'SELL' AND date(created_at, ?) = ?
+                    ORDER BY created_at ASC
+                """, (offset_modifier, today_us, offset_modifier, today_us)).fetchall()
+
+                seen_trades = set()
                 for r in rows:
-                    pnl_val = float(r[4] or 0.0)
+                    sym, side, qty, price, pnl, pnl_pct, reason, created_at = r
+                    pnl_val = float(pnl or 0.0)
+                    qty_val = int(qty or 0)
+                    t_key = (sym, round(pnl_val, 2), qty_val)
+                    if t_key in seen_trades:
+                        continue
+                    seen_trades.add(t_key)
+
                     today_realized_pnl += pnl_val
                     if pnl_val >= 0:
                         wins += 1
                     else:
                         losses += 1
                     today_trades.append({
-                        "symbol": r[0], "side": r[1], "qty": r[2], "price": r[3],
-                        "pnl": pnl_val, "pnl_pct": float(r[5] or 0.0), "reason": r[6]
+                        "symbol": sym, "side": side, "qty": qty_val, "price": float(price or 0.0),
+                        "pnl": pnl_val, "pnl_pct": float(pnl_pct or 0.0), "reason": reason or "N/A"
                     })
                 conn.close()
             except Exception as _db_err:
@@ -95,7 +120,10 @@ class DailyQuantReportCard:
         except Exception:
             pass
 
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M KST")
+        import pytz
+        now_est = datetime.now(pytz.timezone('US/Eastern'))
+        now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+        now_str = f"{now_est.strftime('%Y-%m-%d %H:%M')} EDT ({now_kst.strftime('%H:%M')} KST)"
         
         # Build Telegram Message
         msg = f"🏆 <b>[월스트리트 AI 퀀트 일일 장 마감 성적표]</b>\n"

@@ -67,9 +67,9 @@ class DilutionATMOfferingSentinel:
             shares_m = round(shares_raw / 1_000_000.0, 2)
             float_m = round(float_raw / 1_000_000.0, 2)
 
-            # Check quarterly balance sheet for share growth velocity
-            bs = ticker.quarterly_balance_sheet
-            if bs is not None and not bs.empty and 'Ordinary Shares Number' in bs.index:
+            # Check quarterly balance sheet for share growth velocity safely
+            bs = getattr(ticker, 'quarterly_balance_sheet', None)
+            if bs is not None and not bs.empty and hasattr(bs, 'index') and 'Ordinary Shares Number' in bs.index:
                 s_series = bs.loc['Ordinary Shares Number']
                 if len(s_series) >= 2:
                     s_now = float(s_series.iloc[0])
