@@ -11,6 +11,7 @@ Calculates Dealer Net Gamma Exposure across option strikes, Institutional Walls 
 import time
 import math
 import hashlib
+from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import numpy as np
@@ -75,6 +76,8 @@ class DealerGEXRadar:
                 'gamma_flip': flip_p,
                 'put_call_ratio': micro_pcr,
                 'score_adj': score_adj,
+                'nearest_expiration': gex_data.get('nearest_expiration'),
+                'dte_days': gex_data.get('dte_days'),
                 'gex_regime': regime_label,
                 'reason': reason
             }
@@ -100,6 +103,17 @@ class DealerGEXRadar:
         flip_p = round(price * 0.985, 2)
         gex_val_m = round(85.0 + (h_val % 220), 1)
 
+        try:
+            import pytz
+            today_et = datetime.now(pytz.timezone('America/New_York')).date()
+        except Exception:
+            today_et = datetime.utcnow().date()
+
+        days_to_fri = (4 - today_et.weekday()) % 7
+        nearest_fri_obj = today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)
+        nearest_exp = nearest_fri_obj.strftime("%Y-%m-%d")
+        dte_calc = max(0, (nearest_fri_obj - today_et).days)
+
         res = {
             'symbol': symbol,
             'price': round(price, 2),
@@ -110,6 +124,8 @@ class DealerGEXRadar:
             'gamma_flip': flip_p,
             'put_call_ratio': round(0.55 + ((h_val % 25) / 100.0), 2),
             'score_adj': 8,
+            'nearest_expiration': nearest_exp,
+            'dte_days': dte_calc,
             'gex_regime': 'DEALER_LONG_GAMMA_SUPPORT (안정 지지)',
             'reason': f"${put_w:.1f} 풋월 지지선 및 건전한 콜옵션 수급"
         }
@@ -193,10 +209,25 @@ class DealerGEXRadar:
                     f"<b>감마 스퀴즈 또는 급변동</b>이 발생하는 구간입니다. 플립선(${flip_p:.2f}) 이탈에 유의해야 합니다."
                 )
 
-            # Expiration date & DTE impact
-            exp_date = res.get('nearest_expiration', '2026-08-28')
-            dte = res.get('dte_days', 3)
-            dte_tag = "0DTE 초단기 핀(Pin)" if dte <= 1 else ("위클리 만기 핀 효과 🎯" if dte <= 5 else "월물 OpEx 헤징 롤오버 🔄")
+            # Expiration date & dynamic DTE impact (US Eastern Time)
+            try:
+                import pytz
+                today_et = datetime.now(pytz.timezone('America/New_York')).date()
+            except Exception:
+                today_et = datetime.utcnow().date()
+
+            exp_date = res.get('nearest_expiration')
+            if not exp_date:
+                days_to_fri = (4 - today_et.weekday()) % 7
+                exp_date = (today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)).strftime("%Y-%m-%d")
+
+            try:
+                exp_date_obj = datetime.strptime(exp_date, "%Y-%m-%d").date()
+                dte = max(0, (exp_date_obj - today_et).days)
+            except Exception:
+                dte = int(res.get('dte_days', 1))
+
+            dte_tag = "0DTE 초단기 핀(Pin) ⚡" if dte <= 1 else ("위클리 만기 핀 효과 🎯" if dte <= 5 else "월물 OpEx 헤징 롤오버 🔄")
             exp_info_str = f"  - 📅 <b>옵션 만기일</b>: <code>{exp_date}</code> (DTE: <b>{dte}일</b> / {dte_tag})\n"
 
             star = "🔥" if score_adj >= 8 else "🟢"

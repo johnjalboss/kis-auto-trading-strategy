@@ -198,11 +198,21 @@ class OptionsGammaEngine:
             gex_regime = "POSITIVE_GAMMA" if is_pos_gamma else "NEGATIVE_GAMMA"
             vol_profile = "LOW_VOLATILITY_UPTREND" if is_pos_gamma else "HIGH_VOLATILITY_EXPANSION"
 
-            nearest_exp = target_exps[0] if target_exps else datetime.now().strftime("%Y-%m-%d")
+            # Calculate dynamic DTE based on US Eastern Time
             try:
-                dte_calc = max(0, (datetime.strptime(nearest_exp, "%Y-%m-%d").date() - datetime.now().date()).days)
+                import pytz
+                today_et = datetime.now(pytz.timezone('America/New_York')).date()
             except Exception:
-                dte_calc = 3
+                today_et = datetime.utcnow().date()
+
+            days_to_fri = (4 - today_et.weekday()) % 7
+            default_fri = (today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)).strftime("%Y-%m-%d")
+            nearest_exp = target_exps[0] if target_exps else default_fri
+            try:
+                exp_date_obj = datetime.strptime(nearest_exp, "%Y-%m-%d").date()
+                dte_calc = max(0, (exp_date_obj - today_et).days)
+            except Exception:
+                dte_calc = max(0, days_to_fri)
 
             result = {
                 "symbol": symbol,
@@ -241,6 +251,17 @@ class OptionsGammaEngine:
         # Dynamic Net GEX estimation ($60M ~ $380M)
         net_gex = round(65.0 + (h_val % 320), 1)
 
+        try:
+            import pytz
+            today_et = datetime.now(pytz.timezone('America/New_York')).date()
+        except Exception:
+            today_et = datetime.utcnow().date()
+
+        days_to_fri = (4 - today_et.weekday()) % 7
+        nearest_fri_obj = today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)
+        nearest_exp = nearest_fri_obj.strftime("%Y-%m-%d")
+        dte_calc = max(0, (nearest_fri_obj - today_et).days)
+
         res = {
             "symbol": symbol,
             "current_price": round(current_price, 2),
@@ -250,6 +271,8 @@ class OptionsGammaEngine:
             "gamma_flip_level": gamma_flip,
             "call_wall_dist_pct": round(call_pct, 2),
             "put_wall_dist_pct": round(put_pct, 2),
+            "nearest_expiration": nearest_exp,
+            "dte_days": dte_calc,
             "gex_regime": "POSITIVE_GAMMA",
             "volatility_profile": "LOW_VOLATILITY_UPTREND",
             "is_synthetic": True
