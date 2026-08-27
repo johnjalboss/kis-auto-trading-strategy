@@ -41,25 +41,38 @@ from options_flow import get_options_score, get_vix_snapshot, is_near_max_pain, 
 from database import get_database
 
 
-# Sector Mapping Dictionary for System-wide Sector Rotation & Guards
-GLOBAL_SECTOR_MAP = {
-    "NVDA": "Technology", "AMD": "Technology", "AVGO": "Technology", "QCOM": "Technology", "SMCI": "Technology",
-    "MSFT": "Technology", "AAPL": "Technology", "ORCL": "Technology", "ADBE": "Technology", "CRM": "Technology",
-    "SOXL": "Technology", "SOXS": "Technology", "MU": "Technology", "MRVL": "Technology",
-    "META": "Communication", "GOOGL": "Communication", "GOOG": "Communication", "NFLX": "Communication",
-    "T": "Communication", "VZ": "Communication", "CMCSA": "Communication",
-    "AMZN": "Consumer Disc", "TSLA": "Consumer Disc", "NKE": "Consumer Disc",
-    "HD": "Consumer Disc", "MCD": "Consumer Disc", "SBUX": "Consumer Disc",
-    "LLY": "Healthcare", "UNH": "Healthcare", "JNJ": "Healthcare", "MRK": "Healthcare",
-    "ABBV": "Healthcare", "PFE": "Healthcare", "BMY": "Healthcare", "HALO": "Healthcare",
-    "JPM": "Financials", "BAC": "Financials", "GS": "Financials", "MS": "Financials", "WFC": "Financials",
-    "BHF": "Financials", "PNFP": "Financials", "NTAP": "Technology",
-    "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "FANG": "Energy", "DINO": "Energy",
-    "CAT": "Industrials", "GE": "Industrials", "HON": "Industrials", "UPS": "Industrials",
-    "FLS": "Industrials", "ARMK": "Industrials",
-    "AAL": "Industrials", "DAL": "Industrials", "UAL": "Industrials", "CSX": "Industrials",
-    "ARE": "Real Estate", "WPC": "Real Estate", "AMT": "Real Estate", "O": "Real Estate",
-}
+# ==============================================
+# Canonical GICS Sector Normalization
+# ==============================================
+
+def normalize_sector(raw: str) -> str:
+    """Standardizes raw sector strings to official 11 GICS sector classifications."""
+    if not raw:
+        return "UNKNOWN"
+    r = raw.upper().strip()
+    if any(k in r for k in ["TECH", "SEMI", "SOFTWARE", "HARDWARE", "INFORMATION TECH", "ELECTRONIC"]):
+        return "TECHNOLOGY"
+    if any(k in r for k in ["COMMUNICATION", "TELECOM", "MEDIA"]):
+        return "COMMUNICATION SERVICES"
+    if any(k in r for k in ["CYCLICAL", "DISCRETIONARY"]):
+        return "CONSUMER DISCRETIONARY"
+    if any(k in r for k in ["DEFENSIVE", "STAPLE"]):
+        return "CONSUMER STAPLES"
+    if any(k in r for k in ["HEALTH", "PHARMA", "BIOTECH", "MEDICAL"]):
+        return "HEALTHCARE"
+    if any(k in r for k in ["FINANC", "BANK", "INSUR", "INVEST"]):
+        return "FINANCIALS"
+    if any(k in r for k in ["INDUST", "AEROSPACE", "DEFENSE", "MACHIN"]):
+        return "INDUSTRIALS"
+    if any(k in r for k in ["ENERGY", "OIL", "GAS"]):
+        return "ENERGY"
+    if any(k in r for k in ["MATERIAL", "CHEMIC", "MINING"]):
+        return "MATERIALS"
+    if any(k in r for k in ["REAL ESTATE", "REIT"]):
+        return "REAL ESTATE"
+    if any(k in r for k in ["UTILIT"]):
+        return "UTILITIES"
+    return r
 
 # ==============================================
 # Market Phases
@@ -221,32 +234,20 @@ class StrategyEngine:
         """Resolve GICS sector dynamically from cache, stock_metadata DB (3,002 stocks), or yfinance."""
         if not symbol:
             return "UNKNOWN"
-        symbol = symbol.upper()
+        symbol = symbol.upper().strip()
         if symbol in self._dynamic_sector_cache:
             return self._dynamic_sector_cache[symbol]
 
-        # 1. Fast Map for common/active tickers
-        _fast_map = {
-            "NVDA": "TECH", "AMD": "TECH", "INTC": "TECH", "QCOM": "TECH", "AVGO": "TECH",
-            "AAPL": "TECH", "MSFT": "TECH", "ORCL": "TECH", "CRM": "TECH", "NOW": "TECH",
-            "ADBE": "TECH", "CDNS": "TECH", "SNPS": "TECH", "ANET": "TECH", "FTNT": "TECH",
-            "AKAM": "TECH", "DXCM": "TECH", "ALRM": "TECH", "SAIC": "TECH", "PLTR": "TECH",
-            "SOXL": "SEMI", "SOXS": "SEMI", "MU": "SEMI", "MRVL": "SEMI", "TSM": "SEMI",
-            "META": "COMM", "GOOGL": "COMM", "GOOG": "COMM", "NFLX": "COMM",
-            "T": "COMM", "VZ": "COMM", "CMCSA": "COMM",
-            "AMZN": "CONS_DISC", "TSLA": "CONS_DISC", "NKE": "CONS_DISC",
-            "HD": "CONS_DISC", "MCD": "CONS_DISC", "SBUX": "CONS_DISC",
-            "CART": "CONS_DISC", "LYFT": "INDUS", "UBER": "INDUS", "ADP": "INDUS",
-            "LLY": "HEALTH", "UNH": "HEALTH", "JNJ": "HEALTH", "MRK": "HEALTH", "MDT": "HEALTH",
-            "ABBV": "HEALTH", "PFE": "HEALTH", "BMY": "HEALTH", "HALO": "HEALTH", "VRTX": "HEALTH",
-            "JPM": "FIN", "BAC": "FIN", "GS": "FIN", "MS": "FIN", "WFC": "FIN",
-            "XOM": "ENERGY", "CVX": "ENERGY", "COP": "ENERGY", "FANG": "ENERGY",
-            "CAT": "INDUS", "GE": "INDUS", "HON": "INDUS", "UPS": "INDUS", "VRT": "INDUS",
-            "FCX": "MATERIALS", "SCCO": "MATERIALS", "ERO": "MATERIALS", "TECK": "MATERIALS",
-        }
-        if symbol in _fast_map:
-            self._dynamic_sector_cache[symbol] = _fast_map[symbol]
-            return _fast_map[symbol]
+        # 1. Query SectorFundFlow if available
+        try:
+            from sector_fund_flow import SectorFundFlow
+            s_flow = SectorFundFlow.get_sector(symbol)
+            if s_flow and s_flow != "OTHER":
+                norm = normalize_sector(s_flow)
+                self._dynamic_sector_cache[symbol] = norm
+                return norm
+        except Exception:
+            pass
 
         # 2. Query SQLite stock_metadata DB (3,002 stocks coverage)
         db_paths = [
@@ -262,9 +263,9 @@ class StrategyEngine:
                     row = conn.execute("SELECT sector FROM stock_metadata WHERE ticker = ?", (symbol,)).fetchone()
                     conn.close()
                     if row and row[0]:
-                        sec_str = str(row[0]).upper()
-                        self._dynamic_sector_cache[symbol] = sec_str
-                        return sec_str
+                        norm = normalize_sector(str(row[0]))
+                        self._dynamic_sector_cache[symbol] = norm
+                        return norm
                 except Exception:
                     pass
 
@@ -274,14 +275,26 @@ class StrategyEngine:
             info = yf.Ticker(symbol).info
             sec = info.get('sector')
             if sec:
-                sec_str = str(sec).upper()
-                self._dynamic_sector_cache[symbol] = sec_str
-                return sec_str
+                norm = normalize_sector(str(sec))
+                self._dynamic_sector_cache[symbol] = norm
+                return norm
         except Exception:
             pass
 
         self._dynamic_sector_cache[symbol] = "OTHER"
         return "OTHER"
+
+    def is_defensive_stock(self, symbol: str) -> bool:
+        """Dynamically determines whether a stock is defensively classified."""
+        if not symbol:
+            return False
+        if symbol in getattr(config, 'INVERSE_ETFS', set()):
+            return True
+        sec = self._get_symbol_sector(symbol)
+        if sec in ["HEALTHCARE", "CONSUMER STAPLES", "UTILITIES"]:
+            return True
+        def_set = getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
+        return symbol in def_set
     
     def get_phase_config(self) -> PhaseConfig:
         phase = get_market_phase()
@@ -697,12 +710,11 @@ class StrategyEngine:
         min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
         
         # Add buffer in choppy regimes to avoid whipsaws (Exempt Defensive stocks so rotation targets pass easily)
-        _defensive_set = getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
         if current_regime in _choppy_regimes:
-            if symbol not in _defensive_set:
-                min_required += 15
+            if not self.is_defensive_stock(symbol):
+                min_required += 10
                 setup_reason = f"[CHOPPY SELECTIVE] {setup_reason}"
-                logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for tech symbol {} to {}", symbol, min_required)
+                logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for symbol {} to {}", symbol, min_required)
             else:
                 logger.info("CHOPPY DEFENSIVE FAVOR: Defensive symbol {} exempted from choppy threshold penalty (threshold: {})", symbol, min_required)
 
@@ -756,8 +768,7 @@ class StrategyEngine:
                     current_price)
 
         if current_regime in _bear_regimes:
-            _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
-            if symbol not in _allowed_in_bear:
+            if not self.is_defensive_stock(symbol):
                 if confidence < 70:
                     return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 70)", current_price)
                 else:
@@ -774,8 +785,7 @@ class StrategyEngine:
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
                 if _spy_current < _spy_sma20 * 0.995:
-                    _allowed_in_downtrend = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
-                    if symbol not in _allowed_in_downtrend:
+                    if not self.is_defensive_stock(symbol):
                         if confidence < 70:
                             return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 70)", current_price)
                         else:
@@ -1312,11 +1322,10 @@ class StrategyEngine:
         # 2) 섹터 순환매(BEAR_NORMAL / Sector Shift): 기술주에서 방어주/가치주로 자금이 이동하는 순환매 장세에서는
         #    무조건 강제 청산하지 않고, 개별 종목의 손절가/익절가/트레일링스탑 지표에 따라서만 정밀 매도 수행!
         panic_bear_regimes = {"BEAR_PANIC", "CRASH", "SYSTEMIC_RISK"}
-        _allowed_in_bear = getattr(config, 'INVERSE_ETFS', set()) | getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
         
         if current_regime in panic_bear_regimes:
             # 전면적 시장 폭락 패닉 시에만 방어주가 아닌 손실 포지션 현금화
-            if pnl_pct < 0 and pos.symbol not in _allowed_in_bear:
+            if pnl_pct < 0 and not self.is_defensive_stock(pos.symbol):
                 reason = f"SYSTEMIC_PANIC_EXIT: Market in {current_regime}. Securing capital for crash protection."
                 logger.warning("🚨 [PANIC_GUARD] Force exiting position {} during broad crash | Reason: {}", pos.symbol, reason)
                 return ExitSignal("SELL_ALL", reason, price, pnl_pct)
@@ -1386,6 +1395,11 @@ class StrategyEngine:
         # Absolute Hook: If we were 6% up, trailing stop CANNOT go below Entry + 1%.
         if breakeven_hook:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.01)
+        
+        # Monotonic Non-Decreasing Ratchet: Trailing stop CAN NEVER retreat downwards
+        prev_trailing = getattr(pos, 'trailing_stop', 0.0) or 0.0
+        pos.trailing_stop = max(prev_trailing, trailing_stop)
+        trailing_stop = pos.trailing_stop
         
         if price <= trailing_stop:
             pnl_pct = (price - pos.entry_price) / pos.entry_price
@@ -1572,23 +1586,22 @@ class StrategyEngine:
         if symbol in self._positions:
             pos = self._positions[symbol]
             pos.half_sold = True
-            if pos.quantity > 1:
-                pos.quantity //= 2
-            else:
-                # 1주 보유 시: 정교한 확정 익절 스탑선(Profit-Lock) 상향 설정
-                # 진입가 대비 최소 +2.5% 또는 진입가 + (0.75 * ATR) 중 높은 가격으로 스탑로스 즉시 락
-                min_profit_lock = pos.entry_price * 1.025
-                atr_profit_lock = pos.entry_price + (pos.atr_at_entry * 0.75) if pos.atr_at_entry > 0 else min_profit_lock
-                new_stop = max(pos.stop_price, min_profit_lock, atr_profit_lock)
-                pos.stop_price = new_stop
-                pos.trailing_stop = max(pos.trailing_stop, new_stop)
-                logger.info("🛡️ [SINGLE_SHARE_PROFIT_LOCK] Locked guaranteed profit stop for {} at ${:.2f} (+{:.2f}%)",
-                            symbol, new_stop, (new_stop - pos.entry_price) / pos.entry_price * 100.0)
-                try:
-                    from database import get_database
-                    get_database().update_position_tracking(symbol, pos.entry_price, new_stop)
-                except Exception as de:
-                    logger.debug("DB stop update failed for {}: {}", symbol, de)
+            # NOTE: Share quantity is already accurately managed by phase_5_execute_trade (pos.quantity -= fill_qty)
+            # Do NOT mutate pos.quantity here to prevent double deduction!
+            
+            # Set Breakeven / Guaranteed Profit Lock on remaining shares
+            min_profit_lock = pos.entry_price * 1.020
+            atr_profit_lock = pos.entry_price + (pos.atr_at_entry * 0.75) if pos.atr_at_entry > 0 else min_profit_lock
+            new_stop = max(pos.stop_price, min_profit_lock, atr_profit_lock)
+            pos.stop_price = new_stop
+            pos.trailing_stop = max(getattr(pos, 'trailing_stop', 0.0), new_stop)
+            logger.info("🛡️ [SCALE_OUT_PROFIT_LOCK] Locked guaranteed profit stop for {} at ${:.2f} (+{:.2f}%)",
+                        symbol, new_stop, (new_stop - pos.entry_price) / pos.entry_price * 100.0)
+            try:
+                from database import get_database
+                get_database().update_position_tracking(symbol, pos.entry_price, new_stop)
+            except Exception as de:
+                logger.debug("DB stop update failed for {}: {}", symbol, de)
     
     def remove_position(self, symbol: str):
         if symbol in self._positions:

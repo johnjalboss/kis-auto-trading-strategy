@@ -67,16 +67,34 @@ class ScreenResult:
 # Universe — 거래량 상위 + 인기 종목 풀
 # ==============================================
 
-# 확장된 후보 풀 — 실거래 137건 분석 및 나스닥/S&P 대표 250+ 종목 (2026-05)
 # Russell 1000 유니버스 전체(1,000+ 종목)를 실시간 후보군 스캐닝 대상으로 로드
 BASE_UNIVERSE = universe.get_all_symbols()
 
-# 방어주 별도 풀
-DEFENSIVE_UNIVERSE = [
-    "PG", "KO", "PEP", "JNJ", "WMT", "COST", "CL", "GIS", "K", "SJM",
-    "MO", "PM", "NEE", "DUK", "SO", "ED", "AEP", "XEL", "WEC", "ES",
-    "T", "VZ", "CMCSA", "BMY", "ABBV", "MRK", "PFE", "LLY", "ABT",
-]
+def get_defensive_universe() -> List[str]:
+    """Dynamically queries top market-cap defensive stocks from stock_metadata SQLite database."""
+    import os, sqlite3
+    db_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "us_stocks_data.db"),
+        "/home/ubuntu/us-theme-tracker/us_stocks_data.db",
+        r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\us_stocks_data.db"
+    ]
+    for dbp in db_paths:
+        if os.path.exists(dbp):
+            try:
+                conn = sqlite3.connect(dbp)
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT ticker FROM stock_metadata 
+                    WHERE sector IN ('Healthcare', 'Consumer Defensive', 'Utilities', 'HEALTHCARE', 'CONSUMER STAPLES', 'UTILITIES')
+                    ORDER BY market_cap DESC LIMIT 80
+                """)
+                res = [r[0] for r in cur.fetchall() if r[0]]
+                conn.close()
+                if res:
+                    return res
+            except Exception:
+                pass
+    return [s for s in BASE_UNIVERSE if any(k in s for k in ['PFE', 'JNJ', 'PG', 'KO', 'UNH', 'ABBV', 'MRK', 'WMT', 'NEE', 'DUK', 'COST', 'CL', 'BMY', 'LLY', 'T', 'VZ', 'MDT', 'BEN', 'GIS', 'MO'])]
 
 
 class DynamicScreener:
@@ -1106,13 +1124,13 @@ class DynamicScreener:
 
 
     def _screen_defensive(self) -> List[str]:
-        """방어주 스크리닝 — RISK_OFF 시 안정적 종목"""
+        """방어주 스크리닝 — RISK_OFF 시 안정적 종목 (헬스케어, 필수소비재, 유틸리티 우량주)"""
         try:
-            candidates = list(DEFENSIVE_UNIVERSE)
+            candidates = get_defensive_universe()
             
             # Filter by positive change or small drawdown
             safe_stocks = []
-            for symbol in candidates[:30]: # 풀 확장
+            for symbol in candidates[:40]: # 풀 확장
                 try:
                     price = kis_data.get_current_price(symbol)
                     if price and price.get("last", 0) > 5:
@@ -1127,7 +1145,7 @@ class DynamicScreener:
             
         except Exception as e:
             logger.error("Defensive screen failed: {}", e)
-            return list(DEFENSIVE_UNIVERSE[:20])
+            return list(BASE_UNIVERSE[:20])
 
     def _screen_inverse(self) -> List[str]:
         """인버스 ETF 스크리닝 — 하락장에서 자동으로 숏 포지션 탐색"""
@@ -1157,7 +1175,7 @@ class DynamicScreener:
         import concurrent.futures
         import threading
         try:
-            candidates = list(set(BASE_UNIVERSE + DEFENSIVE_UNIVERSE))
+            candidates = list(set(BASE_UNIVERSE + get_defensive_universe()))
             oversold_stocks = []
             _lock = threading.Lock()
             
@@ -1208,7 +1226,7 @@ class DynamicScreener:
             
         except Exception as e:
             logger.error("Oversold screen failed: {}", e)
-            return list(DEFENSIVE_UNIVERSE[:20])
+            return list(BASE_UNIVERSE[:20])
 
     # ==============================================
     # Scoring Methods (KIS API data)

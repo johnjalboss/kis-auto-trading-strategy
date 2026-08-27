@@ -1524,7 +1524,7 @@ class BotOrchestrator:
         
         # 2. Trade Frequency Control (Exits, Upgrades, and Rebalances always allowed)
         if action == "BUY" and not is_upgrade and not reason.startswith("REBALANCE"):
-            window = self._freq_controller.can_trade(is_upgrade=is_upgrade)
+            window = self._freq_controller.can_trade(symbol=symbol, is_upgrade=is_upgrade)
             if not window.can_trade:
                 logger.info("Trade delayed by frequency: {}", window.reason)
                 return
@@ -1754,7 +1754,7 @@ class BotOrchestrator:
         if self.is_dry_run:
             logger.info("[DRY RUN] {} {} x {} @ ${:.2f} ({})", action, symbol, qty, price, reason)
             if self._freq_controller:
-                self._freq_controller.record_trade(is_entry=(action == "BUY"))
+                self._freq_controller.record_trade(symbol=symbol, is_entry=(action == "BUY"))
             return
 
         # 9. Smart Order Execution
@@ -1860,7 +1860,7 @@ class BotOrchestrator:
                 
                 # Record in frequency controller
                 if self._freq_controller:
-                    self._freq_controller.record_trade(is_entry=(action == "BUY"))
+                    self._freq_controller.record_trade(symbol=symbol, is_entry=(action == "BUY"))
                 
                 # Increment daily trade counter
                 self._daily_trade_count += 1

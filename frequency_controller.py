@@ -135,13 +135,14 @@ class FrequencyController:
         self.trades_today: List[datetime] = []
         self.entries_today: int = 0
         self.last_trade_time: datetime = datetime.min
+        self.last_trade_by_symbol: Dict[str, datetime] = {}
         self.current_date = datetime.now().date()
         
         self._load_state()
         logger.info(f"Frequency mode: {style.value}")
     
-    def can_trade(self, is_upgrade: bool = False) -> TradeWindow:
-        """Check if trading is allowed now"""
+    def can_trade(self, symbol: str = None, is_upgrade: bool = False) -> TradeWindow:
+        """Check if trading is allowed now (supports per-symbol spacing)"""
         now = datetime.now()
         
         # Check date reset
@@ -161,24 +162,29 @@ class FrequencyController:
             return TradeWindow(False, "Entry limit reached", tomorrow,
                               len(self.trades_today), 0)
         
-        # Check minimum time between trades
-        if not is_upgrade:
-            minutes_since = (now - self.last_trade_time).total_seconds() / 60
-            if minutes_since < self.config.min_minutes_between_trades:
-                wait = self.config.min_minutes_between_trades - minutes_since
-                next_allowed = now + timedelta(minutes=wait)
-                return TradeWindow(False, f"Wait {wait:.0f} min", next_allowed,
-                                  len(self.trades_today), 
-                                  self.config.max_trades_per_day - len(self.trades_today))
+        # Check minimum time between trades for the SAME symbol (avoids duplicate fills on same stock)
+        # Distinct symbols into empty slots are never blocked!
+        if not is_upgrade and symbol:
+            sym_key = symbol.upper().strip()
+            if sym_key in self.last_trade_by_symbol:
+                minutes_since = (now - self.last_trade_by_symbol[sym_key]).total_seconds() / 60
+                if minutes_since < self.config.min_minutes_between_trades:
+                    wait = self.config.min_minutes_between_trades - minutes_since
+                    next_allowed = now + timedelta(minutes=wait)
+                    return TradeWindow(False, f"Wait {wait:.0f} min for {sym_key}", next_allowed,
+                                      len(self.trades_today), 
+                                      self.config.max_trades_per_day - len(self.trades_today))
         
         remaining = self.config.max_trades_per_day - len(self.trades_today)
         return TradeWindow(True, "OK", now, len(self.trades_today), remaining)
     
-    def record_trade(self, is_entry: bool = True):
-        """Record a trade"""
+    def record_trade(self, symbol: str = "", is_entry: bool = True):
+        """Record a trade with per-symbol tracking"""
         now = datetime.now()
         self.trades_today.append(now)
         self.last_trade_time = now
+        if symbol:
+            self.last_trade_by_symbol[symbol.upper().strip()] = now
         
         if is_entry:
             self.entries_today += 1
@@ -193,6 +199,7 @@ class FrequencyController:
         """Reset daily counters"""
         self.trades_today = []
         self.entries_today = 0
+        self.last_trade_by_symbol = {}
         logger.info("Daily trade counters reset")
     
     def _save_state(self):
@@ -201,7 +208,8 @@ class FrequencyController:
                 'date': str(self.current_date),
                 'trades_count': len(self.trades_today),
                 'entries_today': self.entries_today,
-                'last_trade': self.last_trade_time.isoformat()
+                'last_trade': self.last_trade_time.isoformat(),
+                'last_trade_by_symbol': {k: v.isoformat() for k, v in self.last_trade_by_symbol.items()}
             }
             with open(self.state_file, 'w') as f:
                 json.dump(state, f)
@@ -218,6 +226,9 @@ class FrequencyController:
                     last = state.get('last_trade')
                     if last:
                         self.last_trade_time = datetime.fromisoformat(last)
+                    sym_map = state.get('last_trade_by_symbol', {})
+                    if isinstance(sym_map, dict):
+                        self.last_trade_by_symbol = {k: datetime.fromisoformat(v) for k, v in sym_map.items() if isinstance(v, str)}
         except: pass
 
 
