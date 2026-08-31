@@ -96,32 +96,77 @@ class AutoTuningEngine:
             return conn
         return None
 
+    def _load_shadow_trades(self, since_date: str) -> List[Dict[str, Any]]:
+        """Loads closed shadow paper trades from shadow_state.json as auxiliary quant learning samples."""
+        shadow_trades = []
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        cands = [
+            os.path.join(base_dir, "shadow_state.json"),
+            "/home/ubuntu/kis-auto-trading/shadow_state.json",
+            r"C:\Users\wngud\.gemini\antigravity\scratch\kis-auto-trading\shadow_state.json"
+        ]
+        for c in cands:
+            if os.path.exists(c):
+                try:
+                    with open(c, 'r', encoding='utf-8-sig') as f:
+                        data = json.load(f)
+                    for t in data.get("closed_trades", []):
+                        exit_time = str(t.get("exit_time", ""))[:10]
+                        if not since_date or exit_time >= since_date:
+                            pnl_val = float(t.get("pnl", 0.0))
+                            pnl_pct_raw = float(t.get("pnl_pct", 0.0))
+                            pnl_pct = (pnl_pct_raw / 100.0) if abs(pnl_pct_raw) > 0.5 else pnl_pct_raw
+                            shadow_trades.append({
+                                "symbol": t.get("symbol"),
+                                "side": "SELL",
+                                "quantity": t.get("quantity", 1),
+                                "price": float(t.get("exit_price", 0.0)),
+                                "pnl": pnl_val,
+                                "pnl_pct": pnl_pct,
+                                "reason": t.get("reason", "SHADOW_PAPER_TRADE"),
+                                "regime": t.get("regime", "NORMAL"),
+                                "created_at": t.get("exit_time", datetime.now().isoformat()),
+                                "mfe_pct": max(pnl_pct, 0.0),
+                                "mae_pct": min(pnl_pct, 0.0),
+                                "holding_minutes": 1440.0,
+                                "spread_at_entry": 0.0,
+                                "quant_score_at_entry": t.get("score", 85),
+                                "is_shadow": True
+                            })
+                    break
+                except Exception as e:
+                    logger.debug("Failed to load shadow trades for auto-tuning: {}", e)
+        return shadow_trades
+
     def analyze_loss_root_causes(self, lookback_days: int = 30) -> Dict[str, Any]:
         conn = self._get_db_connection()
-        if not conn:
-            return {"loss_count": 0, "root_causes": {}}
-
-        cur = conn.cursor()
+        cur_losses = []
         since_date = (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
 
-        cur.execute("""
-            SELECT symbol, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at 
-            FROM trade_details 
-            WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
-            UNION ALL
-            SELECT symbol, quantity, price, pnl, pnl_pct, reason, regime, created_at 
-            FROM trades 
-            WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
-            ORDER BY created_at ASC
-        """, (since_date, since_date))
-        raw_losses = cur.fetchall()
-        conn.close()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT symbol, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at 
+                FROM trade_details 
+                WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
+                UNION ALL
+                SELECT symbol, quantity, price, pnl, pnl_pct, reason, regime, created_at 
+                FROM trades 
+                WHERE side = 'SELL' AND pnl < 0 AND date(created_at) >= ?
+                ORDER BY created_at ASC
+            """, (since_date, since_date))
+            cur_losses = [dict(r) for r in cur.fetchall()]
+            conn.close()
+
+        # Ingest shadow paper losses as auxiliary feedback samples
+        shadow_losses = [t for t in self._load_shadow_trades(since_date) if t['pnl'] < 0]
+        raw_losses = cur_losses + shadow_losses
 
         seen_loss = set()
         losses = []
         for l in raw_losses:
-            pnl_v = float(l['pnl'] or 0.0)
-            t_key = (l['symbol'], round(pnl_v, 2), str(l['created_at'])[:10])
+            pnl_v = float(l.get('pnl') or 0.0)
+            t_key = (l.get('symbol'), round(pnl_v, 2), str(l.get('created_at'))[:10])
             if t_key in seen_loss:
                 continue
             seen_loss.add(t_key)
@@ -217,32 +262,35 @@ class AutoTuningEngine:
 
     def analyze_performance(self, lookback_days: int = 30) -> dict:
         conn = self._get_db_connection()
-        if not conn:
-            return {}
-            
-        cur = conn.cursor()
+        cur_rows = []
         since_date = (date.today() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
-        
-        cur.execute("""
-            SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, regime, created_at,
-                   mfe_pct, mae_pct, holding_minutes, spread_at_entry, quant_score_at_entry
-            FROM trades 
-            WHERE side = 'SELL' AND date(created_at) >= ?
-            UNION ALL
-            SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at,
-                   0.0 as mfe_pct, 0.0 as mae_pct, 0.0 as holding_minutes, 0.0 as spread_at_entry, 80 as quant_score_at_entry
-            FROM trade_details 
-            WHERE side = 'SELL' AND date(created_at) >= ?
-            ORDER BY created_at ASC
-        """, (since_date, since_date))
-        raw_rows = cur.fetchall()
-        conn.close()
+
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT symbol, side, quantity, price, pnl, pnl_pct, reason, regime, created_at,
+                       mfe_pct, mae_pct, holding_minutes, spread_at_entry, quant_score_at_entry
+                FROM trades 
+                WHERE side = 'SELL' AND date(created_at) >= ?
+                UNION ALL
+                SELECT symbol, side, quantity, price, pnl, pnl_pct, setup_reason as reason, regime, created_at,
+                       0.0 as mfe_pct, 0.0 as mae_pct, 0.0 as holding_minutes, 0.0 as spread_at_entry, 80 as quant_score_at_entry
+                FROM trade_details 
+                WHERE side = 'SELL' AND date(created_at) >= ?
+                ORDER BY created_at ASC
+            """, (since_date, since_date))
+            cur_rows = [dict(r) for r in cur.fetchall()]
+            conn.close()
+
+        # Ingest auxiliary shadow paper trade executions
+        shadow_rows = self._load_shadow_trades(since_date)
+        raw_rows = cur_rows + shadow_rows
         
         seen_keys = set()
         rows = []
         for r in raw_rows:
-            pnl_v = float(r['pnl'] or 0.0)
-            t_key = (r['symbol'], round(pnl_v, 2), str(r['created_at'])[:10])
+            pnl_v = float(r.get('pnl') or 0.0)
+            t_key = (r.get('symbol'), round(pnl_v, 2), str(r.get('created_at'))[:10])
             if t_key in seen_keys:
                 continue
             seen_keys.add(t_key)

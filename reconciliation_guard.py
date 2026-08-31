@@ -103,14 +103,48 @@ class BrokerPositionReconciliationGuard:
                 logger.info("Reconciliation: Added newly detected broker position {} ({} shares @ ${:.2f})", sym, qty, avg_p)
 
         # Purge phantom positions (positions in DB that no longer exist in broker)
-        cur.execute("SELECT symbol FROM positions WHERE quantity > 0")
-        db_symbols = [r[0] for r in cur.fetchall()]
+        cur.execute("SELECT symbol, quantity, avg_price FROM positions WHERE quantity > 0")
+        db_rows = cur.fetchall()
         purged = []
-        for d_sym in db_symbols:
+        for d_sym, d_qty, d_avg_p in db_rows:
             if d_sym not in broker_symbols:
                 cur.execute("DELETE FROM positions WHERE symbol = ?", (d_sym,))
                 purged.append(d_sym)
-                logger.warning("Reconciliation: Removed phantom position {} from DB (liquidated on MTS/HTS)", d_sym)
+                logger.warning("Reconciliation: Removed phantom position {} ({} shares) from DB", d_sym, d_qty)
+                
+                # Record the liquidated trade in trades table and send Telegram notification
+                try:
+                    exit_p = float(d_avg_p)
+                    try:
+                        curr_check = kis_data.get_current_price(d_sym)
+                        if curr_check and curr_check > 0:
+                            exit_p = float(curr_check)
+                    except Exception:
+                        pass
+                    
+                    pnl_amt = round((exit_p - d_avg_p) * d_qty, 2)
+                    pnl_pct = round(((exit_p - d_avg_p) / d_avg_p), 4) if d_avg_p > 0 else 0.0
+                    
+                    total_amt = round(exit_p * d_qty, 2)
+                    cur.execute("""
+                        INSERT INTO trades (symbol, side, quantity, price, total, pnl, pnl_pct, reason, created_at)
+                        VALUES (?, 'SELL', ?, ?, ?, ?, ?, 'BROKER_LIQUIDATION_RECONCILED: Order filled on broker', CURRENT_TIMESTAMP)
+                    """, (d_sym, d_qty, exit_p, total_amt, pnl_amt, pnl_pct))
+                    
+                    from notification import get_notifier
+                    from telegram_receipt import TelegramReceiptGenerator
+                    notifier = get_notifier()
+                    receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
+                        symbol=d_sym,
+                        quantity=d_qty,
+                        entry_price=d_avg_p,
+                        exit_price=exit_p,
+                        reason="TRAILING_STOP_LOCK (브로커 체결 정산 완료)"
+                    )
+                    notifier.send(receipt_msg)
+                    logger.info("🔔 [RECONCILIATION_NOTIFIER] Sent Telegram SELL receipt for {}", d_sym)
+                except Exception as _notif_err:
+                    logger.debug("Reconciliation trade notification error for {}: {}", d_sym, _notif_err)
 
         conn.commit()
         conn.close()

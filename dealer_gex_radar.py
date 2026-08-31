@@ -48,27 +48,42 @@ class DealerGEXRadar:
 
             # Put/Call ratio from actual GEX data or neutral 0.85
             micro_pcr = float(gex_data.get('put_call_ratio', 0.85) or 0.85)
-
-            score_adj = 6 if regime == "POSITIVE_GAMMA" else (0 if gex_data.get('is_synthetic') else 3)
+            is_thin = gex_data.get('is_thin_options', False)
             
+            # Refined GEX Regimes:
+            if gex_data.get('is_synthetic'):
+                regime_label = "SYNTHETIC_VOLATILITY (옵션 미상장)"
+                score_adj = 0
+                reason = "CBOE 옵션 미발행으로 통계적 변동성 밴드 적용"
+            elif is_thin or abs(net_gex_m) < 0.5:
+                regime_label = "NEUTRAL_GAMMA_ZONE (옵션 영향 중립)"
+                score_adj = 0
+                reason = "옵션 미결제약정 미미로 딜러 헤징 수급 중립"
+            elif net_gex_m >= 10.0:
+                regime_label = "STRONG_LONG_GAMMA (강력 롱 감마 에어백)"
+                score_adj = 6
+                reason = f"${put_w:.1f} 풋월 지지선 상회로 딜러 대규모 매수 헤징 에어백 작동"
+            elif net_gex_m >= 0.5:
+                regime_label = "MILD_LONG_GAMMA (완만 롱 감마 지지)"
+                score_adj = 4
+                reason = f"${put_w:.1f} 풋월 부근 딜러 매수 헤징 지지력 제공"
+            else:
+                regime_label = "SHORT_GAMMA_SQUEEZE_ZONE (변동성 확장/스퀴즈)"
+                score_adj = 2
+                reason = f"${flip_p:.1f} 플립선 하회로 딜러 매도 헤징 변동성 확대"
+
             # Format GEX in Billions if large (like SPY/NVDA) or Millions
             if abs(net_gex_m) >= 1000:
                 gex_display = f"${net_gex_m / 1000.0:+.2f}B"
             else:
                 gex_display = f"${net_gex_m:+.1f}M"
 
-            if regime == "POSITIVE_GAMMA":
-                reason = f"${put_w:.1f} 풋월 지지선 상회로 딜러 롱 감마 변동성 안정화"
-                regime_label = "DEALER_LONG_GAMMA_SUPPORT (안정 지지)"
-            else:
-                reason = f"${flip_p:.1f} 플립선 하회로 변동성 확대 및 스퀴즈 압력"
-                regime_label = "SHORT_GAMMA_SQUEEZE_ZONE (변동성 확장)"
-
             res = {
                 'symbol': symbol,
                 'price': price,
                 'net_gex_display': gex_display,
                 'net_gex': round(net_gex_m / 1000.0, 2),
+                'net_gex_millions': net_gex_m,
                 'call_wall': call_w,
                 'put_wall': put_w,
                 'gamma_flip': flip_p,
@@ -77,6 +92,9 @@ class DealerGEXRadar:
                 'nearest_expiration': gex_data.get('nearest_expiration'),
                 'dte_days': gex_data.get('dte_days'),
                 'gex_regime': regime_label,
+                'is_synthetic': gex_data.get('is_synthetic', False),
+                'is_thin_options': is_thin,
+                'total_open_interest': gex_data.get('total_open_interest', 0),
                 'reason': reason
             }
 
@@ -171,13 +189,36 @@ class DealerGEXRadar:
                 entry_info_str = f"  - 💰 <b>내 진입가</b>: <code>${entry_p:.2f}</code> (수익률: <b>{pnl_pct:+.2f}%</b>)\n"
 
             # Detailed Net GEX interpretation & Intuitive Hedging Scale
-            is_pos_gex = ("POSITIVE" in str(regime).upper()) or (res.get('net_gex', 0) > 0)
-            if is_pos_gex:
-                gex_intensity = "🟢 강력 롱 감마 (안전 쿠션 ⭐⭐⭐⭐)"
+            is_synthetic = bool(res.get('is_synthetic', False))
+            is_thin = bool(res.get('is_thin_options', False))
+            net_gex_m = float(res.get('net_gex_millions', 0.0))
+
+            if is_synthetic:
+                gex_intensity = "⚪ 옵션 미상장 (1.5σ 통계 지지/저항)"
+                gex_hedge_impact = "옵션 미발행 종목으로 차트 매물대 및 현물 수급 주도"
+                gex_interp = (
+                    f"⚪ <b>[옵션 미상장 종목]</b> CBOE 옵션 미발행 종목으로 역사적 변동성(HV) 1.5σ 기반 "
+                    f"<b>하방 지지선(${put_w:.2f}) / 상방 저항선(${call_w:.2f})</b>을 추적합니다."
+                )
+            elif is_thin or abs(net_gex_m) < 0.5:
+                gex_intensity = "⚪ 중립 / 옵션거래 미미 (현물 수급 주도)"
+                gex_hedge_impact = "옵션 거래량 미미하여 딜러 기계적 매매 영향 적음, 현물 차트 수급 중심"
+                gex_interp = (
+                    f"⚪ <b>[옵션 영향 중립]</b> 옵션 미결제약정이 적어 마켓메이커 헤징 영향이 미미하며, "
+                    f"일반 <b>지지선(${put_w:.2f}) 및 저항선(${call_w:.2f})</b> 매물대가 우선 작동합니다."
+                )
+            elif net_gex_m >= 10.0:
+                gex_intensity = "🟢 강력 롱 감마 (초강력 에어백 ⭐⭐⭐⭐)"
                 gex_hedge_impact = f"주가 1% 하락 시 딜러들이 <b>{gex_disp}</b> 규모의 자동 매수 헤징으로 방어"
                 gex_interp = (
-                    f"🟢 <b>[+GEX 딜러 롱 감마]</b> 마켓메이커가 주가 하락 시 매수, 상승 시 매도로 변동성을 억누르며 "
+                    f"🟢 <b>[+GEX 강력 롱 감마]</b> 마켓메이커가 주가 하락 시 매수, 상승 시 매도로 변동성을 억누르며 "
                     f"<b>풋월(${put_w:.2f})</b> 위에서 주가를 든든하게 받쳐주는 '하방 안전판' 상태입니다."
+                )
+            elif net_gex_m >= 0.5:
+                gex_intensity = "🟢 완만 롱 감마 (하방 지지력 ⭐⭐⭐)"
+                gex_hedge_impact = f"주가 하락 시 딜러들이 <b>{gex_disp}</b> 규모의 매수 헤징으로 방어력 제공"
+                gex_interp = (
+                    f"🟢 <b>[+GEX 완만 롱 감마]</b> 마켓메이커가 <b>풋월(${put_w:.2f})</b> 부근에서 하방 완충재 역할을 수행합니다."
                 )
             else:
                 gex_intensity = "🔴 딜러 숏 감마 (변동성 확장 ⚠️)"

@@ -439,13 +439,16 @@ class DynamicScreener:
         exclude = exclude or set()
         
         # SPY 기준 데이터 로드
+        spy_ret_1m = 0.0
         spy_ret_3m = 0.0
         spy_ret_6m = 0.0
         try:
             spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
-            if spy_df is not None and len(spy_df) >= 65:
-                spy_ret_3m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-65]) - 1) * 100
-                spy_ret_6m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[0]) - 1) * 100
+            if spy_df is not None and len(spy_df) >= 21:
+                spy_ret_1m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-21]) - 1) * 100
+                if len(spy_df) >= 65:
+                    spy_ret_3m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-65]) - 1) * 100
+                    spy_ret_6m = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[0]) - 1) * 100
         except Exception as e:
             logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
         
@@ -538,8 +541,8 @@ class DynamicScreener:
                     if vol_ratio < 0.5:
                         return
                 
-                # [v4.5.0 SOTA QUANT RS RANKING WITH HURST & AMIHUD]
-                rs_score = ((ret_1m - spy_ret_3m*0.33) * 0.40 + 
+                # [v4.5.0 SOTA QUANT RS RANKING WITH EXACT SPY BENCHMARK]
+                rs_score = ((ret_1m - spy_ret_1m) * 0.40 + 
                             (ret_3m - spy_ret_3m) * 0.35 + 
                             (ret_6m - spy_ret_6m) * 0.25 + 
                             (vol_ratio - 1.0) * 2.0)
@@ -1486,8 +1489,7 @@ class DynamicScreener:
                 if spy_df is None:
                     spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
                     if spy_df is not None:
-                        with _lock:
-                            self._ohlcv_cache["SPY"] = spy_df
+                        self._ohlcv_cache["SPY"] = spy_df
                 if spy_df is not None and len(spy_df) >= 65 and len(hist) >= 65:
                     # SPY returns
                     spy_close = spy_df['Close']

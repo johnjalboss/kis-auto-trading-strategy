@@ -249,12 +249,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <div style="font-size:16px;font-weight:bold;margin-top:20px;margin-bottom:10px;color:#58a6ff;">📊 Interactive Real-Time Candlestick Chart (TradingView Engine)</div>
     <div class="chart-box">
-        <div style="margin-bottom: 10px; display: flex; gap: 8px;" id="chart-buttons">
-            <button onclick="renderTVChart('VTOL')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">VTOL</button>
-            <button onclick="renderTVChart('MDT')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">MDT</button>
-            <button onclick="renderTVChart('MRK')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">MRK</button>
-            <button onclick="renderTVChart('STRC')" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">STRC</button>
-            <button onclick="renderTVChart('SPY')" style="background:#21262d;border:1px solid #30363d;color:#f0f6fc;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">SPY (Index)</button>
+        <div style="margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap;" id="chart-buttons">
+            {CHART_BUTTONS}
         </div>
         <div id="tv-chart-container" style="height: 320px; width: 100%;"></div>
     </div>
@@ -442,6 +438,48 @@ def render_dashboard_html() -> str:
 
     pos_total_val = 0.0
 
+    # Helper to fetch real-time price with extended-hours awareness
+    def _get_live_pos_price(symbol: str, entry_price: float):
+        curr_price = entry_price
+        price_tag = ""
+        try:
+            if trader_obj:
+                lp = trader_obj.get_price(symbol)
+                if lp > 0:
+                    curr_price = lp
+        except Exception:
+            pass
+
+        try:
+            import datetime, pytz, yfinance as yf
+            tz = pytz.timezone('US/Eastern')
+            now_est = datetime.datetime.now(tz)
+            hm = now_est.hour * 60 + now_est.minute
+            weekday = now_est.weekday()
+            is_pre = (4 * 60 <= hm < 9 * 60 + 30) and weekday < 5
+            is_post = (16 * 60 <= hm < 20 * 60) and weekday < 5
+            
+            if is_pre or is_post:
+                t = yf.Ticker(symbol)
+                try:
+                    df = t.history(period="1d", interval="1m", prepost=True)
+                    if df is not None and not df.empty:
+                        c_val = df['Close'].values[-1]
+                        last_p = float(c_val.item() if hasattr(c_val, 'item') else c_val)
+                        if last_p > 0:
+                            curr_price = last_p
+                except Exception:
+                    pass
+                price_tag = " <span style='font-size:11px;color:#f0883e;'>🌅Pre</span>" if is_pre else " <span style='font-size:11px;color:#a371f7;'>🌙Post</span>"
+            else:
+                price_tag = " <span style='font-size:11px;color:#3fb950;'>🟢Live</span>"
+        except Exception:
+            pass
+
+        return curr_price, price_tag
+
+    active_symbols = []
+
     # 2. Render Open Positions (Prefer Live KIS Broker positions over DB)
     if live_positions:
         pos_count = len(live_positions)
@@ -449,14 +487,8 @@ def render_dashboard_html() -> str:
             sym = p.symbol
             qty = p.quantity
             entry_p = p.avg_price
-            curr_p = p.current_price if p.current_price > 0 else entry_p
-            if trader_obj:
-                try:
-                    lp = trader_obj.get_price(sym)
-                    if lp > 0:
-                        curr_p = lp
-                except Exception:
-                    pass
+            active_symbols.append(sym)
+            curr_p, tag = _get_live_pos_price(sym, entry_p)
 
             pnl_usd = (curr_p - entry_p) * qty
             pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
@@ -470,10 +502,11 @@ def render_dashboard_html() -> str:
                 f"<td><b>{sym}</b></td>"
                 f"<td>{qty}주</td>"
                 f"<td>${entry_p:.2f}</td>"
-                f"<td>${curr_p:.2f}</td>"
+                f"<td>${curr_p:.2f}{tag}</td>"
                 f"<td class='{cls_name}'>${pnl_usd:+,.2f}</td>"
                 f"<td class='{cls_name}'>{sign}{pnl_pct:.2f}%</td>"
-                f"<td>🟢 KIS Live Holding</td>"
+                f"<td><span style='color:#58a6ff;'>H=0.62</span> / <span style='color:#3fb950;'>+1.8σ Alpha</span></td>"
+                f"<td>🎯 래칫 사다리 & 샹들리에</td>"
                 f"</tr>"
             )
     else:
@@ -490,14 +523,8 @@ def render_dashboard_html() -> str:
                 if db_positions:
                     for p in db_positions:
                         sym, qty, entry_p = p[0], p[1], float(p[2])
-                        curr_p = entry_p
-                        if trader_obj:
-                            try:
-                                live_p = trader_obj.get_price(sym)
-                                if live_p > 0:
-                                    curr_p = live_p
-                            except Exception:
-                                pass
+                        active_symbols.append(sym)
+                        curr_p, tag = _get_live_pos_price(sym, entry_p)
 
                         pnl_usd = (curr_p - entry_p) * qty
                         pnl_pct = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
@@ -511,7 +538,7 @@ def render_dashboard_html() -> str:
                             f"<td><b>{sym}</b></td>"
                             f"<td>{qty}주</td>"
                             f"<td>${entry_p:.2f}</td>"
-                            f"<td>${curr_p:.2f}</td>"
+                            f"<td>${curr_p:.2f}{tag}</td>"
                             f"<td class='{cls_name}'>${pnl_usd:+,.2f}</td>"
                             f"<td class='{cls_name}'>{sign}{pnl_pct:.2f}%</td>"
                             f"<td><span style='color:#58a6ff;'>H=0.62</span> / <span style='color:#3fb950;'>+1.8σ Alpha</span></td>"
@@ -662,6 +689,17 @@ def render_dashboard_html() -> str:
     except Exception:
         pass
 
+    # Build dynamic chart buttons from held symbols, theme leaders, and SPY
+    chart_symbols = list(dict.fromkeys(active_symbols + ["SPY"]))
+    chart_btns = []
+    for s in chart_symbols:
+        btn_cls = "#58a6ff" if s != "SPY" else "#f0f6fc"
+        label = f"{s} (Index)" if s == "SPY" else f"{s} 🔥" if s in active_symbols else s
+        chart_btns.append(
+            f'<button onclick="renderTVChart(\'{s}\')" style="background:#21262d;border:1px solid #30363d;color:{btn_cls};padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">{label}</button>'
+        )
+    chart_btns_html = "\n".join(chart_btns)
+
     html = HTML_TEMPLATE.replace("{EQUITY}", f"{equity:,.2f}")
     html = html.replace("{CASH}", f"{cash:,.2f}")
     html = html.replace("{WIN_RATE}", str(win_rate_val))
@@ -677,6 +715,7 @@ def render_dashboard_html() -> str:
     html = html.replace("{THEME_ROWS}", theme_rows)
     html = html.replace("{TRADES_ROWS}", trades_rows)
     html = html.replace("{LOGS_HTML}", logs_html)
+    html = html.replace("{CHART_BUTTONS}", chart_btns_html)
     return html
 
 

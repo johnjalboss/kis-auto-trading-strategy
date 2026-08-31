@@ -67,11 +67,11 @@ def get_live_performance_metrics(db_path: str = "trades.db") -> Tuple[float, flo
     conn = None
     try:
         conn = sqlite3.connect(db_path)
-        # exit_time이 존재하고 손익(pnl_pct)이 확정된 최근 40건의 거래 조회
+        # exit_time 또는 side='SELL'로 손익(pnl_pct)이 확정된 최근 40건의 거래 조회
         query = """
             SELECT pnl_pct FROM trades 
-            WHERE exit_time IS NOT NULL AND pnl_pct != 0
-            ORDER BY exit_time DESC LIMIT 40
+            WHERE (side = 'SELL' OR exit_time IS NOT NULL) AND (pnl_pct IS NOT NULL AND pnl_pct != 0)
+            ORDER BY id DESC LIMIT 40
         """
         df = pd.read_sql_query(query, conn)
         

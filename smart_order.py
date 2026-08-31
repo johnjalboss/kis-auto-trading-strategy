@@ -269,11 +269,11 @@ class SmartOrderExecutor:
         if self.trader:
             try:
                 if order.side == "BUY":
-                    # [Quant-Execution] Enable ensure_fill=True for BUY orders to prevent missing entries
-                    result = self.trader.buy(order.symbol, order.total_quantity, limit, ensure_fill=True)
+                    # [Quant-Execution] smart_order handles its own adaptive wait and chase
+                    result = self.trader.buy(order.symbol, order.total_quantity, limit, ensure_fill=False)
                 else:
                     # Critical: Force fill on all sell orders to prevent phantom positions
-                    result = self.trader.sell(order.symbol, order.total_quantity, limit, ensure_fill=True)
+                    result = self.trader.sell(order.symbol, order.total_quantity, limit, ensure_fill=False)
                 
                 order_id_from_kis = None
                 if result:
@@ -369,18 +369,20 @@ class SmartOrderExecutor:
                                     order.status = OrderStatus.REJECTED
                                     order.reason = f"Chase SELL order placement failed: {chase_result.message if chase_result else ''}"
                             else:
-                                logger.warning("Cancel request returned non-zero for SELL order {} ({}). Checking live broker positions...", order_id_from_kis, order.symbol)
+                                logger.warning("Cancel request returned non-zero for SELL order {} ({}). Checking live broker positions and unfilled list...", order_id_from_kis, order.symbol)
                                 is_filled = self.trader.wait_for_fill(order_id_from_kis, order.symbol, max_wait=10)
                                 
-                                # 이중 확인: KIS API 취소 전문 오류 시에도 실제 실계좌 잔고에서 수량이 감소했는지 확인
+                                # 이중 확인: KIS API 취소 실패는 대부분 '이미 체결 완료'됨을 의미하므로 실계좌 잔고와 미체결 목록으로 즉시 판정
                                 live_pos = {p.symbol: p.quantity for p in self.trader.get_positions()}
                                 current_held_qty = live_pos.get(order.symbol, 0)
+                                unfilled_list = self.trader.get_unfilled_orders()
+                                is_in_unfilled = any(str(u.get("order_id", "")) == str(order_id_from_kis) for u in unfilled_list)
                                 
-                                if is_filled or current_held_qty < order.total_quantity:
+                                if is_filled or current_held_qty < order.total_quantity or not is_in_unfilled:
                                     logger.info("✅ FULFILLMENT VERIFIED: {} order filled on broker (remaining qty: {})", order.symbol, current_held_qty)
                                     order.status = OrderStatus.FILLED
                                     order.filled_quantity = order.total_quantity
-                                    order.avg_fill_price = self.trader.get_order_fill_price(order_id_from_kis, order.symbol, limit)
+                                    order.avg_fill_price = self.trader.get_order_fill_price(order_id_from_kis, order.symbol, limit) or price
                                 else:
                                     order.status = OrderStatus.FAILED
                                     order.reason = "Cancel failed, original order still unfilled"

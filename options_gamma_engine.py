@@ -96,7 +96,8 @@ class OptionsGammaEngine:
 
         try:
             import yfinance as yf
-            ticker = yf.Ticker(symbol)
+            ticker_cls = getattr(yf, '_original_yf_Ticker', yf.Ticker)
+            ticker = ticker_cls(symbol)
             expirations = ticker.options
             
             # Fetch current stock price robustly
@@ -230,10 +231,15 @@ class OptionsGammaEngine:
             except Exception:
                 dte_calc = max(0, days_to_fri)
 
+            total_oi = float(df_calls['openInterest'].sum() + df_puts['openInterest'].sum()) if not df_calls.empty or not df_puts.empty else 0.0
+            is_thin = total_oi < 150.0
+
             result = {
                 "symbol": symbol,
                 "current_price": round(current_price, 2),
                 "net_gex_millions": round(net_gex, 2),
+                "total_open_interest": int(total_oi),
+                "is_thin_options": is_thin,
                 "call_wall": round(call_wall, 2),
                 "put_wall": round(put_wall, 2),
                 "gamma_flip_level": round(gamma_flip, 2),
@@ -345,6 +351,8 @@ def get_options_gamma_engine() -> OptionsGammaEngine:
     if _options_gamma_instance is None:
         _options_gamma_instance = OptionsGammaEngine()
     return _options_gamma_instance
+
+get_gamma_engine = get_options_gamma_engine
 
 
 if __name__ == "__main__":

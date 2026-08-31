@@ -1,0 +1,14 @@
+[Unit]
+Description=KIS Web Analytics Dashboard Server (Port 8080)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kis-auto-trading
+ExecStart=/home/ubuntu/kis-auto-trading/venv/bin/python /home/ubuntu/kis-auto-trading/web_dashboard.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

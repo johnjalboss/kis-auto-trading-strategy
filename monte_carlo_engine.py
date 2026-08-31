@@ -48,12 +48,48 @@ class MonteCarloEngine:
             ]
         return returns
 
-    def run_simulation(self, current_equity: float = 772.70, position_size_pct: float = 0.35) -> Dict[str, Any]:
-        """Runs 10,000 Monte Carlo simulations using empirical bootstrap sampling."""
+    def _resolve_live_equity(self, current_equity: Optional[float] = None) -> float:
+        """Dynamically queries real-time account equity from KIS broker or positions table."""
+        if current_equity is not None and isinstance(current_equity, (int, float)) and current_equity > 0:
+            return float(current_equity)
+
+        # 1. Try querying Trader API directly
         try:
-            current_equity = float(current_equity) if isinstance(current_equity, (int, float)) else 772.70
-        except Exception:
-            current_equity = 772.70
+            from trader import Trader
+            t = Trader()
+            bp = t.get_buying_power()
+            pos = t.get_positions()
+            pos_val = 0.0
+            if pos:
+                for p in pos:
+                    live_p = t.get_price(p.symbol)
+                    curr_p = live_p if live_p > 0 else (p.current_price or p.avg_price)
+                    pos_val += (p.quantity * curr_p)
+            total = bp + pos_val
+            if total > 0:
+                return float(total)
+        except Exception as e:
+            logger.debug("Monte Carlo live equity query failed from Trader: {}", e)
+
+        # 2. Try querying trades.db positions
+        if os.path.exists(self.db_path):
+            try:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT quantity, avg_price FROM positions")
+                rows = cursor.fetchall()
+                pos_val = sum(float(r[0]) * float(r[1]) for r in rows)
+                conn.close()
+                if pos_val > 0:
+                    return float(pos_val)
+            except Exception:
+                pass
+
+        return 2277.80
+
+    def run_simulation(self, current_equity: Optional[float] = None, position_size_pct: float = 0.35) -> Dict[str, Any]:
+        """Runs 10,000 Monte Carlo simulations using empirical bootstrap sampling."""
+        current_equity = self._resolve_live_equity(current_equity)
         try:
             position_size_pct = float(position_size_pct) if isinstance(position_size_pct, (int, float)) else 0.35
         except Exception:
@@ -125,8 +161,9 @@ class MonteCarloEngine:
             "safety_rating": "AAA (극상위 안전)" if ruin_prob_pct < 0.1 else "AA (안전)"
         }
 
-    def format_telegram_card(self, current_equity: float = 772.70) -> str:
+    def format_telegram_card(self, current_equity: Optional[float] = None) -> str:
         """Formats the Monte Carlo stress test card for Telegram."""
+        current_equity = self._resolve_live_equity(current_equity)
         sim = self.run_simulation(current_equity=current_equity)
 
         card = (

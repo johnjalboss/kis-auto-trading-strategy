@@ -70,3 +70,33 @@ class PEADEarningsRadar:
         except Exception as e:
             logger.debug("PEAD surprise check skipped for {}: {}", symbol, e)
             return False, 0.0
+
+    def check_pead_gamma_squeeze_confluence(self, symbol: str, current_price: float = 0.0) -> tuple[bool, float, str]:
+        """
+        [PEAD + GAMMA SQUEEZE CONFLUENCE ENGINE]
+        Evaluates confluence of Earnings Surprise + Dealer Gamma Squeeze:
+        - Earnings surprise >= +10.0%
+        - Positive Dealer Net GEX or Spot above Gamma Flip strike
+        - Awards up to +15.0pt composite bonus for explosive multi-day swing markup.
+        """
+        try:
+            is_pead, surprise_pct = self.check_pead_breakout(symbol)
+            if surprise_pct < 10.0:
+                return False, 0.0, "NO_PEAD_CATALYST"
+
+            # Check Dealer Gamma Exposure alignment
+            from dealer_gex_radar import get_dealer_gex_radar
+            gex_radar = get_dealer_gex_radar()
+            gex_res = gex_radar.analyze(symbol)
+
+            if gex_res and gex_res.get("regime") in ["CALL_DOMINATED", "POSITIVE_GAMMA", "DEALER_LONG_GAMMA"]:
+                bonus = 15.0 if surprise_pct >= 20.0 else 10.0
+                desc = f"PEAD(+{surprise_pct:.1f}%) + Positive Gamma Squeeze ({gex_res.get('regime')})"
+                logger.info("💥 [PEAD_GAMMA_SQUEEZE] {} Confluence Detected! {} -> +{:.1f}pt", symbol, desc, bonus)
+                return True, bonus, desc
+            elif surprise_pct >= 15.0:
+                return True, 5.0, f"PEAD_SURPRISE_DRIFT (+{surprise_pct:.1f}%)"
+            return False, 0.0, "PEAD_MODERATE"
+        except Exception as e:
+            logger.debug("PEAD gamma squeeze confluence check failed for {}: {}", symbol, e)
+            return False, 0.0, "ERROR"

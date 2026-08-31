@@ -304,7 +304,7 @@ class WeeklyAIReportGenerator:
         mc_line = "  • 몬테카를로 파산 위험: 0.00% (AAA 철벽 안전) | 예상 Sharpe: 2.15"
         try:
             from monte_carlo_engine import MonteCarloEngine
-            mc_res = MonteCarloEngine(db_path=self.db_path).run_simulation(current_equity=772.70)
+            mc_res = MonteCarloEngine(db_path=self.db_path).run_simulation()
             mc_line = (
                 f"  • 🎲 <b>10,000회 파산 위험률</b>: <b>{mc_res['ruin_probability_pct']}%</b> <i>({mc_res['safety_rating']})</i>\n"
                 f"  • 📈 <b>90일 후 목표 자산(Median)</b>: <b>${mc_res['median_equity_90d']:,.2f}</b> (+{mc_res['expected_return_pct']}%)"

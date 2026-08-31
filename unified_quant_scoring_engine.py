@@ -27,7 +27,7 @@ from loguru import logger
 class UnifiedQuantScoringEngine:
     """Institutional Multi-Factor Quantitative Scoring Engine (Swing Trading Horizon: 3-10 Days)"""
 
-    # 5 Factor Pillar Weights calibrated for Swing Alpha (Sum = 1.00)
+    # Baseline 5 Factor Pillar Weights (Calibrated default)
     WEIGHT_TREND = 0.35           # Primary driver: Price momentum, Kalman velocity, RS alpha
     WEIGHT_MICROSTRUCTURE = 0.30  # Volume surge, Order flow imbalance (OFI), Volume profile POC
     WEIGHT_CATALYST = 0.20        # Earnings PEAD surprise drift, News sentiment catalyst
@@ -36,6 +36,50 @@ class UnifiedQuantScoringEngine:
 
     def __init__(self):
         self._cache = {}
+
+    def _get_bayesian_dynamic_weights(self, regime: Optional[str] = None) -> Dict[str, float]:
+        """
+        [BAYESIAN DYNAMIC FACTOR WEIGHTING]
+        Dynamically adapts 5 pillar weights based on current market regime and earnings seasonality:
+        - Bull Momentum: Trend & Microstructure dominate
+        - Choppy / Range: Microstructure & Catalyst dominate
+        - Bear / Risk-Off: Macro Regime & Microstructure defense dominate
+        """
+        reg_str = (regime or "CHOPPY").upper()
+        
+        # Check if current month is peak US earnings season (Jan/Feb, Apr/May, Jul/Aug, Oct/Nov)
+        from datetime import datetime
+        cur_month = datetime.now().month
+        is_earnings_season = cur_month in [1, 2, 4, 5, 7, 8, 10, 11]
+
+        if "BULL" in reg_str or "TREND" in reg_str:
+            w_trend = 0.40
+            w_micro = 0.30
+            w_cat = 0.20 if is_earnings_season else 0.15
+            w_macro = 0.05
+            w_inst = 0.05
+        elif "BEAR" in reg_str or "PANIC" in reg_str or "RISK_OFF" in reg_str:
+            w_macro = 0.30
+            w_micro = 0.30
+            w_cat = 0.20
+            w_trend = 0.15
+            w_inst = 0.05
+        else: # CHOPPY / NORMAL / TRANSITION
+            w_micro = 0.35
+            w_cat = 0.25 if is_earnings_season else 0.20
+            w_macro = 0.20
+            w_trend = 0.15
+            w_inst = 0.05 if not is_earnings_season else 0.05
+
+        # Normalize to sum exactly to 1.00
+        total_w = w_trend + w_micro + w_cat + w_macro + w_inst
+        return {
+            "trend": w_trend / total_w,
+            "micro": w_micro / total_w,
+            "catalyst": w_cat / total_w,
+            "macro": w_macro / total_w,
+            "inst": w_inst / total_w
+        }
 
     def compute_composite_score(
         self,
@@ -53,6 +97,12 @@ class UnifiedQuantScoringEngine:
         """
         breakdown = []
         pillar_details = {}
+
+        # Resolve Bayesian Dynamic Weights for current regime
+        regime_val = getattr(macro_state, "regime", None) if macro_state else None
+        if not regime_val and isinstance(macro_state, dict):
+            regime_val = macro_state.get("regime")
+        b_weights = self._get_bayesian_dynamic_weights(regime_val)
 
         # -------------------------------------------------------------
         # PILLAR 1: Trend & Dynamic Price Momentum (Weight: 35.0%)
@@ -281,14 +331,21 @@ class UnifiedQuantScoringEngine:
         # -------------------------------------------------------------
         p5_signals = []
 
-        # 5.1 PEAD Earnings Surprise Drift
+        # 5.1 PEAD Earnings Surprise Drift & Gamma Squeeze Confluence
         phi_pead = 0.0
         try:
             from pead_earnings_radar import PEADEarningsRadar
-            pead_active, pead_surp = PEADEarningsRadar().check_pead_breakout(symbol)
-            if pead_active and pead_surp > 0:
-                phi_pead = float(np.tanh(pead_surp / 15.0))
-                breakdown.append(f"• [PEAD 어닝 서프라이즈] EPS +{pead_surp:.1f}% (기여 {phi_pead*20.0*0.55:+.1f}pt)")
+            p_radar = PEADEarningsRadar()
+            curr_c = float(df['Close'].iloc[-1]) if (df is not None and len(df) > 0 and 'Close' in df.columns) else 0.0
+            is_sqz, sqz_bonus, sqz_desc = p_radar.check_pead_gamma_squeeze_confluence(symbol, curr_c)
+            if is_sqz:
+                phi_pead = float(np.tanh(sqz_bonus / 10.0))
+                breakdown.append(f"💥 [PEAD+감마 스퀴즈 컨플루언스] {sqz_desc} (기여 {phi_pead*b_weights['catalyst']*100*0.60:+.1f}pt)")
+            else:
+                pead_active, pead_surp = p_radar.check_pead_breakout(symbol)
+                if pead_active and pead_surp > 0:
+                    phi_pead = float(np.tanh(pead_surp / 15.0))
+                    breakdown.append(f"• [PEAD 어닝 서프라이즈] EPS +{pead_surp:.1f}% (기여 {phi_pead*b_weights['catalyst']*100*0.55:+.1f}pt)")
             p5_signals.append(0.55 * phi_pead)
         except Exception:
             pass
@@ -311,11 +368,11 @@ class UnifiedQuantScoringEngine:
         # CONTINUOUS AGGREGATION ACROSS 5 PILLARS (0.0 to 100.0)
         # -------------------------------------------------------------
         weighted_delta = (
-            (self.WEIGHT_TREND * p1_composite) +
-            (self.WEIGHT_INSTITUTIONAL * p2_composite) +
-            (self.WEIGHT_MICROSTRUCTURE * p3_composite) +
-            (self.WEIGHT_MACRO * p4_composite) +
-            (self.WEIGHT_CATALYST * p5_composite)
+            (b_weights["trend"] * p1_composite) +
+            (b_weights["inst"] * p2_composite) +
+            (b_weights["micro"] * p3_composite) +
+            (b_weights["macro"] * p4_composite) +
+            (b_weights["catalyst"] * p5_composite)
         )  # Range: [-1.0, +1.0]
 
         # -------------------------------------------------------------

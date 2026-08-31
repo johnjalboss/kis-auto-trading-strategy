@@ -5,8 +5,6 @@ token.json
 # SSH Keys
 id_rsa
 *.pem
-*.key
-oracle_key
 
 # Python
 __pycache__/

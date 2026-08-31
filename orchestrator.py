@@ -600,6 +600,21 @@ class BotOrchestrator:
 
         self.state.last_macro_refresh = datetime.now()
 
+        # AI Autonomous Auto-Tuning Engine: Periodically recalibrate weights, stops, and thresholds from live/shadow trades
+        try:
+            from auto_tuning_engine import AutoTuningEngine, load_autotune_overrides
+            now_ts = time.time()
+            if now_ts - getattr(self, '_last_autotune_ts', 0) > 1800:  # Every 30 minutes
+                self._last_autotune_ts = now_ts
+                tune_res = AutoTuningEngine().run_autotune()
+                applied = load_autotune_overrides()
+                if applied:
+                    logger.info("🧠 [AI_AUTOTUNE] Autonomous self-calibration active: WinRate={:.1f}%, ProfitFactor={:.2f}, StopATR={}, MinScore={}",
+                                tune_res.get("win_rate", 0), tune_res.get("profit_factor", 0),
+                                applied.get("DYNAMIC_STOP_LOSS_ATR_MULT"), applied.get("DYNAMIC_MIN_SCORE"))
+        except Exception as _at_err:
+            logger.debug("AI AutoTuning periodic cycle skipped: {}", _at_err)
+
         # Daily Telegram Performance Report at Market Close (16:00 ET / 05:00 KST)
         try:
             from extended_hours_sentinel import _EASTERN_TZ
@@ -849,6 +864,13 @@ class BotOrchestrator:
                                 self.phase_5_execute_trade(sym, "SELL", sell_qty, exit_sig.price, exit_sig.reason)
                                 self.strategy.mark_half_sold(sym)
                         else:
+                            pnl_pct = (exit_sig.price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+                            if pnl_pct < 0:
+                                try:
+                                    from ticker_quarantine_sentinel import get_ticker_quarantine_sentinel
+                                    get_ticker_quarantine_sentinel().quarantine_symbol(sym, pnl_pct * 100, exit_sig.reason)
+                                except Exception:
+                                    pass
                             self.phase_5_execute_trade(sym, "SELL", pos.quantity, exit_sig.price, exit_sig.reason)
                             self.strategy.remove_position(sym)
                 except Exception as e:
@@ -989,7 +1011,14 @@ class BotOrchestrator:
                     # Feed high-conviction signals to Parallel Shadow Sandbox ($1,000 baseline)
                     try:
                         from shadow_paper_engine import ShadowPaperEngine
-                        ShadowPaperEngine().on_high_conviction_candidate(symbol, signal.entry_price, int(signal.composite_score))
+                        ShadowPaperEngine().on_high_conviction_candidate(
+                            symbol=symbol,
+                            current_price=signal.entry_price,
+                            quant_score=int(signal.composite_score),
+                            stop_loss=getattr(signal, 'stop_loss', None),
+                            take_profit=getattr(signal, 'take_profit', None),
+                            regime=getattr(self.strategy, '_last_regime', None)
+                        )
                     except Exception as _spe_err:
                         logger.debug("ShadowPaperEngine intake skipped: {}", _spe_err)
 
@@ -998,6 +1027,16 @@ class BotOrchestrator:
                     if symbol in current_positions:
                         continue
                     
+                    # [TICKER QUARANTINE ANTI-WHIPSAW GUARD]
+                    try:
+                        from ticker_quarantine_sentinel import get_ticker_quarantine_sentinel
+                        q_blocked, q_reason = get_ticker_quarantine_sentinel().is_quarantined(symbol)
+                        if q_blocked:
+                            logger.info("🛡️ [TICKER_QUARANTINE_GUARD] Entry blocked for {}: {}", symbol, q_reason)
+                            continue
+                    except Exception as _tq_err:
+                        logger.debug("TickerQuarantine check skipped: {}", _tq_err)
+
                     # [v11.0 QUANT] Check Pearson Correlation Cluster Risk Cap (max 40%)
                     try:
                         from correlation_cluster_cap import CorrelationClusterCap
@@ -1295,9 +1334,9 @@ class BotOrchestrator:
                             # [BUG FIX] Fetch TRUE broker position quantity so ALL shares are sold at once
                             actual_qty = worst_pos.quantity
                             try:
-                                broker_pos = self.trader.get_positions()
-                                if broker_pos and worst_sym in broker_pos:
-                                    actual_qty = max(actual_qty, int(broker_pos[worst_sym].get('qty', actual_qty)))
+                                broker_pos = {p.symbol: p.quantity for p in self.trader.get_positions()}
+                                if worst_sym in broker_pos:
+                                    actual_qty = max(actual_qty, int(broker_pos[worst_sym]))
                             except Exception as _bq_err:
                                 logger.debug("Broker position fetch failed for {}: {}", worst_sym, _bq_err)
 
@@ -1789,6 +1828,30 @@ class BotOrchestrator:
                     except Exception as _pet_err:
                         logger.debug("PostExitTracker sync error: {}", _pet_err)
                 
+                # --- BROKER EXECUTION SENTINEL & RECONCILIATION ---
+                # Double-check live broker positions: if action is SELL and position decreased/cleared,
+                # or action is BUY and position appeared, then the trade WAS FILLED on broker!
+                try:
+                    live_broker_pos = {p.symbol: p.quantity for p in self.trader.get_positions()}
+                    if action == "SELL":
+                        if symbol not in live_broker_pos or live_broker_pos[symbol] < qty:
+                            if order.status != OrderStatus.FILLED:
+                                logger.info("🛡️ [BROKER_SENTINEL] SELL for {} verified filled on broker (remaining qty: {}). Upgrading status to FILLED.",
+                                            symbol, live_broker_pos.get(symbol, 0))
+                                order.status = OrderStatus.FILLED
+                                order.filled_quantity = qty
+                                order.avg_fill_price = order.avg_fill_price or price
+                    elif action == "BUY":
+                        if symbol in live_broker_pos and live_broker_pos[symbol] >= qty:
+                            if order.status != OrderStatus.FILLED:
+                                logger.info("🛡️ [BROKER_SENTINEL] BUY for {} verified filled on broker (held qty: {}). Upgrading status to FILLED.",
+                                            symbol, live_broker_pos[symbol])
+                                order.status = OrderStatus.FILLED
+                                order.filled_quantity = qty
+                                order.avg_fill_price = order.avg_fill_price or price
+                except Exception as _bs_err:
+                    logger.debug("Broker sentinel check skipped: {}", _bs_err)
+
                 # Send Trade Notification
                 try:
                     from notification import get_notifier

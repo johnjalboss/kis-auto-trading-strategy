@@ -562,12 +562,13 @@ class StrategyEngine:
         pct_from_high = (current_price - _52w_high) / _52w_high
 
         # ── Setup A: 52주 고점 돌파 (Breakout) ─────────────────────────────
-        # 52주 신고가 2.5% 이내 + 거래량 확인 = 가장 강한 추세 지속 신호
-        is_breakout = pct_from_high >= -0.025
+        # 52주 신고가 3.5% 이내 + 상승추세(SMA20>SMA50) + 거래량/모멘텀 확인 = 최상위 추세 지속 스윙 신호
+        vol_ratio_today = float(df_daily['Volume'].iloc[-1]) / float(df_daily['Volume'].iloc[-21:-1].mean()) if len(df_daily) >= 21 and float(df_daily['Volume'].iloc[-21:-1].mean()) > 0 else 1.0
+        is_breakout = structural_uptrend and (pct_from_high >= -0.035) and (vol_ratio_today >= 1.15 or (indicators.rsi >= 55 and indicators.rsi <= 75))
 
-        # ── Setup B: 추세 내 눌림목 매수 (Trend Pullback) ─────────────────
-        # 상승추세 (SMA20 > SMA50) + RSI 38~65 + SMA50 근처 = 건강한 조정 후 재개
-        is_pullback = structural_uptrend and (38 <= indicators.rsi <= 65) and (current_price > sma50 * 0.985)
+        # ── Setup B: 20일선 눌림목 매수 (20MA Trend Pullback) ───────────────
+        # 상승추세(SMA20>SMA50) + 20일선 지지 테스트 (20MA -2.0% ~ +3.0%) + 건강한 RSI(40~65) = 교과서적 스윙 눌림목
+        is_pullback = structural_uptrend and (40 <= indicators.rsi <= 65) and (sma20 * 0.980 <= current_price <= sma20 * 1.035)
 
         # ── Setup C: 과매도 반등 (Mean Reversion Bounce) ──────────────────
         # RSI < 35 + BB 하단 근처 + 200MA 위 = 단기 과매도 후 기술적 반등

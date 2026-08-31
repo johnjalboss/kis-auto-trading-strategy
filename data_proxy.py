@@ -538,50 +538,94 @@ class KISTickerProxy:
     
     @property
     def options(self) -> list:
-        """옵션 만기일 — KIS API 미지원, 빈 리스트 반환"""
-        return []
+        """옵션 만기일 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            return list(orig.options or [])
+        except Exception:
+            return []
     
     def option_chain(self, date: str = None):
-        """옵션 체인 — KIS API 미지원, 빈 결과 반환"""
-        class EmptyChain:
-            calls = pd.DataFrame(columns=['strike', 'volume', 'openInterest', 'impliedVolatility'])
-            puts = pd.DataFrame(columns=['strike', 'volume', 'openInterest', 'impliedVolatility'])
-        return EmptyChain()
+        """옵션 체인 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            return orig.option_chain(date)
+        except Exception as e:
+            logger.debug(f"Option chain fetch failed for {self._symbol}: {e}")
+            class EmptyChain:
+                calls = pd.DataFrame(columns=['strike', 'volume', 'openInterest', 'impliedVolatility'])
+                puts = pd.DataFrame(columns=['strike', 'volume', 'openInterest', 'impliedVolatility'])
+            return EmptyChain()
     
     @property
     def institutional_holders(self) -> pd.DataFrame:
-        """기관 보유 현황 — KIS API 미지원"""
-        return pd.DataFrame(columns=['Holder', 'Shares', 'Date Reported', '% Out', 'Value'])
+        """기관 보유 현황 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            df = orig.institutional_holders
+            return df if df is not None else pd.DataFrame(columns=['Holder', 'Shares', 'Date Reported', '% Out', 'Value'])
+        except Exception:
+            return pd.DataFrame(columns=['Holder', 'Shares', 'Date Reported', '% Out', 'Value'])
     
     @property
     def insider_transactions(self) -> pd.DataFrame:
-        """내부자 거래 — KIS API 미지원"""
-        return pd.DataFrame(columns=['Shares', 'Value', 'Start Date', 'Text'])
+        """내부자 거래 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            df = orig.insider_transactions
+            return df if df is not None else pd.DataFrame(columns=['Shares', 'Value', 'Start Date', 'Text'])
+        except Exception:
+            return pd.DataFrame(columns=['Shares', 'Value', 'Start Date', 'Text'])
     
     @property
     def earnings_history(self) -> pd.DataFrame:
-        """실적 히스토리 — KIS API 미지원"""
-        return pd.DataFrame(columns=['epsActual', 'epsEstimate', 'epsDifference', 'surprisePercent'])
+        """실적 히스토리 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            df = orig.earnings_history
+            return df if df is not None else pd.DataFrame(columns=['epsActual', 'epsEstimate', 'epsDifference', 'surprisePercent'])
+        except Exception:
+            return pd.DataFrame(columns=['epsActual', 'epsEstimate', 'epsDifference', 'surprisePercent'])
     
     @property
     def calendar(self) -> pd.DataFrame:
-        """실적 달력 — KIS API 미지원"""
-        return pd.DataFrame()
+        """실적 달력 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            cal = orig.calendar
+            return cal if cal is not None else pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
     
     @property
     def recommendations(self) -> pd.DataFrame:
-        """애널리스트 추천 — KIS API 미지원"""
-        return pd.DataFrame(columns=['Firm', 'To Grade', 'From Grade', 'Action'])
+        """애널리스트 추천 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            rec = orig.recommendations
+            return rec if rec is not None else pd.DataFrame(columns=['Firm', 'To Grade', 'From Grade', 'Action'])
+        except Exception:
+            return pd.DataFrame(columns=['Firm', 'To Grade', 'From Grade', 'Action'])
     
     @property
     def major_holders(self) -> pd.DataFrame:
-        """주요 주주 — KIS API 미지원"""
-        return pd.DataFrame()
+        """주요 주주 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            mh = orig.major_holders
+            return mh if mh is not None else pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
     
     @property  
     def dividends(self) -> pd.Series:
-        """배당금 — KIS API 미지원"""
-        return pd.Series(dtype=float)
+        """배당금 — Original yfinance Ticker로 프록시"""
+        try:
+            orig = _original_yf_Ticker(self._symbol)
+            div = orig.dividends
+            return div if div is not None else pd.Series(dtype=float)
+        except Exception:
+            return pd.Series(dtype=float)
     
     @property
     def fast_info(self):

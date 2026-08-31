@@ -309,27 +309,36 @@ class CompositeSignalEngine:
                 elif cat.score < -20:
                     bearish.append(f"{cat.category}: {sig}")
         
-        # Position sizing (Confidence-scaled dynamic sizing)
+        # Position sizing (Inverse-ATR Volatility Risk Parity Sizing)
         import config
-        # Target size per position based on max slots (e.g., 5 slots = 20% each)
+        # Target size per position based on max slots (e.g., 3 slots = 33% each for real, 5 slots = 20% for shadow)
         target_pct = 1.0 / max(1, config.MAX_POSITIONS)
+        
+        # Calculate stock ATR and ATR percentage
+        atr = self._calculate_atr(df)
+        atr_pct = (atr / current_price) if current_price > 0 else 0.030
+        
+        # [INVERSE-ATR RISK PARITY SCALING]
+        # Benchmark reference ATR is 2.5% (0.025)
+        # Low volatility stock (e.g. ATR 1.5%) gets ~1.25x scaling; High volatility stock (e.g. ATR 4.5%) gets ~0.70x scaling
+        vol_parity_mult = float(np.clip(0.025 / max(0.010, atr_pct), 0.65, 1.35))
         
         # Base size scales proportionally to the slot allocation
         if action in [ActionType.STRONG_BUY, ActionType.STRONG_SELL]:
-            base_pct = target_pct        # Full 1x allocation
+            base_pct = target_pct * vol_parity_mult
         elif action in [ActionType.BUY, ActionType.SELL]:
-            base_pct = target_pct * 0.8  # 0.8x allocation
+            base_pct = target_pct * 0.85 * vol_parity_mult
         elif action in [ActionType.WEAK_BUY, ActionType.WEAK_SELL]:
-            base_pct = target_pct * 0.5  # 0.5x allocation
+            base_pct = target_pct * 0.55 * vol_parity_mult
         else:
             base_pct = 0.0
         
         # Confidence scaling: mild adjustment (e.g., 60% conf -> 0.86x, 90% -> 1.04x)
-        conf_mult = 0.5 + (confidence / 100.0) * 0.6
+        conf_mult = 0.6 + (confidence / 100.0) * 0.5
         position_pct = base_pct * conf_mult
         
-        # Hard cap at user's max single position configuration (default 35%)
-        position_pct = min(position_pct, config.MAX_POSITION_PCT)
+        # Bound between 15% and user's max single position configuration (default 35%)
+        position_pct = min(max(position_pct, 0.15), config.MAX_POSITION_PCT)
         
         # Adjust for risk score
         if risk.score < -30:
@@ -337,7 +346,6 @@ class CompositeSignalEngine:
             warnings.append("HIGH_RISK:Reducing size")
         
         # Calculate stops
-        atr = self._calculate_atr(df)
         stop_loss = current_price - (2 * atr) if action.value.endswith('BUY') else current_price + (2 * atr)
         take_profit = current_price + (3 * atr) if action.value.endswith('BUY') else current_price - (3 * atr)
         risk_reward = 1.5

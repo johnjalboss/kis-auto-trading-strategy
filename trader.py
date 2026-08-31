@@ -567,7 +567,8 @@ class Trader:
                 try:
                     df = ticker.history(period="1d", interval="1m", prepost=True)
                     if df is not None and not df.empty:
-                        ext_p = float(df['Close'].iloc[-1])
+                        c_val = df['Close'].values[-1]
+                        ext_p = float(c_val.item() if hasattr(c_val, 'item') else c_val)
                         if ext_p > 0:
                             return ext_p
                 except Exception:
@@ -886,6 +887,12 @@ class Trader:
             
         exchange = self._exchange_mapper.get_exchange(symbol)
         
+        # Multi-exchange fallback for SELL (prioritize known exchange, then try all exchanges)
+        exchanges_to_try = [exchange]
+        for alt in ["NYSE", "NASD", "AMEX"]:
+            if alt not in exchanges_to_try:
+                exchanges_to_try.append(alt)
+
         tr_id = "VTTT1001U" if self.is_paper else "TTTT1006U"
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/order"
         
@@ -901,53 +908,68 @@ class Trader:
             "ORD_DVSN": "00"
         }
         
-        logger.info("SELL {} x {} @ ${:.2f} ({})", symbol, quantity, limit_price, exchange)
+        logger.info("SELL {} x {} @ ${:.2f} (trying: {})", symbol, quantity, limit_price, exchanges_to_try)
         
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                resp = requests.post(url, headers=self._get_headers(tr_id),
-                                   json=body, timeout=10)
-                data = resp.json()
-                
-                if data.get("rt_cd") == "0":
-                    order_id = data.get("output", {}).get("ODNO", "")
-                    logger.success("SELL order placed: {} (ID: {})", symbol, order_id)
-                    result = OrderResult(True, order_id, symbol, "SELL", quantity, limit_price)
+        no_info_error = "해당종목정보가 없습니다"
+        last_error_msg = "ORDER_FAILED"
+
+        for try_exchange in exchanges_to_try:
+            body["OVRS_EXCG_CD"] = try_exchange
+            if try_exchange != exchange:
+                logger.info("SELL {} retrying on exchange {} (prev: {})", symbol, try_exchange, exchange)
+
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    resp = requests.post(url, headers=self._get_headers(tr_id),
+                                       json=body, timeout=10)
+                    data = resp.json()
                     
-                    if ensure_fill:
-                        # Wait 15 seconds for fill
-                        time.sleep(15)
-                        orders = self.get_unfilled_orders()
-                        unfilled = next((o for o in orders if o["order_id"] == order_id), None)
+                    if data.get("rt_cd") == "0":
+                        order_id = data.get("output", {}).get("ODNO", "")
+                        logger.success("SELL order placed: {} (ID: {}, exchange: {})", symbol, order_id, try_exchange)
+                        # Cache successful exchange
+                        self._exchange_mapper.SYMBOL_EXCHANGE[symbol.upper()] = try_exchange
+                        result = OrderResult(True, order_id, symbol, "SELL", quantity, limit_price)
                         
-                        if unfilled:
-                            logger.warning("Order {} ({}) UNFILLED after 15s. Chasing market!", order_id, symbol)
-                            # Cancel the old order
-                            if self.cancel_order(order_id, symbol, unfilled["quantity"], exchange, "SELL"):
-                                time.sleep(2)  # Wait for cancellation to process
-                                
-                                # Resubmit at min of -1.0% or current price -0.5% (aggressive chase)
-                                current_price = self.get_price(symbol)
-                                chase_price = round(min(limit_price * 0.99, current_price * 0.995), 2)
-                                logger.warning("Resubmitting SELL for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
-                                return self.sell(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
-                            else:
-                                logger.error("Cancel failed for order {} ({}). Keeping original order active, skipping chase.", order_id, symbol)
-                                return result
-                    
-                    return result
-                else:
-                    if self.check_token_error(data, resp.status_code):
-                        time.sleep(1)
+                        if ensure_fill:
+                            # Wait 15 seconds for fill
+                            time.sleep(15)
+                            orders = self.get_unfilled_orders()
+                            unfilled = next((o for o in orders if o["order_id"] == order_id), None)
+                            
+                            if unfilled:
+                                logger.warning("Order {} ({}) UNFILLED after 15s. Chasing market!", order_id, symbol)
+                                # Cancel the old order
+                                if self.cancel_order(order_id, symbol, unfilled["quantity"], try_exchange, "SELL"):
+                                    time.sleep(2)  # Wait for cancellation to process
+                                    
+                                    # Resubmit at min of -1.0% or current price -0.5% (aggressive chase)
+                                    current_price = self.get_price(symbol)
+                                    chase_price = round(min(limit_price * 0.99, current_price * 0.995), 2)
+                                    logger.warning("Resubmitting SELL for {} at CHASE PRICE: ${:.2f}", symbol, chase_price)
+                                    return self.sell(symbol, unfilled["quantity"], limit_price=chase_price, ensure_fill=False)
+                                else:
+                                    logger.error("Cancel failed for order {} ({}). Keeping original order active, skipping chase.", order_id, symbol)
+                                    return result
+                        
+                        return result
+                    else:
+                        if self.check_token_error(data, resp.status_code):
+                            time.sleep(1)
+                            continue
+                        last_error_msg = data.get("msg1", "Error")
+                        logger.error("SELL failed on {}: {}", try_exchange, last_error_msg)
+                        if no_info_error in last_error_msg:
+                            break  # Try next exchange in exchanges_to_try
+                        if attempt < self.MAX_RETRIES - 1:
+                            time.sleep(self.RETRY_DELAY)
+                except Exception as e:
+                    if attempt < self.MAX_RETRIES - 1:
+                        time.sleep(self.RETRY_DELAY)
                         continue
-                    msg = data.get("msg1", "Error")
-                    logger.error("SELL failed: {}", msg)
-                    return OrderResult(False, "", symbol, "SELL", quantity, limit_price, msg)
-            except Exception as e:
-                if attempt < self.MAX_RETRIES - 1:
-                    time.sleep(self.RETRY_DELAY)
-                    continue
-                return OrderResult(False, "", symbol, "SELL", quantity, limit_price, str(e))
+                    logger.error("SELL request exception for {} on {}: {}", symbol, try_exchange, e)
+
+        return OrderResult(False, "", symbol, "SELL", quantity, limit_price, last_error_msg)
     
     def calculate_order_qty(self, symbol: str, usd_amount: float) -> int:
         """Calculate order quantity for given USD amount"""
