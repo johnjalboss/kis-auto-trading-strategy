@@ -146,6 +146,55 @@ class BrokerPositionReconciliationGuard:
                 except Exception as _notif_err:
                     logger.debug("Reconciliation trade notification error for {}: {}", d_sym, _notif_err)
 
+        # Extra Guard: Check trades table for unmatched BUY orders whose symbols are no longer in broker
+        try:
+            cur.execute("""
+                SELECT t.symbol, t.quantity, t.price, t.created_at
+                FROM trades t
+                WHERE t.side = 'BUY'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM trades s 
+                      WHERE s.symbol = t.symbol AND s.side = 'SELL' AND s.created_at >= t.created_at
+                  )
+            """)
+            unmatched_buys = cur.fetchall()
+            for u_sym, u_qty, u_buy_price, u_entry_time in unmatched_buys:
+                if u_sym not in broker_symbols:
+                    exit_p = float(u_buy_price)
+                    try:
+                        curr_check = kis_data.get_current_price(u_sym)
+                        if curr_check and curr_check > 0:
+                            exit_p = float(curr_check)
+                    except Exception:
+                        pass
+                    
+                    pnl_amt = round((exit_p - u_buy_price) * u_qty, 2)
+                    pnl_pct = round(((exit_p - u_buy_price) / u_buy_price), 4) if u_buy_price > 0 else 0.0
+                    total_amt = round(exit_p * u_qty, 2)
+                    
+                    cur.execute("""
+                        INSERT INTO trades (symbol, side, quantity, price, total, pnl, pnl_pct, reason, created_at, exit_time)
+                        VALUES (?, 'SELL', ?, ?, ?, ?, ?, 'BROKER_LIQUIDATION_RECONCILED: Unmatched broker fill', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """, (u_sym, u_qty, exit_p, total_amt, pnl_amt, pnl_pct))
+                    
+                    try:
+                        from notification import get_notifier
+                        from telegram_receipt import TelegramReceiptGenerator
+                        notifier = get_notifier()
+                        receipt_msg = TelegramReceiptGenerator.format_sell_receipt(
+                            symbol=u_sym,
+                            quantity=u_qty,
+                            entry_price=u_buy_price,
+                            exit_price=exit_p,
+                            reason="TRAILING_STOP_LOCK (브로커 체결 정산 완료)"
+                        )
+                        notifier.send(receipt_msg)
+                        logger.info("🔔 [RECONCILIATION_NOTIFIER] Auto-reconciled missing SELL trade for {}", u_sym)
+                    except Exception as _notif_err:
+                        logger.debug("Reconciliation error for {}: {}", u_sym, _notif_err)
+        except Exception as _extra_err:
+            logger.debug("Extra unmatched BUY audit skipped: {}", _extra_err)
+
         conn.commit()
         conn.close()
 
