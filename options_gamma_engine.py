@@ -254,7 +254,7 @@ class OptionsGammaEngine:
                 "symbol": symbol,
                 "current_price": round(current_price, 2),
                 "net_gex_millions": round(net_gex, 2),
-                "total_open_interest": int(total_oi),
+                "total_open_interest": int(total_contracts),
                 "is_thin_options": is_thin,
                 "call_wall": round(call_wall, 2),
                 "put_wall": round(put_wall, 2),
