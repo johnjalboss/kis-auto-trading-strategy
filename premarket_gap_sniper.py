@@ -34,7 +34,7 @@ class PreMarketGapSniper:
             try:
                 from universe import BASE_UNIVERSE, get_all_symbols
                 all_syms = get_all_symbols()
-                candidate_symbols = list(all_syms)[:350] if all_syms else list(BASE_UNIVERSE)
+                candidate_symbols = list(all_syms)[:600] if all_syms else list(BASE_UNIVERSE)
             except Exception:
                 candidate_symbols = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "AVGO", "AMD", "PLTR", "VRT", "LLY", "OKLO", "SMR", "CRWD", "CRM", "NOW", "SNPS", "VEEV", "OKTA"]
 
@@ -54,8 +54,8 @@ class PreMarketGapSniper:
         gaps_up = []
         gaps_down = []
         try:
-            chunk_size = 100
-            for i in range(0, min(len(candidate_symbols), 300), chunk_size):
+            chunk_size = 150
+            for i in range(0, min(len(candidate_symbols), 600), chunk_size):
                 chunk = candidate_symbols[i:i+chunk_size]
                 tickers_str = " ".join(chunk)
                 data = yf.download(tickers_str, period="5d", interval="1d", prepost=True, progress=False, threads=True)
@@ -126,7 +126,7 @@ class PreMarketGapSniper:
         lines = [
             "🚀 <b>[실시간 급등락 특이갭 & 어닝 서프라이즈 레이더]</b>",
             "━━━━━━━━━━━━━━━━━━━",
-            f"⏱ <b>스캔시각:</b> <code>{now_str}</code> (350+ 전 종목 실시간 스캔)\n",
+            f"⏱ <b>스캔시각:</b> <code>{now_str}</code> (600+ 유동성 주도주 실시간 스캔)\n",
             "🔥 <b>[급등 특이갭 Top 5 (상승 돌파)]</b>"
         ]
 
