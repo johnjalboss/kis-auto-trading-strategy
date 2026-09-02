@@ -1601,10 +1601,11 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 연준 순유동성 조회 실패: {e}")
 
     def _handle_options_gex(self):
-        """옵션 감마 익스포저(GEX) & Call/Put Wall 리포트 조회"""
+        """옵션 감마 익스포저(GEX) & Call/Put Wall 리포트 조회 (지수 및 핵심 주도주 다중 레이더)"""
         try:
-            from options_gamma_engine import OptionsGammaEngine
-            card = OptionsGammaEngine().format_telegram_card("SPY")
+            from dealer_gex_radar import get_dealer_gex_radar
+            positions = self._get_positions_dict()
+            card = get_dealer_gex_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed options GEX handler: {}", e)
