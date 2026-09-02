@@ -128,11 +128,12 @@ class RealTimeEconomicSurpriseReactor:
             spy_t = yf.Ticker("SPY")
             h = spy_t.history(period="1y", interval="1d")
             if not h.empty and len(h) >= 50:
-                cur_spy = float(h['Close'].iloc[-1])
-                sma50 = float(h['Close'].rolling(50).mean().iloc[-1])
+                close_vals = h['Close'].values
+                cur_spy = float(close_vals[-1])
+                sma50 = float(h['Close'].rolling(50).mean().values[-1])
                 spy_above_50 = bool(cur_spy >= sma50)
                 if len(h) >= 200:
-                    sma200 = float(h['Close'].rolling(200).mean().iloc[-1])
+                    sma200 = float(h['Close'].rolling(200).mean().values[-1])
                     spy_above_200 = bool(cur_spy >= sma200)
         except Exception:
             pass

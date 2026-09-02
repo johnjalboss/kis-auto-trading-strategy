@@ -33,7 +33,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
         cal = calendar.monthcalendar(y, m)
         prev_m = m - 1 if m > 1 else 12
         
-        # 1. ISM Manufacturing PMI (Day 1 or next business day)
+        # 1. ISM Manufacturing PMI (1st business day)
         ism_mfg_day = 1
         while date(y, m, ism_mfg_day).weekday() >= 5:
             ism_mfg_day += 1
@@ -44,28 +44,54 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "PMI"
         })
 
-        # 2. Non-Farm Payrolls (NFP) & Unemployment: First Friday of each month
-        first_fri = cal[0][4] if cal[0][4] != 0 else cal[1][4]
+        # 2. ADP Non-Farm Employment (First Wednesday) & JOLTS Job Openings
+        wednesdays = [week[2] for week in cal if week[2] != 0]
+        first_wed = wednesdays[0]
+        events.append({
+            "date": date(y, m, first_wed).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 ADP 민간 비농업 고용보고서",
+            "impact": "HIGH",
+            "type": "ADP_NFP"
+        })
+        events.append({
+            "date": date(y, m, first_wed).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 JOLTS 구인·이직 보고서 (구인건수)",
+            "impact": "HIGH",
+            "type": "JOLTS"
+        })
+
+        # 3. ISM Services PMI (3rd business day)
+        biz_days = [d for d in range(1, 32) if d <= calendar.monthrange(y, m)[1] and date(y, m, d).weekday() < 5]
+        ism_svc_day = biz_days[2] if len(biz_days) >= 3 else biz_days[-1]
+        events.append({
+            "date": date(y, m, ism_svc_day).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 ISM 서비스업 PMI",
+            "impact": "MEDIUM",
+            "type": "PMI"
+        })
+
+        # 4. Official Non-Farm Payrolls (NFP) & Unemployment: First Friday of each month (BLS)
+        fridays = [week[4] for week in cal if week[4] != 0]
+        first_fri = fridays[0]
         nfp_date = date(y, m, first_fri)
         events.append({
             "date": nfp_date.strftime("%Y-%m-%d"),
-            "name": f"미국 {prev_m}월 비농업 고용보고서 (NFP)",
-            "impact": "HIGH",
+            "name": f"미국 {prev_m}월 노동부 공식 비농업 고용보고서 (NFP) & 실업률",
+            "impact": "CRITICAL",
             "type": "NFP"
         })
 
-        # 3. CPI: Second Wednesday of each month
-        wednesdays = [week[2] for week in cal if week[2] != 0]
+        # 5. CPI: Second Wednesday of each month
         second_wed = wednesdays[1] if len(wednesdays) > 1 else wednesdays[0]
         cpi_date = date(y, m, second_wed)
         events.append({
             "date": cpi_date.strftime("%Y-%m-%d"),
             "name": f"미국 {prev_m}월 CPI (소비자물가지수)",
-            "impact": "HIGH",
+            "impact": "CRITICAL",
             "type": "CPI"
         })
 
-        # 4. PPI: Day after CPI (2nd Thursday)
+        # 6. PPI: Day after CPI (2nd Thursday)
         thursdays = [week[3] for week in cal if week[3] != 0]
         second_thu = thursdays[1] if len(thursdays) > 1 else thursdays[0]
         events.append({
@@ -75,7 +101,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "PPI"
         })
 
-        # 5. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
+        # 7. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
         if m in [1, 3, 5, 6, 7, 9, 11, 12]:
             third_wed = wednesdays[2] if len(wednesdays) > 2 else wednesdays[-1]
             fomc_date = date(y, m, third_wed)
@@ -86,8 +112,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
                 "type": "FOMC"
             })
 
-        # 6. Monthly Options Expiration (OpEx / Gamma Pin): 3rd Friday of every month
-        fridays = [week[4] for week in cal if week[4] != 0]
+        # 8. Monthly Options Expiration (OpEx / Gamma Pin): 3rd Friday of every month
         third_fri = fridays[2] if len(fridays) > 2 else fridays[-1]
         is_quad = m in [3, 6, 9, 12]
         opex_name = f"미국 {m}월 쿼드러플 위칭데이 (선물옵션 동시만기)" if is_quad else f"미국 {m}월 월간 옵션 만기일 (OpEx)"
@@ -98,7 +123,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "OPEX"
         })
 
-        # 7. GDP Growth Rate (Last Thursday of the month)
+        # 9. GDP Growth Rate (Last Thursday of the month)
         last_thu = thursdays[-1]
         events.append({
             "date": date(y, m, last_thu).strftime("%Y-%m-%d"),
@@ -107,12 +132,12 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "GDP"
         })
 
-        # 8. Core PCE Price Index (Last Friday of the month - Fed's #1 Favorite Gauge)
+        # 10. Core PCE Price Index (Last Friday of the month - Fed's #1 Favorite Gauge)
         last_fri = fridays[-1]
         events.append({
             "date": date(y, m, last_fri).strftime("%Y-%m-%d"),
             "name": f"미국 {prev_m}월 근원 PCE 물가지수 (연준 최선호)",
-            "impact": "HIGH",
+            "impact": "CRITICAL",
             "type": "PCE"
         })
 
