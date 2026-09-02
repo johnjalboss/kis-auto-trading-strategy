@@ -120,8 +120,8 @@ class OptionsGammaEngine:
                 # Synthetic model fallback for non-optionable / API fallback
                 return self._generate_synthetic_gex(symbol, current_price)
 
-            # Analyze nearest 5 standard monthly/weekly expirations for full institutional GEX
-            target_exps = expirations[:5]
+            # Analyze nearest 8 standard monthly/weekly expirations for full institutional GEX
+            target_exps = expirations[:8]
             all_calls = []
             all_puts = []
 
@@ -132,16 +132,18 @@ class OptionsGammaEngine:
                 try:
                     chain = ticker.option_chain(exp_str)
                     exp_dt = datetime.strptime(exp_str, "%Y-%m-%d")
-                    T = max(0.002, (exp_dt - today).days / 365.0)
+                    T = max(0.005, (exp_dt - today).days / 365.0)
 
                     if chain.calls is not None and not chain.calls.empty:
-                        c_df = chain.calls[['strike', 'openInterest', 'impliedVolatility']].copy()
+                        c_df = chain.calls.copy()
                         c_df['T'] = T
+                        c_df['exp_str'] = exp_str
                         all_calls.append(c_df)
 
                     if chain.puts is not None and not chain.puts.empty:
-                        p_df = chain.puts[['strike', 'openInterest', 'impliedVolatility']].copy()
+                        p_df = chain.puts.copy()
                         p_df['T'] = T
+                        p_df['exp_str'] = exp_str
                         all_puts.append(p_df)
                 except Exception as e:
                     logger.debug("Option chain fetch error for {} exp {}: {}", symbol, exp_str, e)
@@ -152,30 +154,34 @@ class OptionsGammaEngine:
             df_calls = pd.concat(all_calls, ignore_index=True) if all_calls else pd.DataFrame()
             df_puts = pd.concat(all_puts, ignore_index=True) if all_puts else pd.DataFrame()
 
-            # Clean and fill
+            # Clean and calculate effective open interest (OI or Volume-weighted proxy)
             for df in [df_calls, df_puts]:
                 if not df.empty:
-                    df['openInterest'] = df['openInterest'].fillna(0).astype(float)
+                    df['oi'] = df['openInterest'].fillna(0).astype(float) if 'openInterest' in df.columns else 0.0
+                    df['vol'] = df['volume'].fillna(0).astype(float) if 'volume' in df.columns else 0.0
+                    df['eff_contracts'] = np.maximum(df['oi'], df['vol'] * 0.40)
                     df['impliedVolatility'] = df['impliedVolatility'].fillna(0.20).clip(lower=0.05, upper=2.0)
 
             # Calculate Dollar Gamma ($GEX in Millions)
             call_gex_by_strike = {}
             put_gex_by_strike = {}
 
-            # Filter strikes near current price (+/- 15%) for accurate institutional walls
-            lower_k = current_price * 0.85
-            upper_k = current_price * 1.15
+            # Filter strikes near current price (+/- 20%) for accurate institutional walls
+            lower_k = current_price * 0.80
+            upper_k = current_price * 1.20
 
             if not df_calls.empty:
                 for _, row in df_calls.iterrows():
                     k = float(row['strike'])
                     if not (lower_k <= k <= upper_k):
                         continue
-                    oi = float(row['openInterest'])
+                    contracts = float(row['eff_contracts'])
+                    if contracts <= 0:
+                        continue
                     sigma = float(row['impliedVolatility'])
                     t = float(row['T'])
                     g = self._bs_gamma(current_price, k, t, r, sigma)
-                    dollar_g = (g * current_price * oi * 100 * current_price * 0.01) / 1e6
+                    dollar_g = (g * current_price * contracts * 100 * current_price * 0.01) / 1e6
                     call_gex_by_strike[k] = call_gex_by_strike.get(k, 0.0) + dollar_g
 
             if not df_puts.empty:
@@ -183,30 +189,32 @@ class OptionsGammaEngine:
                     k = float(row['strike'])
                     if not (lower_k <= k <= upper_k):
                         continue
-                    oi = float(row['openInterest'])
+                    contracts = float(row['eff_contracts'])
+                    if contracts <= 0:
+                        continue
                     sigma = float(row['impliedVolatility'])
                     t = float(row['T'])
                     g = self._bs_gamma(current_price, k, t, r, sigma)
-                    dollar_g = (g * current_price * oi * 100 * current_price * 0.01) / 1e6
-                    put_gex_by_strike[k] = put_gex_by_strike.get(k, 0.0) - dollar_g
+                    dollar_g = (g * current_price * contracts * 100 * current_price * 0.01) / 1e6
+                    put_gex_by_strike[k] = put_gex_by_strike.get(k, 0.0) + dollar_g
 
             # Compute Call Wall (Highest Call GEX strictly above spot) and Put Wall (Highest Put GEX strictly below spot)
-            calls_above = {k: v for k, v in call_gex_by_strike.items() if k >= current_price * 1.003}
-            puts_below = {k: abs(v) for k, v in put_gex_by_strike.items() if k <= current_price * 0.997}
+            calls_above = {k: v for k, v in call_gex_by_strike.items() if k >= current_price * 1.002}
+            puts_below = {k: v for k, v in put_gex_by_strike.items() if k <= current_price * 0.998}
 
             call_wall = max(calls_above, key=calls_above.get) if calls_above else round(current_price * 1.045, 2)
             put_wall = max(puts_below, key=puts_below.get) if puts_below else round(current_price * 0.955, 2)
 
             total_call_gex = sum(call_gex_by_strike.values())
             total_put_gex = sum(put_gex_by_strike.values())
-            net_gex = total_call_gex + total_put_gex  # in $ Millions
+            net_gex = total_call_gex - total_put_gex  # in $ Millions
 
             # Gamma Flip Level (Approximation where cumulative net gamma crosses zero)
             all_strikes = sorted(set(list(call_gex_by_strike.keys()) + list(put_gex_by_strike.keys())))
             cum_gex = 0.0
             gamma_flip = round(current_price, 2)
             for k in all_strikes:
-                cum_gex += call_gex_by_strike.get(k, 0.0) + put_gex_by_strike.get(k, 0.0)
+                cum_gex += call_gex_by_strike.get(k, 0.0) - put_gex_by_strike.get(k, 0.0)
                 if cum_gex >= 0:
                     gamma_flip = round(k, 2)
                     break
@@ -224,15 +232,23 @@ class OptionsGammaEngine:
 
             days_to_fri = (4 - today_et.weekday()) % 7
             default_fri = (today_et + timedelta(days=days_to_fri if days_to_fri > 0 else 7)).strftime("%Y-%m-%d")
+            
+            # Select target expiration with significant volume (prefer next weekly or monthly)
             nearest_exp = target_exps[0] if target_exps else default_fri
+            for exp_c in target_exps:
+                exp_c_obj = datetime.strptime(exp_c, "%Y-%m-%d").date()
+                if (exp_c_obj - today_et).days >= 2:
+                    nearest_exp = exp_c
+                    break
+
             try:
                 exp_date_obj = datetime.strptime(nearest_exp, "%Y-%m-%d").date()
                 dte_calc = max(0, (exp_date_obj - today_et).days)
             except Exception:
                 dte_calc = max(0, days_to_fri)
 
-            total_oi = float(df_calls['openInterest'].sum() + df_puts['openInterest'].sum()) if not df_calls.empty or not df_puts.empty else 0.0
-            is_thin = total_oi < 150.0
+            total_contracts = float(df_calls['eff_contracts'].sum() + df_puts['eff_contracts'].sum()) if not df_calls.empty or not df_puts.empty else 0.0
+            is_thin = total_contracts < 200.0
 
             result = {
                 "symbol": symbol,
