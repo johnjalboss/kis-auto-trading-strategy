@@ -131,7 +131,7 @@ class AINewsSentimentEngine:
         return sig
 
     def format_telegram_card(self, symbols: List[str] = None) -> str:
-        # Dynamic active portfolio detection
+        # Dynamic active portfolio & screener candidate detection
         if not symbols:
             try:
                 from trader import Trader
@@ -141,14 +141,21 @@ class AINewsSentimentEngine:
             except Exception:
                 pass
 
-        is_holding_list = bool(symbols)
-        syms = symbols if symbols else ["NVDA", "AAPL", "MSFT", "AMZN"]
-        header_title = "실보유 포지션 AI 뉴스 분석" if is_holding_list else "시장 대표 주도주 AI 뉴스 분석"
+        if not symbols:
+            try:
+                from universe import BASE_UNIVERSE
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"]
+            except Exception:
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"]
+
+        is_holding_list = bool(symbols and any(s not in ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"] for s in symbols))
+        syms = symbols[:6]
+        header_title = "실보유 포지션 AI 뉴스 분석" if is_holding_list else "실시간 시장 주도주 AI 뉴스 분석"
 
         lines = [
             f"📰 <b>[AI 실시간 뉴스 센티멘트 & 애널리스트 레이더 ({header_title})]</b>",
             "━━━━━━━━━━━━━━━━━━━",
-            "💡 <i>월가 실시간 뉴스 헤드라인과 애널리스트 투자의견 변동을 자연어(NLP)로 분석합니다.</i>",
+            "💡 <i>월가 실시간 뉴스 헤드라인과 애널리스트 투자의견 변동을 자연어(NLP)로 실시간 분석합니다.</i>",
             ""
         ]
 
@@ -157,15 +164,30 @@ class AINewsSentimentEngine:
             res = self.analyze_ticker(s)
             total_bonus += res.score_adjustment
             score_color = "🟢" if res.sentiment_score >= 0.70 else ("🟡" if res.sentiment_score >= 0.50 else "🔴")
+            
+            # Situational dynamic data interpretation
+            if res.sentiment_score >= 0.70:
+                data_meaning = "실적 호조 및 목표가 상향 리포트 집중 (강력 매수 모멘텀)"
+            elif res.sentiment_score >= 0.50:
+                data_meaning = "특별한 악재 없는 안정적 순항 흐름 (정상 분할 매매 가능)"
+            else:
+                data_meaning = "목표가 하향 및 노이즈 경고 (신규 진입 신중/보류)"
+
             lines.append(
                 f"• <b>{s}</b> {score_color} (<b>{res.consensus_rating}</b> / 감성점수: <b>{res.sentiment_score:+.2f}</b>)\n"
                 f"  - 애널리스트 상향: <b>+{res.analyst_upgrades}건</b> (최근 30일)\n"
                 f"  - 핵심 뉴스: <i>\"{res.key_headline}\"</i>\n"
-                f"  - 퀀트 가점: <b>+{res.score_adjustment}pt</b>\n"
+                f"  - 💡 <b>데이터 의미:</b> <i>{data_meaning}</i> (가점 <b>+{res.score_adjustment}pt</b>)\n"
             )
 
         capped_bonus = min(15, total_bonus)
-        lines.append(f"⚡ <b>[알고리즘 종합 영향]</b>: 총 <b>+{capped_bonus}pt</b> 뉴스 센티멘트 가산점 (상한 15pt 철저 통제)")
+        lines.append(f"⚡ <b>[알고리즘 종합 영향]</b>: 총 <b>+{capped_bonus}pt</b> 뉴스 센티멘트 가산점 (상한 15pt 철저 통제)\n")
+        lines.append(
+            "📖 <b>[뉴스 센티멘트 데이터 직관적 해석 가이드]</b>\n"
+            "• <b>감성점수 +0.70 이상 (🟢 STRONG_BUY)</b>: 월가 기관 리포트와 호재가 쏟아지는 구간 ➔ <b>[+6pt 가산]</b>\n"
+            "• <b>감성점수 +0.40 ~ +0.69 (🟡 HOLD)</b>: 뉴스 노이즈 없는 정상 시장 흐름 ➔ <b>[중립/정상 가동]</b>\n"
+            "• <b>감성점수 +0.39 이하 (🔴 BEARISH)</b>: 실적 쇼크/소송/하향 조정 경고 ➔ <b>[-6pt 감점 및 매수 보류]</b>"
+        )
         return "\n".join(lines)
 
 

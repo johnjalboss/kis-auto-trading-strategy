@@ -178,30 +178,53 @@ class SmartMoneyFootprint:
             except Exception:
                 pass
 
-        syms = symbols if symbols and len(symbols) > 0 else ["NVDA", "AAPL", "MSFT", "SPY"]
+        if not symbols:
+            try:
+                from universe import BASE_UNIVERSE
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "SPY"]
+            except Exception:
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "SPY"]
+
+        syms = symbols[:6]
         lines = []
         has_over_100 = False
         for s in syms:
             res = self.analyze_ticker(s)
-            if res.get("institutional_pct", 0) >= 100.0:
+            inst_p = res.get("institutional_pct", 50.0)
+            if inst_p >= 100.0:
                 has_over_100 = True
             bonus_str = f"+{res['bonus_points']:.1f}pt" if res['bonus_points'] >= 0 else f"{res['bonus_points']:.1f}pt"
+            
+            # Situational data interpretation
+            if inst_p >= 75.0:
+                sit_interp = "월가 메가 기관들이 유통주식을 거의 잠가놓아 상승 탄력이 매우 높은 상태"
+            elif inst_p >= 50.0:
+                sit_interp = "기관 지분이 안정적으로 유지되어 개인 세력의 투매 충격을 방어하는 상태"
+            else:
+                sit_interp = "개인 거래 비중이 높아 변동성이 클 수 있으므로 분할 매매로 접근"
+
             lines.append(
-                f"• <b>{s}</b> (수학적 퀀트 가산점: <code>{bonus_str}</code>)\n"
+                f"• <b>{s}</b> (수학적 가산점: <code>{bonus_str}</code>)\n"
                 f"  📊 {res['summary']}\n"
-                f"  🏷️ <i>{res['signal_tag']}</i>"
+                f"  🏷️ <i>{res['signal_tag']}</i>\n"
+                f"  💡 <b>데이터 의미:</b> <i>{sit_interp}</i>"
             )
 
         footnote = (
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 <i>단순 공매도가 높은 종목은 감점(-3.5pt)하며, 오직 20일선 위에서 강력한 모멘텀이 확인된 종목만 숏스퀴즈 가산점(+3.0pt)을 부여합니다.</i>"
+            f"📖 <b>[스마트머니 데이터 직관적 해석 가이드]</b>\n"
+            f"• <b>기관 지분율(13F) 55%~80%</b>: 기관이 물량을 틀어쥐어 하방 지지력이 가장 단단한 <b>'황금 지분율'</b>입니다.\n"
+            f"• <b>숏 비율 10% 이상 + 20일선 위</b>: 공매도 세력이 갇혀 주가 상승 시 <b>숏스퀴즈(강제 환매수 폭등 +3.0pt)</b>가 발생합니다."
         )
         if has_over_100:
             footnote = (
                 f"━━━━━━━━━━━━━━━━━━━\n"
                 f"ℹ️ <b>[기관 지분 100% 초과 & 숏스퀴즈 판정 원리]</b>\n"
                 f"• <b>13F 이중 계산</b>: 대형 기관이 주식을 대여해주고 공매도자가 이를 시장에 재매도하여 다른 기관이 매수하면 SEC 13F상 양쪽 모두 집계됩니다.\n"
-                f"• <b>비대칭 퀀트 필터</b>: 20일선 하락 추세에서는 공매도 압박으로 <b>감점(-3.5pt)</b> 처리하며, <b>20일선 위에서 상방 돌파할 때만 숏스퀴즈 폭발 가산점(+3.0pt)</b>을 부여합니다."
+                f"• <b>비대칭 퀀트 필터</b>: 20일선 하락 추세에서는 공매도 압박으로 <b>감점(-3.5pt)</b> 처리하며, <b>20일선 위에서 상방 돌파할 때만 숏스퀴즈 폭발 가산점(+3.0pt)</b>을 부여합니다.\n\n"
+                f"📖 <b>[스마트머니 데이터 직관적 해석 가이드]</b>\n"
+                f"• <b>기관 지분율(13F) 55%~80%</b>: 하방 지지력이 가장 단단한 <b>'황금 지분율'</b>입니다.\n"
+                f"• <b>숏 비율 10% 이상 + 20일선 위</b>: <b>숏스퀴즈 폭등(+3.0pt)</b> 후보입니다."
             )
 
         card = (
