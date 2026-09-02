@@ -238,7 +238,8 @@ class AutoTuningEngine:
 
             by_cluster = {}
             for c_name in ["HIGH_VOL_GROWTH", "MID_VOL_MOMENTUM", "LOW_VOL_DEFENSIVE"]:
-                c_rows = [r for r in rows if (r['cluster'] or 'MID_VOL_MOMENTUM') == c_name]
+                prefix = c_name.split("_")[0] + "_VOL"
+                c_rows = [r for r in rows if str(r['cluster'] or '').startswith(prefix) or (r['cluster'] == c_name)]
                 c_early = [r for r in c_rows if r['evaluation'] == 'EARLY_EXIT_MISSED_RALLY']
                 c_avoid = [r for r in c_rows if r['evaluation'] == 'PERFECT_EXIT_AVOIDED_DROP']
                 c_avg = sum(float(r['post_exit_return_pct'] or 0.0) for r in c_rows) / len(c_rows) if c_rows else 0.0
