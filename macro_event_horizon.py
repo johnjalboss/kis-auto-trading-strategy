@@ -91,17 +91,35 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "CPI"
         })
 
-        # 6. PPI: Day after CPI (2nd Thursday)
+        # 6. PPI & Retail Sales (2nd Thursday / mid-month)
         thursdays = [week[3] for week in cal if week[3] != 0]
         second_thu = thursdays[1] if len(thursdays) > 1 else thursdays[0]
         events.append({
             "date": date(y, m, second_thu).strftime("%Y-%m-%d"),
-            "name": f"미국 {prev_m}월 PPI (생산자물가지수)",
-            "impact": "MEDIUM",
+            "name": f"미국 {prev_m}월 PPI (생산자물가지수) & 소매판매",
+            "impact": "HIGH",
             "type": "PPI"
         })
 
-        # 7. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
+        # 7. UMich Consumer Sentiment (2nd Friday & Final 4th Friday)
+        second_fri = fridays[1] if len(fridays) > 1 else fridays[0]
+        events.append({
+            "date": date(y, m, second_fri).strftime("%Y-%m-%d"),
+            "name": f"미국 {m}월 미시간대 소비자심리지수 (예비치)",
+            "impact": "MEDIUM",
+            "type": "SENTIMENT"
+        })
+
+        # 8. Weekly Initial Jobless Claims (Every Thursday in the month)
+        for thu_day in thursdays:
+            events.append({
+                "date": date(y, m, thu_day).strftime("%Y-%m-%d"),
+                "name": f"미국 주간 신규 실업수당 청구건수 (Jobless Claims)",
+                "impact": "MEDIUM",
+                "type": "CLAIMS"
+            })
+
+        # 9. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
         if m in [1, 3, 5, 6, 7, 9, 11, 12]:
             third_wed = wednesdays[2] if len(wednesdays) > 2 else wednesdays[-1]
             fomc_date = date(y, m, third_wed)
@@ -112,7 +130,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
                 "type": "FOMC"
             })
 
-        # 8. Monthly Options Expiration (OpEx / Gamma Pin): 3rd Friday of every month
+        # 10. Monthly Options Expiration (OpEx / Gamma Pin): 3rd Friday of every month
         third_fri = fridays[2] if len(fridays) > 2 else fridays[-1]
         is_quad = m in [3, 6, 9, 12]
         opex_name = f"미국 {m}월 쿼드러플 위칭데이 (선물옵션 동시만기)" if is_quad else f"미국 {m}월 월간 옵션 만기일 (OpEx)"
@@ -123,7 +141,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "OPEX"
         })
 
-        # 9. GDP Growth Rate (Last Thursday of the month)
+        # 11. GDP Growth Rate (Last Thursday of the month)
         last_thu = thursdays[-1]
         events.append({
             "date": date(y, m, last_thu).strftime("%Y-%m-%d"),
@@ -132,7 +150,7 @@ def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[
             "type": "GDP"
         })
 
-        # 10. Core PCE Price Index (Last Friday of the month - Fed's #1 Favorite Gauge)
+        # 12. Core PCE Price Index (Last Friday of the month - Fed's #1 Favorite Gauge)
         last_fri = fridays[-1]
         events.append({
             "date": date(y, m, last_fri).strftime("%Y-%m-%d"),
