@@ -4,6 +4,7 @@ import datetime
 import math
 from typing import List, Dict, Any, Optional
 import yfinance as yf
+import pandas as pd
 import numpy as np
 from loguru import logger
 
@@ -147,11 +148,23 @@ class PostExitTracker:
                     continue
 
                 try:
-                    df = yf.download(sym, period='1mo', progress=False)
+                    orig_yf = getattr(yf, '_original_yf_Ticker', yf.Ticker)
+                    ticker = orig_yf(sym)
+                    df = ticker.history(period='1mo', auto_adjust=True)
                     if df is None or df.empty:
                         continue
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = df.columns.get_level_values(0)
                     
-                    curr_price = float(df['Close'].values.flatten()[-1])
+                    curr_price = float(df['Close'].iloc[-1])
+                    try:
+                        fi = getattr(ticker, 'fast_info', {})
+                        lp = getattr(fi, 'last_price', None)
+                        if lp and float(lp) > 0:
+                            curr_price = float(lp)
+                    except Exception:
+                        pass
+
                     post_ret = ((curr_price / exit_price) - 1.0) * 100.0
                     
                     # 100% Mathematical NATR calculation
@@ -178,11 +191,11 @@ class PostExitTracker:
                     if z_score >= 1.8:
                         evaluation = 'EARLY_EXIT_MISSED_RALLY'
                         badge = '🔴 [조기 매도]'
-                        lesson = f'매도 후 {post_ret:+.1f}% 추가 폭등 (Z={z_score:+.2f}σ). {c_label} 고유 변동성 대비 과도한 조기 청산 복기.'
+                        lesson = f'매도 후 {post_ret:+.1f}% 추가 상승 (Z={z_score:+.2f}σ). {c_label} 고유 변동성 대비 익절 조기 청산 복기.'
                     elif z_score <= -1.4:
                         evaluation = 'PERFECT_EXIT_AVOIDED_DROP'
                         badge = '🟢 [손실 회피]'
-                        lesson = f'매도 후 {post_ret:+.1f}% 하락 방어 (Z={z_score:+.2f}σ). {c_label} 고점 탈출로 원금 완벽 보존.'
+                        lesson = f'매도 후 {post_ret:+.1f}% 추가 하락 방어 (Z={z_score:+.2f}σ). {c_label} 탈출로 추가 손실 방어 성공.'
                     else:
                         evaluation = 'OPTIMAL_ROTATION'
                         badge = '⚪ [적정 회전]'
@@ -238,7 +251,8 @@ class PostExitTracker:
         for item in tracked[:8]:
             sym = item['symbol']
             c_label = item['c_label']
-            pnl = item['realized_pnl_pct']
+            raw_pnl = item['realized_pnl_pct']
+            pnl = (raw_pnl * 100.0) if abs(raw_pnl) <= 1.0 else raw_pnl
             post_ret = item['post_exit_return_pct']
             z = item['z_score']
             badge = item['badge']
