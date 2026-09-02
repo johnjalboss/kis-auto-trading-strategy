@@ -143,9 +143,6 @@ class CongressionalTradeTracker:
                     f"  - 태그: <i>{ev.conviction_tag}</i>\n"
                     f"  - 정책 모멘텀: {ev.catalyst_impact}\n"
                 )
-        else:
-            lines.append("ℹ️ <i>현재 보유 중인 포지션 중 최근 의회 공시 일치 종목이 없습니다.</i>\n")
-
         if trades:
             lines.append("🌟 <b>[최근 30일 주요 공시 포착]</b>")
             for t in trades[:5]:
@@ -153,6 +150,12 @@ class CongressionalTradeTracker:
         else:
             lines.append("ℹ️ <i>최근 30일간 등록된 신규 의회 공시 매수가 없습니다. (정기 공시 대기 중)</i>")
 
+        lines.append(
+            "\n━━━━━━━━━━━━━━━━━━━\n"
+            "📖 <b>[미국 의원 매매 초보자 3초 이해 가이드]</b>\n"
+            "• <b>의원 매매(STOCK Act)란?</b>: 미국 상·하원 의원들이 법안 통과나 정책 수혜를 앞두고 <b>자신의 돈으로 직접 산 주식을 법적으로 강제 공개하는 공시</b>입니다.\n"
+            "• <b>왜 중요한가요?</b>: 정부 예산 집행이나 규제 완화 정보를 가장 먼저 아는 유력 정치인들의 매수는 <b>'강력한 정책 수혜와 장기 상승 보증수표'</b> 역할을 합니다."
+        )
         return "\n".join(lines)
 
 

@@ -358,7 +358,13 @@ class RealTimeEconomicSurpriseReactor:
             )
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
-        lines.append(f"⚡ <b>[실시간 운용 전략]</b>\n{data['strategy_description']}")
+        lines.append(f"⚡ <b>[실시간 운용 전략]</b>\n{data['strategy_description']}\n")
+        lines.append(
+            "📖 <b>[거시 팩터 점수 초보자 3초 이해 가이드]</b>\n"
+            "• <b>+40점 이상 (🟢 불장)</b>: 미국 경제/고용/기업 실적이 튼튼하여 주식을 적극 사도 안전한 국면\n"
+            "• <b>+10 ~ +39점 (⚖️ 횡보)</b>: 물가나 고금리 부담으로 방어적 분할 매매 진행\n"
+            "• <b>-20점 이하 (🚨 위기)</b>: 경기 침체 및 신용 위기 경고로 신규 매수를 100% 동결하고 현금화"
+        )
 
         return "\n".join(lines)
 

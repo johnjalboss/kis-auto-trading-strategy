@@ -164,7 +164,12 @@ class CBOEOptionsSentinel:
         for ins in sig.insights:
             lines.append(f"• {ins}")
 
-        lines.append("\n⚡ <i>CBOE 옵션 시장의 미결제약정과 SKEW를 추적하여 월가 큰손들의 하방 헤지 징후를 사전 포착합니다.</i>")
+        lines.append(
+            "\n📖 <b>[CBOE 옵션 초보자 3초 이해 가이드]</b>\n"
+            "• <b>풋/콜 비율(PCR)</b>: <code>0.7 이하</code>면 하락(풋)보다 상승(콜) 베팅이 훨씬 많아 <b>주가 상승에 유리한 환경</b>입니다.\n"
+            "• <b>SKEW 지수(블랙스완)</b>: <code>135 이하</code>면 월가 큰손들이 폭락 걱정 없이 편안하게 주식을 사는 <b>'안전 지대'</b>입니다. (145 이상이면 테일 리스크 방어 모드)\n"
+            "• <b>왜 중요한가요?</b>: 개미들은 주식만 보지만, 월가 거대 기관들은 옵션 시장에서 먼저 움직이기 때문에 미래 방향을 가장 먼저 알려줍니다."
+        )
         return "\n".join(lines)
 
 
