@@ -180,12 +180,11 @@ class SmartMoneyFootprint:
 
         if not symbols:
             try:
-                from universe import BASE_UNIVERSE
-                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "SPY"]
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL", "TSLA", "LLY", "SPY"]
             except Exception:
-                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "SPY"]
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL", "TSLA", "LLY", "SPY"]
 
-        syms = symbols[:6]
+        syms = symbols[:8]
         lines = []
         has_over_100 = False
         for s in syms:
@@ -197,16 +196,15 @@ class SmartMoneyFootprint:
             
             # Situational data interpretation
             if inst_p >= 75.0:
-                sit_interp = "월가 메가 기관들이 유통주식을 거의 잠가놓아 상승 탄력이 매우 높은 상태"
+                sit_interp = "월가 기관들이 물량을 잠가놓아 상승 탄력 최우수"
             elif inst_p >= 50.0:
-                sit_interp = "기관 지분이 안정적으로 유지되어 개인 세력의 투매 충격을 방어하는 상태"
+                sit_interp = "기관 지분이 안정적으로 유지되어 개인 투매 충격 방어"
             else:
-                sit_interp = "개인 거래 비중이 높아 변동성이 클 수 있으므로 분할 매매로 접근"
+                sit_interp = "개인 거래 비중 높아 변동성 대응 분할 매매"
 
             lines.append(
-                f"• <b>{s}</b> (수학적 가산점: <code>{bonus_str}</code>)\n"
-                f"  📊 {res['summary']}\n"
-                f"  🏷️ <i>{res['signal_tag']}</i>\n"
+                f"• <b>{s}</b> (가산점: <code>{bonus_str}</code>)\n"
+                f"  📊 지분 <b>{inst_p:.1f}%</b> | 숏 <b>{res.get('short_pct', 0.0):.1f}%</b> (DTC {res.get('days_to_cover', 0.0):.1f}일)\n"
                 f"  💡 <b>데이터 의미:</b> <i>{sit_interp}</i>"
             )
 

@@ -143,13 +143,12 @@ class AINewsSentimentEngine:
 
         if not symbols:
             try:
-                from universe import BASE_UNIVERSE
-                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"]
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "TSLA", "LLY", "CRWD"]
             except Exception:
-                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"]
+                symbols = ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "TSLA", "LLY", "CRWD"]
 
-        is_holding_list = bool(symbols and any(s not in ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "GOOGL"] for s in symbols))
-        syms = symbols[:6]
+        is_holding_list = bool(symbols and any(s not in ["NVDA", "AAPL", "MSFT", "PLTR", "AMZN", "TSLA", "LLY", "CRWD"] for s in symbols))
+        syms = symbols[:8]
         header_title = "실보유 포지션 AI 뉴스 분석" if is_holding_list else "실시간 시장 주도주 AI 뉴스 분석"
 
         lines = [
@@ -167,17 +166,16 @@ class AINewsSentimentEngine:
             
             # Situational dynamic data interpretation
             if res.sentiment_score >= 0.70:
-                data_meaning = "실적 호조 및 목표가 상향 리포트 집중 (강력 매수 모멘텀)"
+                data_meaning = "실적 호조 및 목표가 상향 집중 (강력 매수 모멘텀)"
             elif res.sentiment_score >= 0.50:
-                data_meaning = "특별한 악재 없는 안정적 순항 흐름 (정상 분할 매매 가능)"
+                data_meaning = "특별한 악재 없는 안정적 순항 (정상 매매 가능)"
             else:
-                data_meaning = "목표가 하향 및 노이즈 경고 (신규 진입 신중/보류)"
+                data_meaning = "목표가 하향 및 노이즈 경고 (신규 진입 신중)"
 
             lines.append(
-                f"• <b>{s}</b> {score_color} (<b>{res.consensus_rating}</b> / 감성점수: <b>{res.sentiment_score:+.2f}</b>)\n"
-                f"  - 애널리스트 상향: <b>+{res.analyst_upgrades}건</b> (최근 30일)\n"
-                f"  - 핵심 뉴스: <i>\"{res.key_headline}\"</i>\n"
-                f"  - 💡 <b>데이터 의미:</b> <i>{data_meaning}</i> (가점 <b>+{res.score_adjustment}pt</b>)\n"
+                f"• <b>{s}</b> {score_color} (<b>{res.consensus_rating}</b> | 상향 <b>+{res.analyst_upgrades}건</b> | 가점 <b>+{res.score_adjustment}pt</b>)\n"
+                f"   └ <i>\"{res.key_headline[:70]}\"</i>\n"
+                f"   └ 💡 <i>{data_meaning}</i>"
             )
 
         capped_bonus = min(15, total_bonus)

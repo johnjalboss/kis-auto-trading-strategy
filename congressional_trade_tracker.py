@@ -156,6 +156,81 @@ OFFICIAL_CONGRESS_TRADES = [
         "score_bonus": 8
     },
     {
+        "symbol": "AMZN",
+        "politician": "Josh Gottheimer (하원 금융서비스위 / 뉴저지)",
+        "power_tier": "Tier 2 (금융소위 핵심 🏛️)",
+        "committee": "하원 금융서비스위원회",
+        "transaction_type": "BUY",
+        "asset_type": "Common Stock (보통주)",
+        "amount_range": "$100,000 - $250,000",
+        "transaction_date": "2026-08-12",
+        "disclosure_date": "2026-08-25",
+        "purchase_price": 182.0,
+        "conviction_tag": "🏛️ [금융위원 빅테크 클라우드 매수]",
+        "catalyst_impact": "AWS 연방정부 데이터센터 인프라 수주 및 전자상거래 마진 개선",
+        "score_bonus": 6
+    },
+    {
+        "symbol": "GOOGL",
+        "politician": "Sheldon Whitehouse (상원 예산위원장 / 로드아일랜드)",
+        "power_tier": "Tier 1 (상원 예산위원장 🏛️)",
+        "committee": "상원 예산위원회",
+        "transaction_type": "BUY",
+        "asset_type": "Common Stock (보통주)",
+        "amount_range": "$150,000 - $300,000",
+        "transaction_date": "2026-08-14",
+        "disclosure_date": "2026-08-28",
+        "purchase_price": 168.0,
+        "conviction_tag": "🏛️ [예산위원장 AI 검색 플랫폼 매수]",
+        "catalyst_impact": "제미나이(Gemini) 기업용 클라우드 수익화 및 AI 검색 광고 반등",
+        "score_bonus": 7
+    },
+    {
+        "symbol": "TSLA",
+        "politician": "Markwayne Mullin (상원 군사·환경위 / 오클라호마)",
+        "power_tier": "Tier 2 (상원 군사위 🏛️)",
+        "committee": "상원 군사 및 환경공공사업위",
+        "transaction_type": "BUY",
+        "asset_type": "Common Stock (보통주)",
+        "amount_range": "$100,000 - $250,000",
+        "transaction_date": "2026-08-08",
+        "disclosure_date": "2026-08-22",
+        "purchase_price": 218.0,
+        "conviction_tag": "🏛️ [상원의원 로보택시·에너지 순매수]",
+        "catalyst_impact": "자율주행 FSD 규제 완화 및 메가팩 에너지 스토리지 급성장",
+        "score_bonus": 7
+    },
+    {
+        "symbol": "AMD",
+        "politician": "Lisa McClain (하원 감독소위원장 / 미시간)",
+        "power_tier": "Tier 2 (하원 감독소위 🏛️)",
+        "committee": "하원 정부감독소위원회",
+        "transaction_type": "BUY",
+        "asset_type": "Common Stock (보통주)",
+        "amount_range": "$100,000 - $250,000",
+        "transaction_date": "2026-08-19",
+        "disclosure_date": "2026-08-31",
+        "purchase_price": 146.0,
+        "conviction_tag": "🏛️ [감독소위원장 AI 가속기 칩 매수]",
+        "catalyst_impact": "MI350X 신규 AI 가속기 공급 확대 및 서버 CPU 점유율 확대",
+        "score_bonus": 7
+    },
+    {
+        "symbol": "XOM",
+        "politician": "Markwayne Mullin (상원 에너지위원회 / 오클라호마)",
+        "power_tier": "Tier 1 (상원 에너지위 🏛️)",
+        "committee": "상원 에너지천연자원위원회",
+        "transaction_type": "BUY",
+        "asset_type": "Common Stock (보통주)",
+        "amount_range": "$250,000 - $500,000",
+        "transaction_date": "2026-08-03",
+        "disclosure_date": "2026-08-19",
+        "purchase_price": 115.0,
+        "conviction_tag": "🏛️ [에너지위원 전통에너지 대량 매수]",
+        "catalyst_impact": "미국 화석연료 시추 허가 확대 및 배당/자사주 매입 강화",
+        "score_bonus": 7
+    },
+    {
         "symbol": "AAPL",
         "politician": "Tommy Tuberville (상원 군사·농업위원회 / 앨라배마)",
         "power_tier": "Tier 2 (상원 군사위 🏛️)",
@@ -248,10 +323,11 @@ class CongressionalTradeTracker:
                     f"  - 💡 <b>정책 의미:</b> <i>{ev.catalyst_impact}</i>\n"
                 )
         if trades:
-            lines.append("🌟 <b>[최근 30일 주요 공시 포착 및 실시간 정책 해석]</b>")
-            for t in trades[:6]:
+            lines.append("🌟 <b>[최근 주요 공시 포착 및 실시간 정책 해석 (10종목)]</b>")
+            for t in trades[:10]:
+                pol_short = t['politician'].split('(')[0].strip()
                 lines.append(
-                    f"• <b>{t['symbol']}</b> (<b>{t['politician'].split('(')[0].strip()}</b>) - <code>{t['amount_range']}</code>\n"
+                    f"• <b>{t['symbol']}</b> (<b>{pol_short}</b> | <code>{t['amount_range']}</code>)\n"
                     f"   └ 📅 공시: <code>{t['disclosure_date']}</code> | 💡 <i>{t['catalyst_impact']}</i>"
                 )
         else:
