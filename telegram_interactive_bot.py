@@ -1058,12 +1058,11 @@ class TelegramInteractiveBot:
             candidate_pool = []
             theme_meta = {}
 
-            # 1. 오케스트레이터 실시간 스크리너 타겟 유니버스 (3,000+ 미국 전수 시장 스크리닝 결과)
-            if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
-                if hasattr(self.orchestrator.state, 'target_universe') and self.orchestrator.state.target_universe:
-                    for s in self.orchestrator.state.target_universe:
-                        if s and s not in candidate_pool:
-                            candidate_pool.append(s)
+            # 1. 미국 8대 핵심 섹터별 주도 대장주 우선 구성 (섹터 쏠림 방지 및 직교 다변화)
+            priority_cands = ["NVDA", "PLTR", "LLY", "CEG", "WMB", "CRWD", "LMT", "COIN"]
+            for sym in priority_cands:
+                if sym not in candidate_pool:
+                    candidate_pool.append(sym)
 
             # 2. 테마 레이더 실시간 주도 테마 탑픽 수집
             try:
@@ -1082,11 +1081,12 @@ class TelegramInteractiveBot:
             except Exception as _tr_err:
                 logger.debug("Theme radar fetch in top picks: {}", _tr_err)
 
-            # 3. 미국 핵심 주도주 및 유망 테마주 수집 (초고속 실시간 채점)
-            fast_cands = ["NVDA", "PLTR", "LLY", "CEG", "CRWD", "LMT", "AVGO", "COIN"]
-            for sym in fast_cands:
-                if sym not in candidate_pool:
-                    candidate_pool.append(sym)
+            # 3. 오케스트레이터 실시간 스크리너 타겟 유니버스 (3,000+ 미국 전수 시장 스크리닝 결과)
+            if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
+                if hasattr(self.orchestrator.state, 'target_universe') and self.orchestrator.state.target_universe:
+                    for s in self.orchestrator.state.target_universe:
+                        if s and s not in candidate_pool:
+                            candidate_pool.append(s)
 
             # 4. 현재 보유 종목 추가 (보유주와 시장 주도주 상대 비교용)
             for sym in holding_syms:
@@ -1121,8 +1121,8 @@ class TelegramInteractiveBot:
                     return None
 
             scored_candidates = []
-            target_list = candidate_pool[:5]
-            with ThreadPoolExecutor(max_workers=5) as ex:
+            target_list = candidate_pool[:6]
+            with ThreadPoolExecutor(max_workers=6) as ex:
                 results = list(ex.map(_score_single, target_list))
                 scored_candidates = [r for r in results if r is not None]
 
