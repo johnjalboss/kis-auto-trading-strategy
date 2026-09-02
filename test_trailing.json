@@ -1,8 +1,0 @@
-{
-  "AAPL": {
-    "entry_price": 150.0,
-    "highest_price": 165,
-    "stop_pct": 0.03,
-    "created_at": "2026-02-07T16:40:14.256992"
-  }
-}

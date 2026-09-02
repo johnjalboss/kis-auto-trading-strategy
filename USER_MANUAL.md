@@ -1,4 +1,4 @@
-﻿# 🚀 KIS 미국주식 SOTA 퀀트 자동매매 시스템 완벽 사용설명서
+# 🚀 KIS 미국주식 SOTA 퀀트 자동매매 시스템 완벽 사용설명서
 > **초보자도 3분 만에 마스터하는 24시간 완전 무인 인공지능 자산 증식 가이드**
 
 ---
@@ -185,6 +185,134 @@ FINNHUB_API_KEY=your_finnhub_api_key_here
 > pkill -f telegram_interactive_bot.py
 > nohup python -u telegram_interactive_bot.py > bot.log 2>&1 &
 > ```
+
+---
+## 8. ☁️ 오라클 클라우드 VPS 설정 및 배포 가이드
+
+### 8.1 Oracle Cloud 계정 만들기
+1. https://cloud.oracle.com/ 에 회원가입 → Free Tier 선택 (VM.Standard.E2.1.Micro 등 무료 인스턴스).
+2. 콘솔 → **Compute → Instances** 로 이동 → **Create Instance** 클릭.
+3. 이름 지정 (예: `kis-trading-bot`), 이미지 → **Ubuntu 22.04** 선택.
+4. Shape → **VM.Standard.E2.1.Micro** (무료).  
+5. **SSH Keys** 섹션에서 공개키(`~/.ssh/id_rsa.pub`)를 붙여넣고 **Create**.
+
+### 8.2 SSH 키 생성 및 로컬에 저장
+```bash
+# 로컬 (Windows) PowerShell에서
+ssh-keygen -t rsa -b 4096 -f $HOME\.ssh\oracle_kis_key -N ""   # 비밀번호 없이
+# 공개키 확인
+cat $HOME\.ssh\oracle_kis_key.pub
+```
+- 위 공개키를 Oracle Console에 등록하고, 개인키(`oracle_kis_key`)는 로컬에 보관.
+
+### 8.3 로컬에서 VPS에 접속
+```bash
+ssh -i $HOME\.ssh\oracle_kis_key ubuntu@<Public_IP_of_VPS>
+```
+- 최초 접속 시 `yes` 입력 후 접속.
+
+### 8.4 시스템 기본 설정 (VPS 내부)
+```bash
+# 패키지 업데이트
+sudo apt update && sudo apt upgrade -y
+
+# Python, git, pip 설치
+sudo apt install -y python3 python3-venv python3-pip git
+
+# 필수 라이브러리
+sudo apt install -y build-essential libssl-dev libffi-dev python3-dev
+```
+
+### 8.5 프로젝트 배포
+```bash
+# GitHub repo clone
+git clone https://github.com/johnjalboss/kis-auto-trading-strategy.git
+cd kis-auto-trading-strategy
+
+# 가상환경 생성 & 활성화
+python3 -m venv venv
+source venv/bin/activate
+
+# 의존성 설치
+pip install -r requirements.txt
+```
+
+### 8.6 .env 파일 설정 (VPS)
+- 프로젝트 루트에 `.env` 파일을 생성하고 로컬에서 사용한 내용 그대로 복사.
+- 반드시 `KIS_IS_PAPER=false` 를 실제 매매 환경에 맞게 지정.
+
+### 8.7 서비스 자동 실행 (systemd)
+`/etc/systemd/system/kis-trading-bot.service` 파일을 만들고 다음 내용 저장:
+
+```ini
+[Unit]
+Description=KIS Auto Trading Bot
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kis-auto-trading-strategy
+ExecStart=/home/ubuntu/kis-auto-trading-strategy/venv/bin/python -u telegram_interactive_bot.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# 서비스 등록 및 시작
+sudo systemctl daemon-reload
+sudo systemctl enable kis-trading-bot
+sudo systemctl start kis-trading-bot
+
+# 상태 확인
+sudo systemctl status kis-trading-bot
+```
+
+### 8.8 로그 확인 & 재시작
+```bash
+# 실시간 로그
+journalctl -u kis-trading-bot -f
+
+# 재시작
+sudo systemctl restart kis-trading-bot
+```
+
+### 8.9 방화벽 / 보안그룹 설정
+- 인바운드 포트 22(SSH)만 열어두고, 기타 포트는 차단.
+- 필요 시 Oracle Cloud 콘솔 → **Virtual Cloud Network → Security Lists** 에서 규칙 추가.
+
+### 8.10 Gemini API (예시) 및 기타 외부 키 발급
+- **Gemini** (암호화폐 API) → https://www.gemini.com/api → `API Key`와 `Secret Key` 생성 후 `.env`에 `GEMINI_API_KEY`·`GEMINI_API_SECRET` 추가.
+- **Finnhub** → https://finnhub.io/ → `API Key` 발급 후 `.env`에 `FINNHUB_API_KEY` 입력.
+- **Alpha Vantage** 등 필요 시 추가 API도 동일 방식으로 `.env`에 기록.
+
+### 8.11 자동 업데이트 (옵션)
+```bash
+# 매일 02:00에 pull & 재시작
+echo "0 2 * * * cd /home/ubuntu/kis-auto-trading-strategy && git pull && sudo systemctl restart kis-trading-bot" | crontab -
+```
+
+> **Tip**: `systemctl` 로그와 `bot.log`를 함께 모니터링하면 문제 원인을 빠르게 파악할 수 있습니다.
+
+---
+## 9. 🔐 Gemini API (예시) 및 기타 외부 API 키 관리
+
+- **Gemini** (암호화폐 거래소) → https://www.gemini.com/api
+  - `API Key`와 `Secret Key`를 생성하고 `.env`에 아래와 같이 추가합니다:
+    ```env
+    GEMINI_API_KEY=your_gemini_api_key_here
+    GEMINI_API_SECRET=your_gemini_api_secret_here
+    ```
+  - Gemini API는 **REST**와 **WebSocket** 두 가지 방식이 제공됩니다. 실시간 시세를 받으려면 `WebSocket`을, 주문/잔고 조회는 `REST`를 사용합니다.
+  - **보안 팁**: API 키는 절대로 코드에 하드코딩하지 말고, `.env` 파일을 `.gitignore`에 포함시켜 버전 관리에서 제외합니다.
+
+- **그 외 API** (예: Alpha Vantage, IEX Cloud, Polygon 등)
+  - 각 서비스마다 발급받은 `API Key`를 `.env`에 동일한 형식으로 저장합니다.
+  - 키 관리 규칙은 동일하게 **환경 변수**를 통해 주입하고, `dotenv` 라이브러리(`python-dotenv`)가 자동 로드하도록 합니다.
+
+> **Tip**: 로컬 개발 환경과 오라클 VPS 모두 동일한 `.env` 템플릿을 사용하면 배포가 쉬워집니다.
 
 ---
 *Developed by Deep Quant System & Antigravity AI.*

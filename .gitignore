@@ -1,30 +1,101 @@
-# Environment
+# ==========================================
+# Distribution Repository .gitignore
+# ==========================================
+
+# Environment & Private Keys
 .env
+.env.*
+*.env
 token.json
-
-# SSH Keys
-id_rsa
+token_paper.json
+token_*.json
+*.key
 *.pem
+id_rsa
+oracle_key
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-venv/
-
-# Logs
-*.log
-tuning_history.json
-universe_cache.json
-
-# Database
+# Databases
 *.db
 *.sqlite3
+*.sqlite
 
-# OS
+# Trade Dumps, Tax Records & Personal State
+tax_export.csv
+trades_dump.csv
+portfolio_trades.json
+portfolio_history.json
+trade_log.json
+position_cache.json
+debug_data.json
+module_audit_result.json
+test_attribution.json
+test_diag.json
+test_exec.json
+test_trailing.json
+server_out.json
+shadow_state.json
+compound_state.json
+drawdown_state.json
+emergency_state.json
+frequency_state.json
+vol_result.json
+performance_metrics.json
+dashboard_state.json
+local_dashboard.json
+final_dash.json
+
+# Caches
+*_cache.json
+fed_net_liquidity_cache.json
+fred_cache.json
+fred_liquidity_cache.json
+finnhub_cache.json
+fundamental_cache.json
+universe_cache.json
+us-theme-tracker/theme_radar_cache.json
+us-theme-tracker/bot_status.json
+
+# Logs, Dumps & Text Output
+*.log
+*.log.*
+*_log.txt
+*log*.txt
+*dump*.txt
+*audit*.txt
+*_report.txt
+trade_analysis_*.txt
+all_trade_executions.txt
+signatures.txt
+audit_full.txt
+audit_out.txt
+audit_output.txt
+audit_stdout.txt
+are_nov_active_log.txt
+are_nov_rotated_log.txt
+live_log_now.txt
+session_log.txt
+vps_adp_log.txt
+vps_db_dump.txt
+kis_api_docs_summary.txt
+kis_api_overseas.txt
+kis_api_summary.txt
+kis_api_params.txt
+us-theme-tracker/classify_result.txt
+us-theme-tracker/final_result.txt
+us-theme-tracker/fix2_result.txt
+us-theme-tracker/fix_output.txt
+us-theme-tracker/verify_output.txt
+
+# Archives & Patches
+*.tar.gz
+*.tmp
+
+# Python & OS
+__pycache__/
+*.py[cod]
+venv/
+env/
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
