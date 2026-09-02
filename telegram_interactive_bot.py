@@ -1066,24 +1066,14 @@ class TelegramInteractiveBot:
             except Exception as _tr_err:
                 logger.debug("Theme radar fetch in top picks: {}", _tr_err)
 
-            # 3. 3,000+ 미국 전수 유니버스 모멘텀/거래대금 Super Candidate 수집
-            try:
-                from universe_expander import UniverseExpander
-                exp_cands = UniverseExpander().get_top_super_candidates(top_n=15)
-                for sym in exp_cands:
-                    if sym not in candidate_pool:
-                        candidate_pool.append(sym)
-            except Exception as _ue_err:
-                logger.debug("Universe expander fetch in top picks: {}", _ue_err)
-
-            # 4. 현재 보유 종목 추가 (보유주와 시장 주도주 상대 비교용)
-            for sym in holding_syms:
+            # 3. 미국 핵심 주도주 및 유망 테마주 수집 (초고속 실시간 채점)
+            fast_cands = ["NVDA", "PLTR", "LLY", "CEG", "CRWD", "LMT", "AVGO", "COIN", "TSLA", "MSFT", "AAPL"]
+            for sym in fast_cands:
                 if sym not in candidate_pool:
                     candidate_pool.append(sym)
 
-            # 폴백 기본 유니버스
-            fallback_core = ["TENB", "S", "GCMG", "DX", "BEN", "RBRK", "CDNS", "MSFT", "PLTR", "NVDA"]
-            for sym in fallback_core:
+            # 4. 현재 보유 종목 추가 (보유주와 시장 주도주 상대 비교용)
+            for sym in holding_syms:
                 if sym not in candidate_pool:
                     candidate_pool.append(sym)
 
@@ -1093,8 +1083,8 @@ class TelegramInteractiveBot:
             engine = get_quant_scoring_engine()
 
             scored_candidates = []
-            # 최대 15개 핵심 후보 실시간 채점
-            for sym in candidate_pool[:15]:
+            # 최대 8개 핵심 후보 실시간 채점
+            for sym in candidate_pool[:8]:
                 try:
                     df = kis_data.get_daily_ohlcv(sym, days=60)
                     score, breakdown, raw, pillars = engine.compute_composite_score(sym, df=df)
