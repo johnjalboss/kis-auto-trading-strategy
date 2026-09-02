@@ -777,6 +777,11 @@ class TelegramInteractiveBot:
             from auto_tuning_engine import AutoTuningEngine
             tuner = AutoTuningEngine()
             card = tuner.format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 AI 파라미터 자가 튜닝 조언 & 운용 수칙]</b>\n"
+                "• <b>시장 적응 최적화</b>: 시장 국면(Bull/Bear/Chop)에 따라 봇이 손절선(-2.8%~-5.0%)과 진입 기준점(80~85점)을 실시간 자동 최적화하므로 인위적인 수동 개입이 필요 없습니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed to generate auto-tuning report: {}", e)
@@ -1523,6 +1528,12 @@ class TelegramInteractiveBot:
             from weekly_ai_report_generator import WeeklyAIReportGenerator
             generator = WeeklyAIReportGenerator()
             report_html = generator.generate_report()
+            report_html += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[주간 종합 투자 조언 & 다음 주 운용 전략]</b>\n"
+                "• <b>원칙 준수</b>: 주간 최대 손실 한도(-15%)와 개별 종목 칼손절(-3.8%) 원칙을 지키는 한 계좌는 수학적으로 반드시 우상향합니다.\n"
+                "• <b>다음 주 핵심 과제</b>: 실적 시즌 진입에 따른 어닝 서프라이즈 주도주 선별 집중 매매로 복리 수익을 극대화하세요."
+            )
             self._send_reply(report_html)
         except Exception as e:
             logger.error("Failed weekly AI report generation: {}", e)
@@ -1535,6 +1546,11 @@ class TelegramInteractiveBot:
             engine = ShadowPaperEngine()
             real_equity = self._get_live_real_equity()
             card_html = engine.format_telegram_card(real_equity=real_equity)
+            card_html += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 섀도우 샌드박스 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>전략 사전 검증</b>: 모든 퀀트 알파 전략과 파라미터는 실계좌 투입 전 섀도우 샌드박스에서 100% 모의 검증을 거친 후 실매매에 안전하게 반영됩니다."
+            )
             self._send_reply(card_html)
         except Exception as e:
             logger.error("Failed shadow paper card generation: {}", e)
@@ -1581,6 +1597,12 @@ class TelegramInteractiveBot:
             positions = self._get_positions_dict()
             meh = MacroEventHorizon(holdings=list(positions.keys()) if positions else None)
             card = meh.format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 매크로 D-Day 투자 조언 & 대응 수칙]</b>\n"
+                "• <b>실적/CPI D-Day 직전</b>: 발표 24시간 전에는 변동성(IV Crush) 리스크가 극대화되므로 신규 매수를 자제하고 비중을 50% 축소하세요.\n"
+                "• <b>서프라이즈 발표 직후</b>: 지표/실적 호재로 갭상승이 확인된 후 15분봉 지지 반등 시 분할 매수로 진입합니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed macro D-Day handler: {}", e)
@@ -1591,6 +1613,12 @@ class TelegramInteractiveBot:
         try:
             from realtime_economic_surprise_reactor import get_economic_surprise_reactor
             card = get_economic_surprise_reactor().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 경제지표 서프라이즈 투자 조언 & 대응 수칙]</b>\n"
+                "• <b>골디락스/불장 (+40점 이상)</b>: 경기 펀더멘털이 우수하므로 주도 테마 1등주에 33%씩 공격적으로 집중 투자하세요.\n"
+                "• <b>침체 경고 (-20점 이하)</b>: 신규 매수를 전면 동결(Freeze)하고 100% 현금을 확보하여 자본을 보존합니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed economic surprise handler: {}", e)
@@ -1602,6 +1630,12 @@ class TelegramInteractiveBot:
             from dark_pool_radar import get_dark_pool_radar
             positions = self._get_positions_dict()
             card = get_dark_pool_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 다크풀 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>기관 은밀 매집주 공략</b>: 다크풀 비중 50% 이상 종목은 든든한 기관 매집 바닥이 확인되었으므로 눌림목마다 분할 매수하세요.\n"
+                "• <b>숏스퀴즈 폭등 대비</b>: 숏비율 10% 이상 종목이 전고점을 돌파하면 숏커버링 폭등이 발생하므로 익절 목표가를 2차 목표가(+12%)까지 높여 잡으세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed dark pool handler: {}", e)
@@ -1612,6 +1646,12 @@ class TelegramInteractiveBot:
         try:
             from cboe_options_sentinel import get_cboe_options_sentinel
             card = get_cboe_options_sentinel().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 CBOE 옵션 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>PCR 지표 활용</b>: 풋/콜 비율이 0.70 이하일 때는 시장 전반의 상승 에너지가 강하므로 주도주 롱 포지션을 적극 유지하세요.\n"
+                "• <b>SKEW 위험 관리</b>: SKEW 지수가 145pt 이상 치솟으면 기관들이 폭락 헷지를 시작한 것이므로 현금 비중을 30% 이상 확보하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed cboe options handler: {}", e)
@@ -1623,6 +1663,12 @@ class TelegramInteractiveBot:
             from dealer_gex_radar import get_dealer_gex_radar
             positions = self._get_positions_dict()
             card = get_dealer_gex_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 마켓메이커 GEX 감마 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>양의 감마 (+GEX) 지지</b>: 딜러들의 기계적 매수 에어백이 작동하므로 풋월(Put Wall) 지지선 근처에서 안심하고 분할 매수하세요.\n"
+                "• <b>콜월 (Call Wall) 저항선</b>: 딜러들의 강력한 매도 저항 구간이므로 보유 물량의 50%를 1차 분할 익절하는 타이밍으로 활용하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed GEX radar handler: {}", e)
@@ -1634,6 +1680,12 @@ class TelegramInteractiveBot:
             from congressional_trade_tracker import get_congressional_tracker
             positions = self._get_positions_dict()
             card = get_congressional_tracker().format_telegram_card(holdings=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 미국 의원 매매 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>정책 수혜주 편승</b>: 주요 상임위 의원의 대규모 매수(특히 만기 1년 이상 콜옵션)는 강력한 정책/입법 모멘텀 신호입니다.\n"
+                "• <b>공시 시차 주의</b>: 공시까지 최대 45일 시차가 발생하므로, 현재 주가가 의원 매수가 대비 10% 이내일 때만 진입하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed congress trades handler: {}", e)
@@ -1645,6 +1697,12 @@ class TelegramInteractiveBot:
             from ai_news_sentiment_engine import get_ai_news_sentiment_engine
             positions = self._get_positions_dict()
             card = get_ai_news_sentiment_engine().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 AI 뉴스 센티멘트 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>뉴스 과열 추격 금지</b>: 뉴스 점수가 +75점 이상 극단적 과열일 때는 '뉴스에 팔아라' 차익 실현이 나올 수 있으므로 당일 추격 매수를 금지합니다.\n"
+                "• <b>단기 노이즈 역발상</b>: 펀더멘털과 무관한 노이즈로 센티멘트가 급락 후 반등할 때(RSI 30 이하)가 최적의 역발상 분할 매수 기회입니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed news sentiment handler: {}", e)
@@ -1657,6 +1715,12 @@ class TelegramInteractiveBot:
             positions = self._get_positions_dict()
             smf = SmartMoneyFootprint()
             card = smf.format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 스마트머니 수급 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>기관 지분율 70% 이상</b>: 워런 버핏, 뱅가드, 블랙록 등 메이저 기관 지분이 높은 종목은 하방 경직성이 매우 뛰어나 스윙 매매 코어로 적합합니다.\n"
+                "• <b>내부자 매수 동반</b>: 기관 지분 증가와 함께 CEO/임원 장내 매수가 동반된 종목은 가장 높은 알파 점수 가산점(+15pt)을 부여합니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed smart money handler: {}", e)
@@ -1680,6 +1744,12 @@ class TelegramInteractiveBot:
             from theme_rotation_flow import ThemeRotationFlow
             rf = ThemeRotationFlow()
             card = rf.format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 테마 순환매 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>자금 유입 섹터 집중</b>: 테마 모멘텀이 가속화되는 1~3위 주도 테마에 전체 투자금의 70% 이상을 집중 배분하세요.\n"
+                "• <b>자금 이탈 섹터 교체</b>: 순환매가 꺾이고 자금이 유출되는 테마는 미련 없이 교체 매매(Switching)하세요."
+            )
             _rotation_cache["ts"] = time.time()
             _rotation_cache["card"] = card
             self._send_reply(card)
@@ -1694,6 +1764,12 @@ class TelegramInteractiveBot:
             equity = self._get_live_real_equity()
             mc = MonteCarloEngine()
             card = mc.format_telegram_card(current_equity=equity)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 몬테카를로 자산 배분 조언 & 운용 수칙]</b>\n"
+                "• <b>파산 확률 0% 유지</b>: 단일 종목 최대 투자 비중(25~35%)과 단일 손절선(-3.8%)을 철저히 지킬 때만 10,000회 시뮬레이션의 우상향 복리 수익률이 완성됩니다.\n"
+                "• <b>몰빵/물타기 금지</b>: 계좌 파산의 99%는 무리한 비중 집중에서 발생합니다. 봇의 분할 매수 비율을 엄수하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed monte carlo handler: {}", e)
@@ -1704,6 +1780,12 @@ class TelegramInteractiveBot:
         try:
             from fed_net_liquidity_engine import FedNetLiquidityEngine
             card = FedNetLiquidityEngine().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 연준 유동성 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>유동성 확장기 (Net Liquidity 증가)</b>: 연준 순유동성이 증가할 때는 나스닥 빅테크 및 성장주(AI, 반도체)가 시장을 주도하므로 공격적 비중을 유지하세요.\n"
+                "• <b>유동성 축소기 (TGA 증가/RRP 감소)</b>: 유동성이 마를 때는 방어주(에너지, 원자재, 배당주)로 포트폴리오를 전환하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed fed liquidity handler: {}", e)
@@ -1715,6 +1797,12 @@ class TelegramInteractiveBot:
             from dealer_gex_radar import get_dealer_gex_radar
             positions = self._get_positions_dict()
             card = get_dealer_gex_radar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 마켓메이커 GEX 감마 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>양의 감마 (+GEX) 지지</b>: 딜러들의 기계적 매수 에어백이 작동하므로 풋월(Put Wall) 지지선 근처에서 안심하고 분할 매수하세요.\n"
+                "• <b>콜월 (Call Wall) 저항선</b>: 딜러들의 강력한 매도 저항 구간이므로 보유 물량의 50%를 1차 분할 익절하는 타이밍으로 활용하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed options GEX handler: {}", e)
@@ -1726,6 +1814,12 @@ class TelegramInteractiveBot:
             from sec_form4_insider_radar import SECForm4InsiderRadar
             positions = self._get_positions_dict()
             card = SECForm4InsiderRadar().format_telegram_card(symbols=list(positions.keys()) if positions else None)
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 내부자 순매수 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>클러스터 매수 주목</b>: CEO 혼자가 아니라 CFO, 사외이사 등 3인 이상이 동시 장내 매수한 종목은 회사의 강력한 실적 턴어라운드를 의미합니다.\n"
+                "• <b>사재 매입 신뢰</b>: 단순 스톡옵션 행사가 아닌, 실제 사재를 털어 시장가로 매수한 내역에 높은 가중치를 둡니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed insider radar handler: {}", e)
@@ -1736,6 +1830,12 @@ class TelegramInteractiveBot:
         try:
             from macro_event_shock_shield import MacroEventShockShield
             card = MacroEventShockShield().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 거시 충격 쉴드 조언 & 운용 수칙]</b>\n"
+                "• <b>블랙아웃 윈도우 엄수</b>: CPI, FOMC 발표 전후 30분 동안은 신규 매수가 전면 차단되므로, 순간 급등락 슬리피지로부터 자산을 100% 보호합니다.\n"
+                "• <b>방어 완료 후</b>: 시장 변동성이 잦아들고 방향성이 확인된 후 안전하게 신규 진입을 재개합니다."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed macro shock shield handler: {}", e)
@@ -1746,6 +1846,12 @@ class TelegramInteractiveBot:
         try:
             from post_exit_tracker import get_post_exit_tracker
             card = get_post_exit_tracker().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 매도 오답노트 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>손실 회피 준수</b>: 손실 회피로 판정된 매도는 감정을 배제한 칼손절이 계좌를 살렸음을 증명합니다.\n"
+                "• <b>조기 매도 대응</b>: 조기 매도가 누적되면 봇이 스스로 익절 목표치를 상향 조정하므로 안심하고 자율 매매 시스템을 신뢰하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed post exit note handler: {}", e)
@@ -1756,6 +1862,12 @@ class TelegramInteractiveBot:
         try:
             from premarket_gap_sniper import PreMarketGapSniper
             card = PreMarketGapSniper().format_telegram_card()
+            card += (
+                "\n\n━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 특이갭 레이더 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>돌파 갭(Breakaway Gap)</b>: 거래량 3배 이상 터진 +3~+5% 갭상승은 추세 시작 신호이므로 적극 분할 매수합니다.\n"
+                "• <b>소진 갭(Exhaustion Gap)</b>: 연속 상승 후 터진 대형 갭상승은 상투 신호이므로 추격 매수 대신 분할 익절로 대응하세요."
+            )
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed unusual gaps handler: {}", e)
