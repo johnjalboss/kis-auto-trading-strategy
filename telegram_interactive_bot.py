@@ -14,6 +14,9 @@ from loguru import logger
 import config
 
 _is_bot_paused = False
+_top_picks_cache = {"ts": 0, "card": ""}
+_quant_status_cache = {"ts": 0, "card": ""}
+_rotation_cache = {"ts": 0, "card": ""}
 
 def is_trading_paused() -> bool:
     return _is_bot_paused
@@ -929,6 +932,11 @@ class TelegramInteractiveBot:
     def _handle_quant_status(self):
         """실시간 퀀트 알파 상태 및 센티넬 지표 조회"""
         try:
+            now_ts = time.time()
+            if _quant_status_cache["card"] and (now_ts - _quant_status_cache["ts"] < 300):
+                self._send_reply(_quant_status_cache["card"])
+                return
+
             risk_label = "NORMAL (정상)"
             stress_score = 15
             freeze_entries = False
@@ -1028,7 +1036,10 @@ class TelegramInteractiveBot:
                 f"  - 승률: {win_label} | 자금 배분 배율: {mult:.2f}x",
                 f"• <b>보호 매트릭스</b>: 9단계 메가 락 (+100% ➔ +82% 락) & 유상증자 희석 방어"
             ]
-            self._send_reply("\n".join(lines))
+            card_text = "\n".join(lines)
+            _quant_status_cache["ts"] = time.time()
+            _quant_status_cache["card"] = card_text
+            self._send_reply(card_text)
         except Exception as e:
             logger.error("Failed _handle_quant_status: {}", e)
             self._send_reply(f"⚠️ 퀀트 상태 조회 실패: {e}")
@@ -1036,6 +1047,11 @@ class TelegramInteractiveBot:
     def _handle_top_picks(self):
         """실시간 스크리너 5대 직교 퀀트 알파 최상위 정예 후보 Top 5 조회 (3,000+ 전수 유니버스 기반)"""
         try:
+            now_ts = time.time()
+            if _top_picks_cache["card"] and (now_ts - _top_picks_cache["ts"] < 300):
+                self._send_reply(_top_picks_cache["card"])
+                return
+
             positions = self._get_positions_dict()
             holding_syms = set(positions.keys()) if positions else set()
 
@@ -1160,7 +1176,11 @@ class TelegramInteractiveBot:
             lines.append("• <b>실제 주문 엔진 100% 연동</b>: 텔레그램 점수와 실제 자동주문 엔진의 Grinold-Kahn 진입 점수가 완전 일치합니다.")
             lines.append("• <b>20MA 과열 방어 (Tail-Risk)</b>: 20일선 대비 +4.5% 이상 과이격된 추격 매수는 감점 페널티(최대 -25pt)로 자본을 보호합니다.")
             lines.append("• <b>진입 기준</b>: 5대 직교 팩터 시너지 및 지지선 확인 시 분할 진입합니다.")
-            self._send_reply("\n".join(lines))
+
+            card_text = "\n".join(lines)
+            _top_picks_cache["ts"] = time.time()
+            _top_picks_cache["card"] = card_text
+            self._send_reply(card_text)
         except Exception as e:
             logger.error("Failed _handle_top_picks: {}", e)
             self._send_reply(f"⚠️ Top 5 조회 실패: {e}")
@@ -1565,6 +1585,11 @@ class TelegramInteractiveBot:
     def _handle_rotation(self):
         """월가 스마트머니 테마 순환매 자금 이동 레이더 조회"""
         try:
+            now_ts = time.time()
+            if _rotation_cache["card"] and (now_ts - _rotation_cache["ts"] < 300):
+                self._send_reply(_rotation_cache["card"])
+                return
+
             import sys
             theme_tracker_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "us-theme-tracker")
             if not os.path.exists(theme_tracker_dir):
@@ -1575,6 +1600,8 @@ class TelegramInteractiveBot:
             from theme_rotation_flow import ThemeRotationFlow
             rf = ThemeRotationFlow()
             card = rf.format_telegram_card()
+            _rotation_cache["ts"] = time.time()
+            _rotation_cache["card"] = card
             self._send_reply(card)
         except Exception as e:
             logger.error("Failed rotation handler: {}", e)
