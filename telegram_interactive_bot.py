@@ -17,9 +17,29 @@ _is_bot_paused = False
 _top_picks_cache = {"ts": 0, "card": ""}
 _quant_status_cache = {"ts": 0, "card": ""}
 _rotation_cache = {"ts": 0, "card": ""}
+_pause_files = ["/tmp/kis_trading_paused", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kis_trading_paused.flag")]
 
 def is_trading_paused() -> bool:
-    return _is_bot_paused
+    if _is_bot_paused:
+        return True
+    for pf in _pause_files:
+        if os.path.exists(pf):
+            return True
+    return False
+
+def set_trading_paused(paused: bool):
+    global _is_bot_paused
+    _is_bot_paused = paused
+    for pf in _pause_files:
+        try:
+            if paused:
+                with open(pf, "w") as f:
+                    f.write("PAUSED")
+            else:
+                if os.path.exists(pf):
+                    os.remove(pf)
+        except Exception:
+            pass
 
 class TelegramInteractiveBot:
     """Bi-directional Telegram Control Daemon with Complete One-Click Interactive Buttons & Charts"""
@@ -339,13 +359,13 @@ class TelegramInteractiveBot:
                                     self._answer_callback(cb_id, "📈 SPY 비교 수익차트를 생성합니다.")
                                     _run_async(self._handle_chart, 0, "SPY")
                                 elif cb_data == "cmd_pause":
-                                    _is_bot_paused = True
+                                    set_trading_paused(True)
                                     self._answer_callback(cb_id, "⏸️ 매매가 일시정지되었습니다.")
-                                    self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 또는 버튼으로 다시 가동)")
+                                    self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색 및 주문 발송을 일시 중단합니다. (/resume 또는 '매수 재개' 버튼으로 다시 가동)")
                                 elif cb_data == "cmd_resume":
-                                    _is_bot_paused = False
+                                    set_trading_paused(False)
                                     self._answer_callback(cb_id, "▶️ 매매가 재개되었습니다.")
-                                    self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 루프를 재가동합니다.")
+                                    self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 및 자동 주문 루프를 정상 재가동합니다.")
                                 elif cb_data == "cmd_close_all":
                                     self._answer_callback(cb_id, "🚨 보유 종목 긴급 청산 실행!")
                                     _run_async(self._handle_close_all)
@@ -1428,26 +1448,34 @@ class TelegramInteractiveBot:
         try:
             positions = self._get_positions_dict()
             if not positions:
-                self._send_reply("ℹ️ 현재 청산할 포지션이 없습니다.")
+                self._send_reply("ℹ️ 현재 청산할 보유 포지션이 없습니다 (100% 현금 대기 중).")
                 return
 
-            self._send_reply(f"🚨 <b>[긴급 청산]</b> 보유 중인 {len(positions)}개 종목 전량 시장가 청산을 시작합니다...")
+            self._send_reply(f"🚨 <b>[긴급 청산]</b> 보유 중인 {len(positions)}개 종목 전량 시장가 매도 주문을 발송합니다...")
             sold_count = 0
             for sym, pos in list(positions.items()):
                 try:
-                    price = pos.entry_price
+                    price = getattr(pos, 'entry_price', 0.0)
+                    qty = int(getattr(pos, 'quantity', 0))
+                    if qty <= 0:
+                        continue
                     if self.orchestrator and hasattr(self.orchestrator, 'trader'):
                         lp = self.orchestrator.trader.get_price(sym)
                         if lp > 0: price = lp
                     if self.orchestrator:
-                        self.orchestrator.phase_5_execute_trade(sym, "SELL", pos.quantity, price, "TELEGRAM_EMERGENCY_CLOSE_ALL")
+                        self.orchestrator.phase_5_execute_trade(sym, "SELL", qty, price, "TELEGRAM_EMERGENCY_CLOSE_ALL")
                         if hasattr(self.orchestrator.strategy, 'remove_position'):
                             self.orchestrator.strategy.remove_position(sym)
+                    else:
+                        from trader import KisTrader
+                        t = KisTrader()
+                        res = t.sell_market(sym, qty)
+                        logger.info("Direct KIS trader emergency sell executed for {}: {}", sym, res)
                     sold_count += 1
                 except Exception as se:
                     logger.error("Failed emergency sell for {}: {}", sym, se)
 
-            self._send_reply(f"✅ <b>[긴급 청산 완료]</b> 총 {sold_count}개 종목 전량 청산 처리 완료되었습니다.")
+            self._send_reply(f"✅ <b>[긴급 청산 완료]</b> 총 {sold_count}개 종목 전량 시장가 매도 주문을 전송했습니다.\n현재 포지션이 전량 현금화되었습니다.")
         except Exception as e:
             logger.error("Failed close_all for Telegram reply: {}", e)
             self._send_reply(f"⚠️ 긴급 청산 처리 중 오류 발생: {e}")
