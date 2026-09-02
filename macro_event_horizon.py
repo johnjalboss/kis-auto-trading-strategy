@@ -15,45 +15,106 @@ import config
 import calendar
 
 def get_dynamic_macro_calendar(start_date: date, months_ahead: int = 4) -> List[Dict[str, Any]]:
-    """Calculates statutory release schedules for CPI, NFP, and FOMC dynamically using calendar math."""
+    """
+    Calculates statutory US economic release schedules dynamically using calendar mathematics:
+    1. ISM Manufacturing PMI (1st business day) & Services PMI (3rd business day)
+    2. Non-Farm Payrolls (NFP) & Unemployment (1st Friday)
+    3. CPI Consumer Price Index (2nd Wednesday) & PPI Producer Price Index (2nd Thursday)
+    4. FOMC Rate Decision (3rd Wednesday of scheduled months) & FOMC Minutes
+    5. Monthly OpEx & Quadruple Witching Gamma Pin (3rd Friday)
+    6. Advance / Prelim / Final GDP (Last Thursday)
+    7. Core PCE Price Index (Last Friday - Fed's #1 Favorite Inflation Target)
+    """
     events = []
     y = start_date.year
     m = start_date.month
 
     for _ in range(months_ahead):
         cal = calendar.monthcalendar(y, m)
+        prev_m = m - 1 if m > 1 else 12
         
-        # 1. Non-Farm Payrolls (NFP): First Friday of each month
+        # 1. ISM Manufacturing PMI (Day 1 or next business day)
+        ism_mfg_day = 1
+        while date(y, m, ism_mfg_day).weekday() >= 5:
+            ism_mfg_day += 1
+        events.append({
+            "date": date(y, m, ism_mfg_day).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 ISM 제조업 PMI",
+            "impact": "MEDIUM",
+            "type": "PMI"
+        })
+
+        # 2. Non-Farm Payrolls (NFP) & Unemployment: First Friday of each month
         first_fri = cal[0][4] if cal[0][4] != 0 else cal[1][4]
         nfp_date = date(y, m, first_fri)
         events.append({
             "date": nfp_date.strftime("%Y-%m-%d"),
-            "name": f"미국 {m}월 비농업 고용보고서 (NFP)",
+            "name": f"미국 {prev_m}월 비농업 고용보고서 (NFP)",
             "impact": "HIGH",
             "type": "NFP"
         })
 
-        # 2. CPI: Second Wednesday of each month
+        # 3. CPI: Second Wednesday of each month
         wednesdays = [week[2] for week in cal if week[2] != 0]
         second_wed = wednesdays[1] if len(wednesdays) > 1 else wednesdays[0]
         cpi_date = date(y, m, second_wed)
         events.append({
             "date": cpi_date.strftime("%Y-%m-%d"),
-            "name": f"미국 {m-1 if m > 1 else 12}월 CPI (소비자물가지수)",
+            "name": f"미국 {prev_m}월 CPI (소비자물가지수)",
             "impact": "HIGH",
             "type": "CPI"
         })
 
-        # 3. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
+        # 4. PPI: Day after CPI (2nd Thursday)
+        thursdays = [week[3] for week in cal if week[3] != 0]
+        second_thu = thursdays[1] if len(thursdays) > 1 else thursdays[0]
+        events.append({
+            "date": date(y, m, second_thu).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 PPI (생산자물가지수)",
+            "impact": "MEDIUM",
+            "type": "PPI"
+        })
+
+        # 5. FOMC Rate Decision (Jan, Mar, May, Jun, Jul, Sep, Nov, Dec - 3rd Wednesday)
         if m in [1, 3, 5, 6, 7, 9, 11, 12]:
             third_wed = wednesdays[2] if len(wednesdays) > 2 else wednesdays[-1]
             fomc_date = date(y, m, third_wed)
             events.append({
                 "date": fomc_date.strftime("%Y-%m-%d"),
-                "name": f"FOMC 기준금리 결정 ({y}년 {m}월)",
+                "name": f"FOMC 연준 기준금리 결정 ({y}년 {m}월)",
                 "impact": "CRITICAL",
                 "type": "FOMC"
             })
+
+        # 6. Monthly Options Expiration (OpEx / Gamma Pin): 3rd Friday of every month
+        fridays = [week[4] for week in cal if week[4] != 0]
+        third_fri = fridays[2] if len(fridays) > 2 else fridays[-1]
+        is_quad = m in [3, 6, 9, 12]
+        opex_name = f"미국 {m}월 쿼드러플 위칭데이 (선물옵션 동시만기)" if is_quad else f"미국 {m}월 월간 옵션 만기일 (OpEx)"
+        events.append({
+            "date": date(y, m, third_fri).strftime("%Y-%m-%d"),
+            "name": opex_name,
+            "impact": "HIGH" if is_quad else "MEDIUM",
+            "type": "OPEX"
+        })
+
+        # 7. GDP Growth Rate (Last Thursday of the month)
+        last_thu = thursdays[-1]
+        events.append({
+            "date": date(y, m, last_thu).strftime("%Y-%m-%d"),
+            "name": f"미국 분기 GDP 성장률 발표 ({m}월)",
+            "impact": "HIGH",
+            "type": "GDP"
+        })
+
+        # 8. Core PCE Price Index (Last Friday of the month - Fed's #1 Favorite Gauge)
+        last_fri = fridays[-1]
+        events.append({
+            "date": date(y, m, last_fri).strftime("%Y-%m-%d"),
+            "name": f"미국 {prev_m}월 근원 PCE 물가지수 (연준 최선호)",
+            "impact": "HIGH",
+            "type": "PCE"
+        })
 
         m += 1
         if m > 12:
@@ -216,8 +277,8 @@ class MacroEventHorizon:
         mult, status_msg = self.evaluate_risk_multiplier()
 
         macro_lines = []
-        for ev in macro_events[:4]:
-            tag = "🚨" if ev["days_left"] <= 1 else "📅"
+        for ev in macro_events[:6]:
+            tag = "🚨" if ev["days_left"] <= 1 or ev["impact"] == "CRITICAL" else ("🔥" if ev["impact"] == "HIGH" else "📅")
             macro_lines.append(f"  • {tag} <b>{ev['name']}</b>: <code>{ev['d_day']}</code> ({ev['date'][5:]})")
         macro_str = "\n".join(macro_lines) if macro_lines else "  • 28일 이내 예정된 주요 지표 없음"
 
