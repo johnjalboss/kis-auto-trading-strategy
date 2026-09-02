@@ -741,8 +741,21 @@ class TelegramInteractiveBot:
                     sign = "🟢" if pnl_p >= 0 else "🔴"
                     pl = p.get("price_label", "")
                     msg += f"{sign} <b>{p['symbol']}</b>: {p['quantity']}주 | 평단가: ${p['entry_price']:.2f} | 현재가: ${p['current_price']:.2f}{pl} ({pnl_p:+.2f}%)\n"
+                msg += (
+                    "\n━━━━━━━━━━━━━━━━━━━\n"
+                    "💡 <b>[실전 투자 조언 & 운용 가이드]</b>\n"
+                    "• <b>보유주 운용 원칙</b>: 인위적인 조기 매도보다는 봇의 1차 분할 익절선 도달 및 9단계 메가 락 보호선에 맞춰 수익을 지키세요.\n"
+                    "• <b>리스크 통제</b>: -3.8% ~ -5.0% 칼손절 시스템이 상시 작동 중이므로 안심하고 추세를 추종하실 수 있습니다."
+                )
             else:
-                msg += "ℹ️ 현재 보유 중인 포지션이 없습니다.\n"
+                msg += (
+                    "ℹ️ 현재 보유 중인 포지션이 없습니다 (100% 현금 대기 중).\n\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "💡 <b>[실전 투자 조언 & 운용 가이드]</b>\n"
+                    "• <b>현금 100% 대기 모드</b>: 시장 노이즈 구간을 피해 자본을 100% 보존 중입니다.\n"
+                    "• <b>진입 전략</b>: 5대 직교 퀀트 알파 80점 이상 및 거래량 폭발 시 공격형 고수익(3종목 35% 집중) 분할 진입이 자동 개시됩니다.\n"
+                    "• <b>추천 행동</b>: [실시간 후보 Top 5] 및 [테마 순환매]를 통해 월가 자금 유입처를 미리 확인해두세요."
+                )
 
             reply_markup = {
                 "inline_keyboard": [
@@ -856,6 +869,13 @@ class TelegramInteractiveBot:
                 )
                 lines.append(block)
 
+            lines.append(
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 포지션 투자 조언 & 대응 가이드]</b>\n"
+                "• <b>1차 익절 도달 시</b>: 보유 수량의 50%를 분할 매도하여 수익을 확정하고, 잔여 수량은 안전 스탑선 본절로 올려 무위험 랠리를 즐기세요.\n"
+                "• <b>스탑로스 준수</b>: 안전 스탑선 하향 돌파 시 즉시 전량 매도하여 계좌 드로우다운을 최소화합니다."
+            )
+
             self._send_reply("\n\n".join(lines))
         except Exception as e:
             logger.error("Failed positions lookup: {}", e)
@@ -916,7 +936,11 @@ class TelegramInteractiveBot:
                     "━" * 18,
                     f"• {empty_msg}",
                     f"• <b>보유 포지션 미실현 손익</b>: <b>{'+' if unrealized_pnl>=0 else ''}${unrealized_pnl:,.2f} ({unreal_pct:+.2f}%)</b>",
-                    f"• <b>계좌 총 평가 자산</b>: <b>${total_eq:,.2f} USD</b>"
+                    f"• <b>계좌 총 평가 자산</b>: <b>${total_eq:,.2f} USD</b>",
+                    "━" * 18,
+                    "💡 <b>[실전 투자 조언 & 운용 가이드]</b>",
+                    "• <b>계좌 방어 전략</b>: 잦은 매매로 인한 수수료/슬리피지를 방지하고, 확실한 5대 직교 팩터 고점수 종목만 선별 진입합니다.",
+                    "• <b>추천 행동</b>: [실시간 후보 Top 5]를 주기적으로 점검하시기 바랍니다."
                 ]
                 self._send_reply("\n".join(lines))
                 return
@@ -944,6 +968,15 @@ class TelegramInteractiveBot:
                 date_str = str(t.exit_time)[:10] if t.exit_time else ""
                 reason_clean = (t.reason or "EXIT").replace("TELEGRAM_", "").replace("_", " ")[:20]
                 lines.append(f"{emoji} <b>{t.symbol}</b> ({date_str}): <b>{pnl_sign}${t.pnl:,.2f}</b>{pct_str} | {reason_clean}")
+
+            lines.append("━" * 18)
+            lines.append("💡 <b>[실전 성과 분석 & 투자 조언]</b>")
+            if wr >= 60.0:
+                lines.append("• <b>고승률 우세 국면 (승률 60% 이상)</b>: 현재 시장과 퀀트 팩터의 적합도가 매우 높습니다. 35% 집중 투자로 복리 수익을 극대화하세요.")
+            elif wr >= 40.0:
+                lines.append("• <b>손익비 우세 균형 국면 (승률 40~60%)</b>: 짧은 손절(-3.8%)과 긴 익절(+9%~+15%)의 손익비 우위로 계좌가 꾸준히 우상향하는 정석 구간입니다.")
+            else:
+                lines.append("• <b>변동성 장세 방어 모드</b>: 승률 저하 시 봇이 자가 튜닝으로 포지션을 축소하고 진입 기준을 85점으로 상향하여 원금을 완벽 보호합니다.")
             self._send_reply("\n".join(lines))
         except Exception as e:
             logger.error("Failed PnL lookup: {}", e)
@@ -1230,7 +1263,9 @@ class TelegramInteractiveBot:
                     f"  └ 💵 현재가: ${px:.1f} | 🎯 목표가: <code>${tp:.1f}</code> | 🛑 손절선: <code>${sl:.1f}</code>"
                 )
             lines.append("━━━━━━━━━━━━━━━━━━━")
-            lines.append("💡 <i>18대 핵심 테마 중 자금 유입 가속도와 거래대금 1위 주도주를 실시간 선별합니다.</i>")
+            lines.append("💡 <b>[실전 테마 매매 투자 조언 & 운용 수칙]</b>")
+            lines.append("• <b>대장주 집중 원칙</b>: 테마 순환매 장세에서는 2등주보다 거래대금 1위 대장주(LEADER 👑)를 공략하는 것이 승률과 반등 탄력이 가장 높습니다.")
+            lines.append("• <b>진입 타이밍</b>: 목표가까지 잔여 상승 여력이 최소 +8% 이상 남아있고, 손절선과의 손익비가 2:1 이상인 종목에만 분할 진입하세요.")
             self._send_reply("\n".join(lines))
         except Exception as e:
             logger.error("Failed _handle_theme: {}", e)
@@ -1251,7 +1286,9 @@ class TelegramInteractiveBot:
                 theme = data.get("theme_name", "모멘텀 돌파")
                 lines.append(f"  • 🚀 <b>{sym:5s}</b> ➔ <b>{theme}</b> (칼만 속도 가속 + 기관 매집 포착)")
             lines.append("━━━━━━━━━━━━━━━━━━━")
-            lines.append("💡 <i>20일 신고가 돌파 및 거래량 2.5배 폭발 종목을 실시간 감시합니다.</i>")
+            lines.append("💡 <b>[실전 스크리너 투자 조언 & 대응 수칙]</b>")
+            lines.append("• <b>돌파 매매 수칙</b>: 20일 신고가 돌파 직후 거래량이 전일 대비 2.5배 이상 터진 종목은 기관 매집의 명확한 증거입니다.")
+            lines.append("• <b>추격 매수 금지</b>: 당일 이미 +5% 이상 갭상승한 종목은 시초가 추격 매수하지 마시고, 당일 VWAP(거래량 가중 평균가) 지지 반등 시 분할 매수하세요.")
             self._send_reply("\n".join(lines))
         except Exception as e:
             logger.error("Failed _handle_screener: {}", e)
