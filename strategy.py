@@ -636,6 +636,18 @@ class StrategyEngine:
         except Exception as _sr_err:
             logger.debug("Sector tailwind check skipped for {}: {}", symbol, _sr_err)
 
+        # 4. Orthogonal Macro Intelligence (CBOE SKEW Tail Risk + TOTM Calendar + Credit Spread)
+        try:
+            from orthogonal_macro_suite import get_orthogonal_macro_suite
+            _ortho_snap = get_orthogonal_macro_suite().get_snapshot()
+            if _ortho_snap.composite_boost != 0:
+                confidence = max(0, min(100, confidence + _ortho_snap.composite_boost))
+                setup_reason += f" | ORTHO({_ortho_snap.composite_boost:+d}pt: SKEW {_ortho_snap.skew.skew_value:.0f}, {_ortho_snap.totm_day_desc})"
+                logger.info("ORTHOGONAL_MACRO: Symbol {} adjusted by {:+d}pts (SKEW: {:.1f}, TOTM: {}, Credit: {})",
+                            symbol, _ortho_snap.composite_boost, _ortho_snap.skew.skew_value, _ortho_snap.totm_day_desc, _ortho_snap.credit_sentiment)
+        except Exception as _ortho_err:
+            logger.debug("Orthogonal macro check skipped for {}: {}", symbol, _ortho_err)
+
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()
         filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)
