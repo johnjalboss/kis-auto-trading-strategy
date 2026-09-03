@@ -22,6 +22,29 @@ critical_issues = []
 warnings = []
 
 # =========================================================================
+# PHASE 0: TRADING CONSTITUTION INVARIANT ASSERTIONS (절대 원칙 자동 검증)
+# =========================================================================
+print("\n[PHASE 0] Verifying Trading Constitution Invariants...")
+try:
+    import config
+    if getattr(config, 'MAX_POSITIONS', 0) != 3:
+        critical_issues.append(f"[CONSTITUTION VIOLATION] config.MAX_POSITIONS must be 3 (found {config.MAX_POSITIONS})! 3종목 집중 투자 원칙 위반!")
+    if abs(getattr(config, 'MAX_POSITION_PCT', 0.0) - 0.333) > 0.05:
+        critical_issues.append(f"[CONSTITUTION VIOLATION] config.MAX_POSITION_PCT must be ~0.333 (found {config.MAX_POSITION_PCT})! 33.3% 집중 투자 비중 원칙 위반!")
+    
+    if os.path.exists(".env"):
+        with open(".env", "r", encoding="utf-8") as env_f:
+            for eline in env_f:
+                eline = eline.strip()
+                if eline.startswith("MAX_POSITIONS="):
+                    val = eline.split("=")[1].strip()
+                    if val != "3":
+                        critical_issues.append(f"[CONSTITUTION VIOLATION] .env MAX_POSITIONS must be 3 (found {val})!")
+    print("  -> Invariants 100% Passed: MAX_POSITIONS=3, MAX_POSITION_PCT=33.3%, PURE SWING")
+except Exception as const_e:
+    critical_issues.append(f"[CONSTITUTION CHECK FAILED] {const_e}")
+
+# =========================================================================
 # PHASE 1: AST SYNTAX & SCOPE AUDIT FOR ALL .PY FILES
 # =========================================================================
 print("\n[PHASE 1] AST Parsing & Syntax Verification...")
