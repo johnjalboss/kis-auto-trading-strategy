@@ -829,10 +829,30 @@ class StrategyEngine:
         except Exception as _p_err:
             logger.debug("Pressure leader check skipped for {}: {}", symbol, _p_err)
 
+        # ── Setup K: 마크 미너비니 VCP 피봇 돌파 (Minervini VCP Breakout) ────────
+        is_vcp_breakout = False
+        vcp_res = {}
+        try:
+            from vcp_breakout_engine import VCPBreakoutEngine
+            vcp_res = VCPBreakoutEngine().analyze(df_daily, symbol)
+            if vcp_res.get("is_pivot_breakout", False) and structural_uptrend:
+                is_vcp_breakout = True
+                confidence += vcp_res.get("score_bonus", 15)
+                logger.info("🏆 [VCP_PIVOT_BREAKOUT] {} confirmed Minervini VCP Pivot Breakout (Pivot=${:.2f}) -> +{}pts",
+                            symbol, vcp_res.get("pivot_resistance", 0.0), vcp_res.get("score_bonus", 15))
+            elif vcp_res.get("label") == "VCP_TIGHT_COIL_BASE" and structural_uptrend:
+                confidence += 8
+                logger.info("🌀 [VCP_TIGHT_COIL] {} formed tight base contraction (Depth={:.1f}%) -> +8pts",
+                            symbol, vcp_res.get("final_contraction_depth_pct", 0.0))
+        except Exception as _vcp_err:
+            logger.debug("VCP check skipped for {}: {}", symbol, _vcp_err)
+
         # ── 설정 우선순위 결정 (가장 강한 신호부터) ─────────────────────
         setup_reason = ""
         if is_moc_drive:
             setup_reason = "MOC_CLOSING_DRIVE: Holding Day High at Market Close (Institutional MOC Sweep)"
+        elif is_vcp_breakout:
+            setup_reason = f"MINERVINI_VCP_BREAKOUT: Pivot ${vcp_res.get('pivot_resistance', 0.0):.2f} (Depth {vcp_res.get('final_contraction_depth_pct', 0.0):.1f}%)"
         elif is_squeeze_release:
             setup_reason = f"VOLATILITY_SQUEEZE_RELEASE: Energy expansion up (BW {sq_res.get('bandwidth', 0.0):.3f})"
         elif is_pressure_leader:
@@ -858,7 +878,7 @@ class StrategyEngine:
         elif comp_signal and comp_signal.composite_score >= 75:
             setup_reason = f"HIGH_CONVICTION_QUANT: Institutional score {comp_signal.composite_score:.0f}"
         else:
-            return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant/MOC/Squeeze/Pressure)", current_price)
+            return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant/MOC/Squeeze/Pressure/VCP)", current_price)
 
         # 11. Dynamic score requirements based on Regime & Volatility
         base_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
