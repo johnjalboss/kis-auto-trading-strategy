@@ -623,6 +623,19 @@ class StrategyEngine:
         except Exception as _ws_err:
             logger.debug("Wall Street consensus check skipped for {}: {}", symbol, _ws_err)
 
+        # 3. Sector Momentum Tail-Wind Alignment
+        try:
+            from sector_rotator import get_sector_rotator
+            _sr = get_sector_rotator()
+            _top_s = _sr.get_top_sectors(3)
+            _stock_s = _sr.get_sector_for_stock(symbol)
+            if _stock_s and _stock_s in _top_s:
+                confidence += 7
+                setup_reason += f" | SECTOR_TAILWIND ({_stock_s} in Top 3)"
+                logger.info("SECTOR_TAILWIND: {} belongs to top leading sector {} (+7pts)", symbol, _stock_s)
+        except Exception as _sr_err:
+            logger.debug("Sector tailwind check skipped for {}: {}", symbol, _sr_err)
+
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()
         filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)
@@ -646,6 +659,15 @@ class StrategyEngine:
         # ── Setup B: 20일선 눌림목 매수 (20MA Trend Pullback) ───────────────
         # 상승추세(SMA20>SMA50) + 20일선 지지 테스트 (20MA -2.0% ~ +3.0%) + 건강한 RSI(40~65) = 교과서적 스윙 눌림목
         is_pullback = structural_uptrend and (40 <= indicators.rsi <= 65) and (sma20 * 0.980 <= current_price <= sma20 * 1.035)
+
+        # Wyckoff Volume Dry-Up (VDU): 눌림목에서 거래량 바닥(매물 소진) 확인 시 +8점 가산
+        vol_avg20_pb = float(df_daily['Volume'].iloc[-21:-1].mean()) if len(df_daily) >= 21 else 1.0
+        vol_today_pb = float(df_daily['Volume'].iloc[-1])
+        if is_pullback and vol_avg20_pb > 0 and vol_today_pb <= vol_avg20_pb * 0.65:
+            confidence += 8
+            setup_reason += f" | WYCKOFF_VDU (Vol {vol_today_pb/vol_avg20_pb:.0%})"
+            logger.info("WYCKOFF_VDU: {} pullback shows supply exhaustion (Vol {:.0%} of 20MA, +8pts)",
+                        symbol, (vol_today_pb / vol_avg20_pb) * 100)
 
         # ── Setup C: 과매도 반등 (Mean Reversion Bounce) ──────────────────
         # RSI < 35 + BB 하단 근처 + 200MA 위 = 단기 과매도 후 기술적 반등
