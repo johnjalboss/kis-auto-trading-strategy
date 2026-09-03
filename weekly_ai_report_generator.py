@@ -69,16 +69,16 @@ class WeeklyAIReportGenerator:
             # Query closed trades in the last 7 days from BOTH trade_details and trades
             cursor.execute("""
                 SELECT symbol, side, price, quantity, pnl, pnl_pct, 
-                       COALESCE(diagnostic_notes, setup_reason, '') as reason, 
+                       COALESCE(reason, '') as reason, 
                        created_at
                 FROM (
-                    SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason, diagnostic_notes, created_at
+                    SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason as reason, created_at
                     FROM trade_details
                     WHERE side = 'SELL' AND date(created_at, ?) >= date(?, '-7 days')
                     UNION ALL
-                    SELECT symbol, side, price, quantity, pnl, pnl_pct, reason as setup_reason, reason as diagnostic_notes, created_at
+                    SELECT symbol, side, price, quantity, pnl, pnl_pct, reason, COALESCE(created_at, exit_time) as created_at
                     FROM trades
-                    WHERE side = 'SELL' AND date(created_at, ?) >= date(?, '-7 days')
+                    WHERE side = 'SELL' AND date(COALESCE(created_at, exit_time), ?) >= date(?, '-7 days')
                 )
                 ORDER BY created_at DESC
             """, (offset_modifier, today_us, offset_modifier, today_us))
