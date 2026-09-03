@@ -252,34 +252,48 @@ class TelegramNotifier:
         if self._enabled and self.bot_token and self.chat_id:
             try:
                 url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": message,
-                    "parse_mode": "HTML"
-                }
-                resp = requests.post(url, json=payload, timeout=10)
-                if not resp.ok:
-                    logger.error(f"Telegram API error: {resp.status_code} {resp.text}")
-                    # [AUTO-RECOVERY] If HTML parse failed (400), retry in plain text without HTML parse_mode
-                    if resp.status_code == 400:
-                        import re
-                        plain_text = re.sub(r'<[^>]+>', '', message)
-                        logger.info("Retrying Telegram notification in plain text fallback mode...")
-                        plain_payload = {
-                            "chat_id": self.chat_id,
-                            "text": plain_text
-                        }
-                        resp2 = requests.post(url, json=plain_payload, timeout=10)
-                        if resp2.ok:
-                            logger.info("Telegram message successfully sent via plain text fallback.")
-                            success = True
+                
+                # Split message if it exceeds Telegram 3900 char threshold to avoid 4096 hard limit
+                chunks = []
+                remaining = message
+                while len(remaining) > 3900:
+                    split_idx = remaining.rfind('\n', 0, 3900)
+                    if split_idx == -1:
+                        split_idx = 3900
+                    chunks.append(remaining[:split_idx])
+                    remaining = remaining[split_idx:].lstrip()
+                if remaining:
+                    chunks.append(remaining)
+
+                for chunk in chunks:
+                    payload = {
+                        "chat_id": self.chat_id,
+                        "text": chunk,
+                        "parse_mode": "HTML"
+                    }
+                    resp = requests.post(url, json=payload, timeout=10)
+                    if not resp.ok:
+                        logger.error(f"Telegram API error: {resp.status_code} {resp.text}")
+                        # [AUTO-RECOVERY] If HTML parse failed (400), retry in plain text without HTML parse_mode
+                        if resp.status_code == 400:
+                            import re
+                            plain_text = re.sub(r'<[^>]+>', '', chunk)
+                            logger.info("Retrying Telegram notification in plain text fallback mode...")
+                            plain_payload = {
+                                "chat_id": self.chat_id,
+                                "text": plain_text
+                            }
+                            resp2 = requests.post(url, json=plain_payload, timeout=10)
+                            if resp2.ok:
+                                logger.info("Telegram message successfully sent via plain text fallback.")
+                                success = True
+                            else:
+                                success = False
                         else:
                             success = False
                     else:
-                        success = False
-                else:
-                    logger.info("Telegram message successfully sent via HTTP request.")
-                    success = True
+                        logger.info("Telegram message successfully sent via HTTP request.")
+                        success = True
             except Exception as e:
                 logger.error(f"Telegram send failed: {e}")
                 success = False

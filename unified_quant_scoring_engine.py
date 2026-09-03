@@ -443,8 +443,12 @@ class UnifiedQuantScoringEngine:
         except Exception:
             pass
 
-        # Final Bounded Continuous Quant Score
+        # Final Bounded Continuous Quant Score with Robust NaN/Inf Defense
         raw_final = base_quant_score - total_penalty
+        if np.isnan(raw_final) or np.isinf(raw_final):
+            logger.warning("⚠️ [UNIFIED_QUANT_SCORE] {} raw_final is NaN/Inf (Base: {}, Pen: {}), defaulting to 0",
+                           symbol, base_quant_score, total_penalty)
+            raw_final = 0.0
         clamped_score = int(np.clip(round(raw_final), 0, 100))
 
         logger.info(

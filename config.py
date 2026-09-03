@@ -55,11 +55,23 @@ ENABLE_CONSECUTIVE_LOSS_COOLDOWN = False
 CONSECUTIVE_LOSS_LIMIT = int(os.getenv("CONSECUTIVE_LOSS_LIMIT", "999"))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "0"))
 
-# Position limits (공격형 고수익 모드: 3개 상위 주도주에 각 33.3% 집중 투자)
+# Position limits (동적 .env 반영: MAX_POSITIONS 기본 5)
 MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.35"))  # 33.3~35% max per position
 if MAX_POSITION_PCT >= 1.0:
     MAX_POSITION_PCT /= 100.0
-MAX_POSITIONS = 3  # 공격형 고수익 모드: 3종목 집중 배팅 (+2,048% CAGR 35.88% 모델)
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "5"))
+
+# Dynamic .env parameters
+MIN_ENTRY_SCORE = int(os.getenv("MIN_ENTRY_SCORE", "60"))
+DAILY_STOP_LOSS_PCT = float(os.getenv("DAILY_STOP_LOSS_PCT", "0.05"))
+if DAILY_STOP_LOSS_PCT >= 1.0:
+    DAILY_STOP_LOSS_PCT /= 100.0
+
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+FRED_API_KEY = os.getenv("FRED_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+DISABLE_OPTIONS_FLOW = os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() in ("true", "1", "yes")
+DISABLE_YFINANCE_FALLBACK = os.getenv("DISABLE_YFINANCE_FALLBACK", "false").lower() in ("true", "1", "yes")
 
 # ==============================================
 # [ENABLED] UPGRADE 교체매매 활성화 — 최소 30점 차이날 때만 교체

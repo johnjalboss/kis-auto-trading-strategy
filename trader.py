@@ -751,8 +751,15 @@ class Trader:
             logger.debug("BLACKLIST: {} skipped (KIS API permanently rejected)", symbol)
             return OrderResult(False, "", symbol, "BUY", quantity, limit_price or 0.0, "KIS_BLACKLISTED")
 
+        if quantity <= 0:
+            logger.warning("BUY ABORTED: Invalid order quantity {} for {} (insufficient cash or sub-share)", quantity, symbol)
+            return OrderResult(False, "", symbol, "BUY", 0, limit_price or 0.0, "INVALID_QUANTITY_ZERO")
+
         if limit_price is None:
             price = self.get_price(symbol)
+            if price <= 0:
+                logger.error("BUY ABORTED: Failed to fetch valid market price for {}", symbol)
+                return OrderResult(False, "", symbol, "BUY", quantity, 0.0, "PRICE_FETCH_FAILED")
             # [SOTA QUANT SPREAD GATE & MID-SPREAD PEGGING]
             # 10호가 스프레드를 실시간 측정하여 슬리피지를 원천 차단
             spread = self.get_spread(symbol)
@@ -876,8 +883,15 @@ class Trader:
         if symbol.upper() in _KIS_BLACKLIST:
             logger.warning("⚠️ SELL on blacklisted {}: attempting anyway to close position.", symbol)
 
+        if quantity <= 0:
+            logger.warning("SELL ABORTED: Invalid order quantity {} for {}", quantity, symbol)
+            return OrderResult(False, "", symbol, "SELL", 0, limit_price or 0.0, "INVALID_QUANTITY_ZERO")
+
         if limit_price is None:
             price = self.get_price(symbol)
+            if price <= 0:
+                logger.error("SELL ABORTED: Failed to fetch valid market price for {}", symbol)
+                return OrderResult(False, "", symbol, "SELL", quantity, 0.0, "PRICE_FETCH_FAILED")
             # [Quant-Execution] Spread-Aware Dynamic Pricing (호가 스프레드 연동형 동적 지정가 산출)
             spread = self.get_spread(symbol)
             markdown = max(0.001, min(0.015, spread * 1.5))
