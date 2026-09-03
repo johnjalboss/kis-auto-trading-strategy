@@ -1,12 +1,12 @@
 {
-  "MIN_ENTRY_SCORE": 84,
-  "STOP_LOSS_PCT": 0.03,
-  "TAKE_PROFIT_PCT": 0.06,
-  "MAX_POSITION_PCT": 0.3,
+  "MIN_ENTRY_SCORE": 80,
+  "STOP_LOSS_PCT": 0.04,
+  "TAKE_PROFIT_PCT": 0.09,
+  "MAX_POSITION_PCT": 0.25,
   "RVOL_MIN": 1.5,
   "MAX_RSI_ENTRY": 72,
-  "TUNED_AT": "2026-08-27 21:55:16",
-  "REASON": "노이즈 방어(IC=-0.22 ➔ 84점) + 알파 집중 모드(승률 75.0%)",
+  "TUNED_AT": "2026-09-04 02:20:03",
+  "REASON": "Baseline Balanced Institutional Matrix",
   "CLUSTERS": {
     "HIGH_VOL_GROWTH": {
       "label": "🚀 고변동 성장주",
