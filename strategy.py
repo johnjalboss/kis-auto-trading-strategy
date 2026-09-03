@@ -295,6 +295,56 @@ class StrategyEngine:
             return True
         def_set = getattr(config, 'DEFENSIVE_UNIVERSE_SET', set())
         return symbol in def_set
+
+    def _calc_dynamic_regime_threshold(self, base_score: int, regime: str, symbol: str) -> Tuple[int, str]:
+        """
+        Calculates mathematically optimal dynamic entry score threshold.
+        Formula:
+            Threshold = Clamp(Base + Delta_Regime + Delta_VIX, min_bound=48, max_bound=75)
+        """
+        delta_regime = 0
+        delta_vix = 0
+        tag_parts = []
+
+        _bull_regimes = {"BULL_STRONG", "BULL_NORMAL", "BULL_MOMENTUM", "RISK_ON"}
+        _choppy_regimes = {"CHOPPY", "TRANSITION", "CHOPPY_VOLATILE"}
+        _bear_regimes = {"BEAR_NORMAL", "BEAR_TRENDING", "BEAR_VOLATILE", "BEAR_PANIC", "RISK_OFF"}
+
+        if regime in _bull_regimes:
+            delta_regime = -5
+            tag_parts.append("BULL_ACCEL(-5)")
+        elif regime in _choppy_regimes:
+            if not self.is_defensive_stock(symbol):
+                delta_regime = +8
+                tag_parts.append("CHOPPY_GUARD(+8)")
+            else:
+                delta_regime = +2
+                tag_parts.append("CHOPPY_DEFENSIVE(+2)")
+        elif regime in _bear_regimes:
+            delta_regime = +15
+            tag_parts.append("BEAR_SELECTIVE(+15)")
+
+        # 2. VIX delta
+        try:
+            from options_flow import get_vix_snapshot
+            vix_snap = get_vix_snapshot()
+            vix_val = float(vix_snap.vix) if vix_snap and hasattr(vix_snap, 'vix') else 16.0
+            if vix_val < 14.5:
+                delta_vix = -3
+                tag_parts.append("LOW_VIX(-3)")
+            elif vix_val > 28.0:
+                delta_vix = +10
+                tag_parts.append("PANIC_VIX(+10)")
+            elif vix_val > 20.0:
+                delta_vix = +4
+                tag_parts.append("HIGH_VIX(+4)")
+        except Exception:
+            delta_vix = 0
+
+        # 3. Clamping to [48, 75]
+        effective_score = max(48, min(75, int(base_score + delta_regime + delta_vix)))
+        regime_desc = "|".join(tag_parts) if tag_parts else "NEUTRAL"
+        return effective_score, regime_desc
     
     def get_phase_config(self) -> PhaseConfig:
         phase = get_market_phase()
@@ -707,17 +757,13 @@ class StrategyEngine:
         else:
             return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant)", current_price)
 
-        # 11. Dynamic score requirements based on Regime
-        min_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
-        
-        # Add buffer in choppy regimes to avoid whipsaws (Exempt Defensive stocks so rotation targets pass easily)
-        if current_regime in _choppy_regimes:
-            if not self.is_defensive_stock(symbol):
-                min_required += 10
-                setup_reason = f"[CHOPPY SELECTIVE] {setup_reason}"
-                logger.info("CHOPPY SELECTIVE: Raised minimum score threshold for symbol {} to {}", symbol, min_required)
-            else:
-                logger.info("CHOPPY DEFENSIVE FAVOR: Defensive symbol {} exempted from choppy threshold penalty (threshold: {})", symbol, min_required)
+        # 11. Dynamic score requirements based on Regime & Volatility
+        base_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
+        min_required, regime_desc = self._calc_dynamic_regime_threshold(base_required, current_regime, symbol)
+        if regime_desc:
+            setup_reason = f"[{regime_desc}] {setup_reason}"
+        logger.info("DYNAMIC REGIME THRESHOLD: Calculated effective threshold for {} = {} (Base: {}, Adjustment: {})",
+                    symbol, min_required, base_required, regime_desc)
 
         # Enforce technical filter checks for Setup A (Setup B bypasses some filters due to flow momentum)
         if not is_quant_accumulation and not filter_res['passed']:
@@ -1470,7 +1516,7 @@ class StrategyEngine:
         elif target_30r_pct < min_tp_pct:
             target_30r = pos.entry_price * (1.0 + min_tp_pct)
             target_15r = pos.entry_price + (target_30r - pos.entry_price) * 0.5
-            atr_pct_log = (atr_at_entry / pos.entry_price) if atr_at_entry > 0 and pos.entry_price > 0 else 0
+            atr_pct_log = (pos.atr_at_entry / pos.entry_price) if pos.atr_at_entry > 0 and pos.entry_price > 0 else 0
             logger.debug("[ATR_TP] {} | ATR={:.1%} → MinTP={:.1%} (raw 30R was {:.1%})", pos.symbol, atr_pct_log, min_tp_pct, target_30r_pct)
             
         # Scale-Out TP Exits (50% 분할 익절 및 100% 무위험 거래 전환)
