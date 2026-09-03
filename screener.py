@@ -1492,15 +1492,15 @@ class DynamicScreener:
                         self._ohlcv_cache["SPY"] = spy_df
                 if spy_df is not None and len(spy_df) >= 65 and len(hist) >= 65:
                     # SPY returns
-                    spy_close = spy_df['Close']
-                    spy_ret_3m = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-65]) - 1) * 100
-                    spy_ret_6m = (float(spy_close.iloc[-1]) / float(spy_close.iloc[0]) - 1) * 100 if len(spy_close) >= 130 else spy_ret_3m
+                    spy_close = spy_df['Close'].values
+                    spy_ret_3m = (float(spy_close[-1]) / float(spy_close[-65]) - 1) * 100
+                    spy_ret_6m = (float(spy_close[-1]) / float(spy_close[0]) - 1) * 100 if len(spy_close) >= 130 else spy_ret_3m
                     
                     # Stock returns
-                    close = hist['Close']
-                    curr = float(close.iloc[-1])
-                    ret_3m = (curr / float(close.iloc[-65]) - 1) * 100
-                    ret_6m = (curr / float(close.iloc[0]) - 1) * 100 if len(close) >= 130 else ret_3m
+                    close = hist['Close'].values
+                    curr = float(close[-1])
+                    ret_3m = (curr / float(close[-65]) - 1) * 100
+                    ret_6m = (curr / float(close[0]) - 1) * 100 if len(close) >= 130 else ret_3m
                     
                     # RS Score (3M 60% / 6M 40%)
                     rs_val = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
