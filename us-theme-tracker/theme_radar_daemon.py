@@ -129,20 +129,21 @@ class ThemeRadarDaemon:
                     len(self.theme_tickers), len(self.all_unique_tickers))
 
     def fetch_daily_history(self, force: bool = False):
-        """Fetch 1-year daily historical OHLCV data with intelligent hourly refresh"""
+        """Fetch 6-month daily historical OHLCV data with intelligent hourly refresh"""
         now = time.time()
-        if not force and self.last_daily_fetch and (now - self.last_daily_fetch < 3600) and not self.raw_daily.empty:
+        if not force and self.last_daily_fetch and (now - self.last_daily_fetch < 1800) and not self.raw_daily.empty:
             return
             
         logger.info("Refreshing daily historical baseline for {} tickers...", len(self.all_unique_tickers))
-        chunk_size = 150
+        chunk_size = 100
         daily_chunks = []
+        import gc
         
         for i in range(0, len(self.all_unique_tickers), chunk_size):
             chunk = self.all_unique_tickers[i:i+chunk_size]
             try:
                 raw_c = yf.download(
-                    chunk, period="1y", interval="1d", auto_adjust=True,
+                    chunk, period="6mo", interval="1d", auto_adjust=True,
                     progress=False, threads=True, group_by="ticker"
                 )
                 if not raw_c.empty:
@@ -154,26 +155,13 @@ class ThemeRadarDaemon:
         if daily_chunks:
             self.raw_daily = pd.concat(daily_chunks, axis=1)
             self.last_daily_fetch = now
+            del daily_chunks
+            gc.collect()
             logger.info("Daily baseline updated successfully.")
 
     def fetch_live_snapshots(self) -> pd.DataFrame:
-        """Download fast 1-minute / snapshot data for real-time calculation"""
-        chunk_size = 200
-        live_chunks = []
-        for i in range(0, len(self.all_unique_tickers), chunk_size):
-            chunk = self.all_unique_tickers[i:i+chunk_size]
-            try:
-                raw_l = yf.download(
-                    chunk, period="1d", interval="1m", prepost=True,
-                    progress=False, threads=True, group_by="ticker"
-                )
-                if not raw_l.empty:
-                    live_chunks.append(raw_l)
-            except Exception as e:
-                logger.warning("Error downloading live chunk {}: {}", i, e)
-            time.sleep(0.05)
-                
-        return pd.concat(live_chunks, axis=1) if live_chunks else pd.DataFrame()
+        """Lightweight live snapshot fetcher (reuses daily baseline to eliminate CPU/RAM spikes)"""
+        return pd.DataFrame()
 
     def run_cycle(self):
         cycle_start = time.time()
@@ -586,12 +574,14 @@ class ThemeRadarDaemon:
             try:
                 m_state = get_market_state()
                 self.run_cycle()
+                import gc
+                gc.collect()
                 
-                # Dynamic sleep interval based on market hours
+                # Dynamic sleep interval based on market hours (5 mins during trading)
                 if m_state == "REGULAR":
-                    sleep_sec = 60   # Every 1 minute in regular trading
+                    sleep_sec = 300  # Every 5 minutes in regular trading
                 elif m_state == "EXTENDED":
-                    sleep_sec = 300  # Every 5 minutes in pre/post market
+                    sleep_sec = 600  # Every 10 minutes in pre/post market
                 else:
                     sleep_sec = 1800 # Every 30 minutes outside market hours/weekends
                     

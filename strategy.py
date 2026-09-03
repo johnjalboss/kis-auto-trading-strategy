@@ -175,6 +175,10 @@ class EntrySignal:
     price: float
     indicators: Optional[IndicatorSummary] = None
     score_breakdown: Optional[List[str]] = None
+    kalman_velocity: float = 0.0
+    rs_alpha: float = 0.0
+    raw_score: float = 0.0
+    composite_score: float = 0.0
 
 
 @dataclass
@@ -648,6 +652,37 @@ class StrategyEngine:
         except Exception as _ortho_err:
             logger.debug("Orthogonal macro check skipped for {}: {}", symbol, _ortho_err)
 
+        # 5. US Congressional Stock Purchases (STOCK Act Form PTR Policy Catalyst)
+        try:
+            from congressional_trade_tracker import CongressionalTradeTracker
+            _cong_event = CongressionalTradeTracker().check_ticker_catalyst(symbol)
+            if _cong_event and _cong_event.score_bonus > 0:
+                confidence += _cong_event.score_bonus
+                pol_name = _cong_event.politician.split('(')[0].strip()
+                setup_reason += f" | CONGRESS_TAILWIND({pol_name}: +{_cong_event.score_bonus}pt)"
+                logger.info("🏛️ [CONGRESS_CATALYST] {} backed by {}! +{}pt Boost",
+                            symbol, pol_name, _cong_event.score_bonus)
+        except Exception as _cong_err:
+            logger.debug("Congressional trade check skipped for {}: {}", symbol, _cong_err)
+
+        # 6. Wall Street Consensus Target Price Upside & Exhaustion Check
+        try:
+            import yfinance as yf
+            _inf = yf.Ticker(symbol).info if hasattr(yf.Ticker(symbol), 'info') else {}
+            _curr_p = _inf.get('currentPrice') or _inf.get('regularMarketPrice') or current_price
+            _tgt_p = _inf.get('targetMeanPrice')
+            if _curr_p and _tgt_p and _curr_p > 0 and _tgt_p > 0:
+                _upside = (_tgt_p - _curr_p) / _curr_p
+                if _upside >= 0.20:  # 20%+ target upside
+                    confidence += 5
+                    setup_reason += f" | TARGET_UPSIDE(+{_upside*100:.0f}%)"
+                    logger.info("TARGET_UPSIDE: {} has +{:.1f}% analyst target upside (+5pts)", symbol, _upside * 100)
+                elif _upside < -0.05:  # Stock trading 5%+ ABOVE analyst price target (exhaustion)
+                    confidence = max(0, confidence - 8)
+                    logger.warning("TARGET_EXHAUSTION: {} trading {:.1f}% above mean analyst target (-8pts)", symbol, abs(_upside) * 100)
+        except Exception as _tgt_err:
+            logger.debug("Target price upside check skipped for {}: {}", symbol, _tgt_err)
+
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()
         filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)
@@ -994,8 +1029,38 @@ class StrategyEngine:
             self._last_scores = {}
         self._last_scores[symbol] = int(round(confidence))
 
-        logger.info("🎯 ENTRY SIGNAL TRIGGERED [2026 SOTA]: {} -> BUY (Score: {}, Setup: {})", symbol, confidence, setup_reason)
-        return EntrySignal("BUY", confidence, setup_reason, current_price, indicators, score_breakdown=score_breakdown)
+        # Compute lag-free Kalman velocity slope & RS alpha for deterministic orchestrator tie-breaking
+        k_vel = 0.0
+        try:
+            from kalman_filter_engine import KalmanFilterEngine
+            k_res = KalmanFilterEngine().analyze(df_daily)
+            k_vel = float(k_res.get('velocity_slope', 0.0))
+        except Exception:
+            pass
+
+        rs_a = 0.0
+        try:
+            if _spy_df is not None and len(_spy_df) >= 2 and len(df_daily) >= 2:
+                s_ret = (float(df_daily['Close'].iloc[-1]) / float(df_daily['Close'].iloc[-2])) - 1.0
+                m_ret = (float(_spy_df['Close'].iloc[-1]) / float(_spy_df['Close'].iloc[-2])) - 1.0
+                rs_a = float(s_ret - m_ret)
+        except Exception:
+            pass
+
+        logger.info("🎯 ENTRY SIGNAL TRIGGERED [2026 SOTA]: {} -> BUY (Score: {}, KalmanVel: {:.4f}, Setup: {})",
+                    symbol, confidence, k_vel, setup_reason)
+        return EntrySignal(
+            action="BUY",
+            confidence=confidence,
+            reason=setup_reason,
+            price=current_price,
+            indicators=indicators,
+            score_breakdown=score_breakdown,
+            kalman_velocity=k_vel,
+            rs_alpha=rs_a,
+            raw_score=float(confidence),
+            composite_score=float(confidence)
+        )
 
 
     def _check_entry_filters(self, ind: IndicatorSummary, cfg: PhaseConfig,
