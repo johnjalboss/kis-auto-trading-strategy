@@ -652,37 +652,6 @@ class StrategyEngine:
         except Exception as _ortho_err:
             logger.debug("Orthogonal macro check skipped for {}: {}", symbol, _ortho_err)
 
-        # 5. US Congressional Stock Purchases (STOCK Act Form PTR Policy Catalyst)
-        try:
-            from congressional_trade_tracker import CongressionalTradeTracker
-            _cong_event = CongressionalTradeTracker().check_ticker_catalyst(symbol)
-            if _cong_event and _cong_event.score_bonus > 0:
-                confidence += _cong_event.score_bonus
-                pol_name = _cong_event.politician.split('(')[0].strip()
-                setup_reason += f" | CONGRESS_TAILWIND({pol_name}: +{_cong_event.score_bonus}pt)"
-                logger.info("🏛️ [CONGRESS_CATALYST] {} backed by {}! +{}pt Boost",
-                            symbol, pol_name, _cong_event.score_bonus)
-        except Exception as _cong_err:
-            logger.debug("Congressional trade check skipped for {}: {}", symbol, _cong_err)
-
-        # 6. Wall Street Consensus Target Price Upside & Exhaustion Check
-        try:
-            import yfinance as yf
-            _inf = yf.Ticker(symbol).info if hasattr(yf.Ticker(symbol), 'info') else {}
-            _curr_p = _inf.get('currentPrice') or _inf.get('regularMarketPrice') or current_price
-            _tgt_p = _inf.get('targetMeanPrice')
-            if _curr_p and _tgt_p and _curr_p > 0 and _tgt_p > 0:
-                _upside = (_tgt_p - _curr_p) / _curr_p
-                if _upside >= 0.20:  # 20%+ target upside
-                    confidence += 5
-                    setup_reason += f" | TARGET_UPSIDE(+{_upside*100:.0f}%)"
-                    logger.info("TARGET_UPSIDE: {} has +{:.1f}% analyst target upside (+5pts)", symbol, _upside * 100)
-                elif _upside < -0.05:  # Stock trading 5%+ ABOVE analyst price target (exhaustion)
-                    confidence = max(0, confidence - 8)
-                    logger.warning("TARGET_EXHAUSTION: {} trading {:.1f}% above mean analyst target (-8pts)", symbol, abs(_upside) * 100)
-        except Exception as _tgt_err:
-            logger.debug("Target price upside check skipped for {}: {}", symbol, _tgt_err)
-
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()
         filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)
