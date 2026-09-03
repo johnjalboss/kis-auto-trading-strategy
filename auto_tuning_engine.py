@@ -420,11 +420,27 @@ class AutoTuningEngine:
         reasons = []
 
         if n_trades >= 3:
-            optimal_sl = min(0.055, max(0.030, mae_wins_95 + 0.005))
-            tuned_params["STOP_LOSS_PCT"] = round(optimal_sl, 3)
+            optimal_sl = min(0.055, max(0.025, mae_wins_95 + 0.005))
+            optimal_tp = min(0.150, max(0.050, mfe_median * (1.0 + 0.25 * max(0.0, min(1.5, pf - 1.0)))))
             
-            optimal_tp = min(0.140, max(0.060, mfe_median * 0.75))
+            tuned_params["STOP_LOSS_PCT"] = round(optimal_sl, 3)
             tuned_params["TAKE_PROFIT_PCT"] = round(optimal_tp, 3)
+
+            # [QUANT MATHEMATICAL VOLATILITY MULTIPLIER SCALING]
+            # 고변동 성장주: Beta = 1.60x, 변동성 비례 확장
+            cluster_params["HIGH_VOL_GROWTH"]["TAKE_PROFIT_PCT"] = round(min(0.240, max(0.080, optimal_tp * 1.60)), 3)
+            cluster_params["HIGH_VOL_GROWTH"]["STOP_LOSS_PCT"] = round(min(0.060, max(0.035, optimal_sl * 1.35)), 3)
+            cluster_params["HIGH_VOL_GROWTH"]["TRAILING_ATR"] = round(min(3.5, max(2.2, 2.0 * (cluster_params["HIGH_VOL_GROWTH"]["TAKE_PROFIT_PCT"] / cluster_params["HIGH_VOL_GROWTH"]["STOP_LOSS_PCT"]))), 1)
+
+            # 중변동 표준주: Beta = 1.00x 기준선
+            cluster_params["MID_VOL_MOMENTUM"]["TAKE_PROFIT_PCT"] = round(min(0.140, max(0.050, optimal_tp * 1.00)), 3)
+            cluster_params["MID_VOL_MOMENTUM"]["STOP_LOSS_PCT"] = round(min(0.045, max(0.025, optimal_sl * 1.00)), 3)
+            cluster_params["MID_VOL_MOMENTUM"]["TRAILING_ATR"] = round(min(2.6, max(1.6, 1.8 * (cluster_params["MID_VOL_MOMENTUM"]["TAKE_PROFIT_PCT"] / cluster_params["MID_VOL_MOMENTUM"]["STOP_LOSS_PCT"]))), 1)
+
+            # 저변동 방어주: Beta = 0.65x 압축 (노이즈 필터링 및 안정적 마진 보호)
+            cluster_params["LOW_VOL_DEFENSIVE"]["TAKE_PROFIT_PCT"] = round(min(0.080, max(0.035, optimal_tp * 0.65)), 3)
+            cluster_params["LOW_VOL_DEFENSIVE"]["STOP_LOSS_PCT"] = round(min(0.035, max(0.018, optimal_sl * 0.72)), 3)
+            cluster_params["LOW_VOL_DEFENSIVE"]["TRAILING_ATR"] = round(min(1.8, max(1.2, 1.4 * (cluster_params["LOW_VOL_DEFENSIVE"]["TAKE_PROFIT_PCT"] / cluster_params["LOW_VOL_DEFENSIVE"]["STOP_LOSS_PCT"]))), 1)
 
             if ic >= 0.25:
                 tuned_params["MIN_ENTRY_SCORE"] = 78
@@ -503,12 +519,13 @@ class AutoTuningEngine:
             f"  • 📈 <b>평균 MFE</b>: <code>+{metrics.get('avg_mfe', 0.0)*100:.1f}%</code> | 📉 <b>평균 MAE</b>: <code>-{metrics.get('avg_mae', 0.0)*100:.1f}%</code>\n"
             f"  • 🔮 <b>알파 점수 예측력(IC)</b>: <code>{ic_val:+.2f}</code>\n"
             f"  • 📝 <b>매도 사후 오답노트</b>: <i>{remorse_str}</i>\n\n"
-            f"🏛️ <b>3대 자산 성향별 맞춤 튜닝 매트릭스</b>:\n"
-            f"  🚀 <b>고변동 성장주 (NVDA/PLTR/CRWD 등)</b>\n"
+            f"🏛️ <b>3대 자산 성향별 동적 퀀트 튜닝 매트릭스</b>:\n"
+            f"<i>(수학적 산출: 30일 MFE·MAE 실측치 및 변동성 Beta Kestner 모형 최적화)</i>\n"
+            f"  🚀 <b>고변동 성장주 (NVDA/PLTR/CRWD 등, β=1.60)</b>\n"
             f"     • 익절선: <code>+{high_c.get('TAKE_PROFIT_PCT', 0.15)*100:.1f}%</code> | 손절선: <code>-{high_c.get('STOP_LOSS_PCT', 0.05)*100:.1f}%</code> | 트레일: <code>{high_c.get('TRAILING_ATR', 2.8)}x ATR</code>\n\n"
-            f"  ⚖️ <b>중변동 표준주 (AAPL/MSFT/NOW 등)</b>\n"
+            f"  ⚖️ <b>중변동 표준주 (AAPL/MSFT/NOW 등, β=1.00)</b>\n"
             f"     • 익절선: <code>+{mid_c.get('TAKE_PROFIT_PCT', 0.09)*100:.1f}%</code> | 손절선: <code>-{mid_c.get('STOP_LOSS_PCT', 0.038)*100:.1f}%</code> | 트레일: <code>{mid_c.get('TRAILING_ATR', 2.0)}x ATR</code>\n\n"
-            f"  🛡️ <b>저변동 방어주 (MDT/ADP/KO/JNJ 등)</b>\n"
+            f"  🛡️ <b>저변동 방어주 (MDT/ADP/KO/JNJ 등, β=0.65)</b>\n"
             f"     • 익절선: <code>+{low_c.get('TAKE_PROFIT_PCT', 0.055)*100:.1f}%</code> | 손절선: <code>-{low_c.get('STOP_LOSS_PCT', 0.028)*100:.1f}%</code> | 트레일: <code>{low_c.get('TRAILING_ATR', 1.4)}x ATR</code>\n\n"
             f"🤖 <b>[AI 자율 최적화 수학적 근거]</b>:\n"
             f"<i>'{tuned.get('REASON', 'Multi-Tier Institutional Cluster Harmony')}'</i>\n"

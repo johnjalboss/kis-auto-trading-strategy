@@ -151,10 +151,11 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
             # Fetch all genuine trades since baseline (2026-08-14)
             cur.execute("""
                 SELECT id, symbol, side, quantity, price, pnl, pnl_pct, 
-                       date(created_at, '-14 hours') as trade_date, created_at
+                       date(COALESCE(created_at, exit_time, entry_time), '-14 hours') as trade_date, 
+                       COALESCE(created_at, exit_time, entry_time) as created_at
                 FROM trades 
-                WHERE created_at >= '2026-08-14'
-                ORDER BY created_at ASC, id ASC
+                WHERE COALESCE(created_at, exit_time, entry_time) >= '2026-08-14'
+                ORDER BY COALESCE(created_at, exit_time, entry_time) ASC, id ASC
             """)
             
             seen_trade_keys = set()
