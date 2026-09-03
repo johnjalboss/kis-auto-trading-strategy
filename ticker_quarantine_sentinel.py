@@ -1,4 +1,4 @@
-﻿"""
+"""
 Ticker Quarantine Cooldown Sentinel (ticker_quarantine_sentinel.py)
 ===================================================================
 Prevents toxic whipsaw revenge re-entries:

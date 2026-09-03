@@ -152,6 +152,19 @@ class TradeDatabase:
                     resolved_at TIMESTAMP
                 );
                 
+                CREATE TABLE IF NOT EXISTS trade_details (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    price REAL NOT NULL,
+                    pnl REAL DEFAULT 0,
+                    pnl_pct REAL DEFAULT 0,
+                    setup_reason TEXT,
+                    regime TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(entry_time);
                 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
             """)

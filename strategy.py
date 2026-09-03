@@ -596,6 +596,33 @@ class StrategyEngine:
             confidence += 15
             setup_reason += " | Bear Market Hedge Boost"
 
+        # [AVWAP Support & Wall Street Consensus Integration]
+        # 1. Anchored VWAP Institutional Cost Basis Support
+        if indicators and hasattr(indicators, 'dist_from_avwap_pct'):
+            dist_avwap = indicators.dist_from_avwap_pct
+            if 0.0 <= dist_avwap <= 0.035 and indicators.avwap > 0:
+                confidence += 8
+                setup_reason += f" | AVWAP_SUPPORT (+{dist_avwap:.1%} vs ${indicators.avwap:.2f})"
+                logger.info("AVWAP_SUPPORT: Symbol {} resting on institutional swing anchor (${:.2f}, +{:.1%})",
+                            symbol, indicators.avwap, dist_avwap)
+            elif dist_avwap < -0.025 and indicators.avwap > 0:
+                confidence = max(0, confidence - 12)
+                logger.warning("AVWAP_RESISTANCE: Symbol {} below institutional swing anchor (${:.2f}, {:.1%}). Damped score.",
+                               symbol, indicators.avwap, dist_avwap)
+
+        # 2. Wall Street Consensus Sentinel Check
+        try:
+            from wall_street_consensus import get_wall_street_consensus
+            ws_res = get_wall_street_consensus().analyze(symbol)
+            if ws_res.is_strong_consensus:
+                confidence += 7
+                setup_reason += f" | {ws_res.reason}"
+                logger.info("WALL_STREET_CONSENSUS: {} has strong institutional backing (+7pts, score {:+.0f})", symbol, ws_res.consensus_score)
+            elif ws_res.is_blocked:
+                return EntrySignal("HOLD", confidence, f"WALL_STREET_SELL_CONSENSUS: {ws_res.reason}", current_price)
+        except Exception as _ws_err:
+            logger.debug("Wall Street consensus check skipped for {}: {}", symbol, _ws_err)
+
         # Evaluate basic indicators filters (e.g. overbought check)
         cfg = self.get_phase_config()
         filter_res = self._check_entry_filters(indicators, cfg, symbol=symbol, price=current_price)

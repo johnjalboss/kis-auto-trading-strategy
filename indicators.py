@@ -56,6 +56,8 @@ class IndicatorSummary:
     macd: MACDResult
     stoch_rsi: float
     trend_strength: str  # "STRONG", "MODERATE", "WEAK"
+    avwap: float = 0.0
+    dist_from_avwap_pct: float = 0.0
     
     @property
     def entry_score(self) -> int:
@@ -111,6 +113,31 @@ def calculate_vwap(df: pd.DataFrame) -> pd.Series:
     cumulative_tp_vol = (typical_price * df['Volume']).cumsum()
     cumulative_vol = df['Volume'].cumsum()
     return cumulative_tp_vol / cumulative_vol
+
+
+def calculate_anchored_vwap(df: pd.DataFrame, anchor_idx: Optional[int] = None) -> pd.Series:
+    """
+    Calculates Volume Weighted Average Price anchored from a specific bar index.
+    If anchor_idx is None, automatically anchors to the lowest price bar in the last 30 bars (swing low origin).
+    AVWAP_t = sum_{i=t0}^t (TypicalPrice_i * Volume_i) / sum_{i=t0}^t Volume_i
+    """
+    if df is None or len(df) < 5:
+        return calculate_vwap(df) if df is not None and len(df) > 0 else pd.Series(dtype=float)
+
+    if anchor_idx is None:
+        lookback = min(len(df), 30)
+        low_idx = df['Low'].iloc[-lookback:].idxmin()
+        anchor_idx = df.index.get_loc(low_idx)
+
+    sub = df.iloc[anchor_idx:]
+    typical_price = (sub['High'] + sub['Low'] + sub['Close']) / 3
+    cumulative_tp_vol = (typical_price * sub['Volume']).cumsum()
+    cumulative_vol = sub['Volume'].cumsum().replace(0, 1)
+    avwap_sub = cumulative_tp_vol / cumulative_vol
+
+    res = pd.Series(index=df.index, dtype=float)
+    res.iloc[anchor_idx:] = avwap_sub
+    return res
 
 
 def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -450,6 +477,19 @@ def analyze_all(df: pd.DataFrame) -> Optional[IndicatorSummary]:
     else:
         trend_strength = "WEAK"
     
+    # Anchored VWAP (AVWAP from 20-30 day swing low)
+    avwap_val = 0.0
+    dist_avwap_pct = 0.0
+    try:
+        avwap_series = calculate_anchored_vwap(df)
+        if avwap_series is not None and len(avwap_series.dropna()) > 0:
+            avwap_val = float(avwap_series.dropna().iloc[-1])
+            curr_c = float(close.iloc[-1])
+            if avwap_val > 0:
+                dist_avwap_pct = (curr_c - avwap_val) / avwap_val
+    except Exception:
+        pass
+    
     return IndicatorSummary(
         vwap=vwap.iloc[-1],
         rsi=rsi.iloc[-1],
@@ -460,7 +500,9 @@ def analyze_all(df: pd.DataFrame) -> Optional[IndicatorSummary]:
         bollinger=bollinger,
         macd=macd,
         stoch_rsi=stoch_rsi.iloc[-1],
-        trend_strength=trend_strength
+        trend_strength=trend_strength,
+        avwap=avwap_val,
+        dist_from_avwap_pct=dist_avwap_pct
     )
 
 

@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 sys.path.append('/home/ubuntu/kis-auto-trading')
 from dealer_gex_radar import DealerGEXRadar
 r = DealerGEXRadar()
