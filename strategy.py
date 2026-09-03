@@ -23,6 +23,7 @@ from datetime import datetime, time
 from typing import Optional, Dict, List, Tuple, Any
 from enum import Enum
 import os
+import numpy as np
 import pandas as pd
 import kis_data as yf  # KIS API drop-in replacement for yfinance
 import pytz
@@ -666,6 +667,48 @@ class StrategyEngine:
 
         _52w_high = float(df_daily['High'].tail(252).max()) if len(df_daily) >= 252 else float(df_daily['High'].max())
         pct_from_high = (current_price - _52w_high) / _52w_high
+
+        # ── 1. Opening Range Breakout (ORB) & Gap-Fade Bull Trap Guard ───────────────
+        try:
+            from opening_range_breakout import OpeningRangeBreakoutFilter
+            _orb_res = OpeningRangeBreakoutFilter().analyze(df_daily, symbol)
+            if _orb_res.get("is_gap_fade_trap", False):
+                confidence = max(0, confidence - 25)
+                logger.warning("🚫 [GAP_FADE_TRAP] {} gapped up but failed to hold open! -25pt penalty", symbol)
+            elif _orb_res.get("is_orb_breakout", False):
+                confidence += 12
+                setup_reason += " | ORB_EXPANSION"
+                logger.info("🌅 [ORB_EXPANSION] {} confirmed morning ORB expansion! +12pt Boost", symbol)
+        except Exception as _orb_err:
+            logger.debug("ORB filter check skipped for {}: {}", symbol, _orb_err)
+
+        # ── 2. Relative Strength (RS) Line Leading Breakout vs SPY (O'Neil & Minervini) ─
+        try:
+            _spy_df_rs = kis_data.get_daily_ohlcv("SPY", days=60)
+            if _spy_df_rs is not None and len(_spy_df_rs) >= 25 and len(df_daily) >= 25:
+                _common_idx = df_daily.index.intersection(_spy_df_rs.index)
+                if len(_common_idx) >= 21:
+                    _rs_series = df_daily.loc[_common_idx, 'Close'] / _spy_df_rs.loc[_common_idx, 'Close']
+                    _rs_today = float(_rs_series.iloc[-1])
+                    _rs_20_max = float(_rs_series.iloc[-21:-1].max())
+                    if _rs_today >= _rs_20_max:
+                        confidence += 10
+                        setup_reason += " | RS_LINE_NEW_HIGH"
+                        logger.info("🔥 [RS_LINE_NEW_HIGH] {} RS line hit 20-day high ahead of price! +10pt Boost", symbol)
+        except Exception as _rs_err:
+            logger.debug("RS line check skipped for {}: {}", symbol, _rs_err)
+
+        # ── 3. Toby Crabel NR7 Volatility Compression (Narrowest Range of 7 Days) ──────
+        try:
+            if len(df_daily) >= 8:
+                _ranges = (df_daily['High'] - df_daily['Low']).values
+                _is_nr7 = _ranges[-1] <= float(np.min(_ranges[-8:-1]))
+                if _is_nr7 and structural_uptrend:
+                    confidence += 8
+                    setup_reason += " | NR7_COIL"
+                    logger.info("🌀 [NR7_COIL] {} daily range compressed to 7-day narrowest! +8pt Energy Coil", symbol)
+        except Exception as _nr_err:
+            logger.debug("NR7 check skipped for {}: {}", symbol, _nr_err)
 
         # ── Setup A: 52주 고점 돌파 (Breakout) ─────────────────────────────
         # 52주 신고가 3.5% 이내 + 상승추세(SMA20>SMA50) + 거래량/모멘텀 확인 = 최상위 추세 지속 스윙 신호
