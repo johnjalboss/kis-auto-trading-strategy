@@ -757,10 +757,52 @@ class StrategyEngine:
         except Exception as err:
             logger.debug("MOC check skipped for {}: {}", symbol, err)
 
+        # ── Setup I: 변동성 압축 후 폭발 (TTM Volatility Squeeze Release) ────────
+        is_squeeze_release = False
+        sq_res = {}
+        try:
+            from indicators import calculate_bb_squeeze
+            sq_res = calculate_bb_squeeze(df_daily)
+            if sq_res.get('is_releasing', False) and sq_res.get('direction', '') == 'UP' and current_price > sma20:
+                is_squeeze_release = True
+                confidence += 10
+                logger.info("🔥 [SQUEEZE_EXPANSION] {} releasing volatility to upside (BW: {:.3f})! +10pt Boost",
+                            symbol, sq_res.get('bandwidth', 0.0))
+            elif sq_res.get('is_releasing', False) and sq_res.get('direction', '') == 'DOWN':
+                confidence = max(0, confidence - 20)
+                logger.warning("⚠️ [SQUEEZE_BREAKDOWN] {} breaking down from squeeze! -20pt penalty", symbol)
+        except Exception as _sq_err:
+            logger.debug("Squeeze evaluation skipped for {}: {}", symbol, _sq_err)
+
+        # ── Setup J: 지수 급락 압력 대비 비정상 상대강도 (Outperformance Under Market Pressure) ────────
+        is_pressure_leader = False
+        try:
+            qqq_df = kis_data.get_daily_ohlcv("QQQ", days=5)
+            if qqq_df is not None and len(qqq_df) >= 2 and len(df_daily) >= 2:
+                qqq_chg = (float(qqq_df['Close'].iloc[-1]) / float(qqq_df['Close'].iloc[-2])) - 1.0
+                sym_chg = (float(df_daily['Close'].iloc[-1]) / float(df_daily['Close'].iloc[-2])) - 1.0
+                # 시장이 -0.3% 이상 하락 중일 때 종목이 +0.5% 이상 버티고 상단 35% 마감 시
+                if qqq_chg <= -0.003 and sym_chg >= 0.005:
+                    h_d = float(df_daily['High'].iloc[-1])
+                    l_d = float(df_daily['Low'].iloc[-1])
+                    c_d = float(df_daily['Close'].iloc[-1])
+                    rng = h_d - l_d
+                    if rng > 0 and (c_d - l_d) / rng >= 0.65:
+                        is_pressure_leader = True
+                        confidence += 10
+                        logger.info("🛡️ [PRESSURE_ALPHA] {} decoupling from market drop ({:+.1%} vs QQQ {:+.1%})! +10pt Boost",
+                                    symbol, sym_chg * 100, qqq_chg * 100)
+        except Exception as _p_err:
+            logger.debug("Pressure leader check skipped for {}: {}", symbol, _p_err)
+
         # ── 설정 우선순위 결정 (가장 강한 신호부터) ─────────────────────
         setup_reason = ""
         if is_moc_drive:
             setup_reason = "MOC_CLOSING_DRIVE: Holding Day High at Market Close (Institutional MOC Sweep)"
+        elif is_squeeze_release:
+            setup_reason = f"VOLATILITY_SQUEEZE_RELEASE: Energy expansion up (BW {sq_res.get('bandwidth', 0.0):.3f})"
+        elif is_pressure_leader:
+            setup_reason = f"PRESSURE_ALPHA_LEADER: Market decoupling outperformance (Score {confidence:.0f})"
         elif is_pead:
             setup_reason = f"PEAD_CONTINUATION: Earnings beat +{pead_beat:.0f}% ({pead_beat:.0f}% surprise)"
         elif is_golden_cross:
@@ -782,7 +824,7 @@ class StrategyEngine:
         elif comp_signal and comp_signal.composite_score >= 75:
             setup_reason = f"HIGH_CONVICTION_QUANT: Institutional score {comp_signal.composite_score:.0f}"
         else:
-            return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant)", current_price)
+            return EntrySignal("HOLD", 0, "No setup triggered (Breakout/Pullback/MeanRev/Gap/GoldenX/VIX/PEAD/Quant/MOC/Squeeze/Pressure)", current_price)
 
         # 11. Dynamic score requirements based on Regime & Volatility
         base_required = config.SCREENED_MIN_SCORE if is_screened else cfg.min_entry_score
