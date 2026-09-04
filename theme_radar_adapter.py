@@ -61,47 +61,55 @@ class ThemeRadarAdapter:
         실시간 추천 탑픽 종목군(LEADER 및 SETUP)을 Ticker 기준의 딕셔너리로 반환
         """
         sql = """
-            SELECT r.ticker, r.theme_id, r.pick_type, r.price, r.target_price, r.stop_loss, r.target_pct, r.stop_pct, r.updated_at, s.name_ko
+            SELECT r.ticker, r.theme_id, r.pick_type, r.price, r.target_price, r.stop_loss, r.target_pct, r.stop_pct, r.updated_at, s.name_ko, s.signal_type, s.quality
             FROM theme_recommendations r
             JOIN theme_signals s ON r.theme_id = s.theme_id
             WHERE s.signal_type IN ('TRUE_SIGNAL', 'WATCH')
+            ORDER BY s.quality DESC, r.updated_at DESC
         """
         rows = self._query(sql)
         recs = {}
         for r in rows:
             ticker = r[0]
-            recs[ticker] = {
-                "theme_id": r[1],
-                "pick_type": r[2],
-                "price": r[3],
-                "target_price": r[4],
-                "stop_loss": r[5],
-                "target_pct": r[6],
-                "stop_pct": r[7],
-                "updated_at": r[8],
-                "theme_name": r[9]
-            }
+            if ticker not in recs:  # Preserve highest quality entry per symbol
+                recs[ticker] = {
+                    "theme_id": r[1],
+                    "pick_type": r[2],
+                    "price": float(r[3] or 0.0),
+                    "target_price": float(r[4] or 0.0),
+                    "stop_loss": float(r[5] or 0.0),
+                    "target_pct": float(r[6] or 0.0),
+                    "stop_pct": float(r[7] or 0.0),
+                    "updated_at": r[8],
+                    "theme_name": r[9],
+                    "signal_type": r[10] if len(r) > 10 else "TRUE_SIGNAL",
+                    "quality": int(r[11]) if len(r) > 11 and r[11] is not None else 70
+                }
 
-        # 18-theme diverse sector market leaders
+        # Baseline fallback leaders (only used if DB has fewer than 8 recommendations)
         default_leaders = {
-            "NVDA": {"theme_id": "ai_semi", "pick_type": "LEADER 👑", "price": 217.4, "target_price": 245.0, "stop_loss": 208.0, "theme_name": "AI 반도체/가속기"},
-            "PLTR": {"theme_id": "defense_ai", "pick_type": "LEADER 👑", "price": 31.8, "target_price": 38.0, "stop_loss": 29.5, "theme_name": "국방 AI 소프트웨어"},
-            "LLY": {"theme_id": "glp1_bio", "pick_type": "LEADER 👑", "price": 910.0, "target_price": 1050.0, "stop_loss": 870.0, "theme_name": "GLP-1 비만치료제"},
-            "CEG": {"theme_id": "nuclear_ai", "pick_type": "LEADER 👑", "price": 285.0, "target_price": 330.0, "stop_loss": 270.0, "theme_name": "AI 데이터센터 원자력"},
-            "CRWD": {"theme_id": "cyber_sec", "pick_type": "LEADER 👑", "price": 248.0, "target_price": 290.0, "stop_loss": 235.0, "theme_name": "클라우드 사이버보안"},
-            "WMB": {"theme_id": "energy_gas", "pick_type": "LEADER 👑", "price": 76.5, "target_price": 88.0, "stop_loss": 73.0, "theme_name": "천연가스/에너지 인프라"},
-            "LMT": {"theme_id": "defense_aero", "pick_type": "LEADER 👑", "price": 540.0, "target_price": 610.0, "stop_loss": 515.0, "theme_name": "미사일 방산/항공우주"},
-            "COIN": {"theme_id": "crypto_fin", "pick_type": "LEADER 👑", "price": 195.0, "target_price": 240.0, "stop_loss": 180.0, "theme_name": "가상자산/디지털금융"}
+            "NVDA": {"theme_id": "ai_semi", "pick_type": "LEADER 👑", "price": 120.0, "target_price": 145.0, "stop_loss": 112.0, "theme_name": "AI 반도체/가속기", "quality": 85, "signal_type": "TRUE_SIGNAL"},
+            "PLTR": {"theme_id": "defense_ai", "pick_type": "LEADER 👑", "price": 31.8, "target_price": 38.0, "stop_loss": 29.5, "theme_name": "국방 AI 소프트웨어", "quality": 82, "signal_type": "TRUE_SIGNAL"},
+            "LLY": {"theme_id": "glp1_bio", "pick_type": "LEADER 👑", "price": 910.0, "target_price": 1050.0, "stop_loss": 870.0, "theme_name": "GLP-1 비만치료제", "quality": 80, "signal_type": "TRUE_SIGNAL"},
+            "CEG": {"theme_id": "nuclear_ai", "pick_type": "LEADER 👑", "price": 285.0, "target_price": 330.0, "stop_loss": 270.0, "theme_name": "AI 데이터센터 원자력", "quality": 78, "signal_type": "TRUE_SIGNAL"},
+            "CRWD": {"theme_id": "cyber_sec", "pick_type": "LEADER 👑", "price": 248.0, "target_price": 290.0, "stop_loss": 235.0, "theme_name": "클라우드 사이버보안", "quality": 76, "signal_type": "TRUE_SIGNAL"},
+            "WMB": {"theme_id": "energy_gas", "pick_type": "LEADER 👑", "price": 76.5, "target_price": 88.0, "stop_loss": 73.0, "theme_name": "천연가스/에너지 인프라", "quality": 75, "signal_type": "TRUE_SIGNAL"},
+            "LMT": {"theme_id": "defense_aero", "pick_type": "LEADER 👑", "price": 540.0, "target_price": 610.0, "stop_loss": 515.0, "theme_name": "미사일 방산/항공우주", "quality": 74, "signal_type": "TRUE_SIGNAL"},
+            "COIN": {"theme_id": "crypto_fin", "pick_type": "LEADER 👑", "price": 195.0, "target_price": 240.0, "stop_loss": 180.0, "theme_name": "가상자산/디지털금융", "quality": 73, "signal_type": "TRUE_SIGNAL"}
         }
 
-        # Merge DB recommendations while preventing single-theme dominance
+        # Prioritize live dynamically detected theme recommendations FIRST
         merged_recs = {}
-        for k, v in default_leaders.items():
+        for k, v in recs.items():
             merged_recs[k] = v
 
-        for k, v in recs.items():
-            if len(merged_recs) < 12:
-                merged_recs[k] = v
+        # If DB recommendations are fewer than 8, backfill remaining slots from fallback leaders
+        if len(merged_recs) < 8:
+            for k, v in default_leaders.items():
+                if k not in merged_recs:
+                    merged_recs[k] = v
+                if len(merged_recs) >= 8:
+                    break
 
         return merged_recs
 

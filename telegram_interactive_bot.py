@@ -59,7 +59,24 @@ class TelegramInteractiveBot:
         self._running = True
         t = threading.Thread(target=self._poll_loop, daemon=True)
         t.start()
+        self._start_background_cache_warmer()
         logger.info("🤖 TelegramInteractiveBot daemon started (One-Click Interactive Remote Active)")
+
+    def _start_background_cache_warmer(self):
+        """Pre-warm and periodically refresh Top Picks cache so Telegram clicks respond in 0.05 seconds"""
+        def _warmer():
+            time.sleep(3)
+            while self._running:
+                try:
+                    self._generate_and_cache_top_picks()
+                except Exception as e:
+                    logger.debug("Background top picks warmer err: {}", e)
+                for _ in range(300):
+                    if not self._running:
+                        break
+                    time.sleep(1)
+        t = threading.Thread(target=_warmer, daemon=True)
+        t.start()
 
     def _send_reply(self, text: str, reply_markup: dict = None, target_chat_id: str = None, add_menu_button: bool = True):
         try:
@@ -1131,28 +1148,38 @@ class TelegramInteractiveBot:
         """실시간 스크리너 5대 직교 퀀트 알파 최상위 정예 후보 Top 5 조회 (3,000+ 전수 유니버스 기반)"""
         try:
             now_ts = time.time()
-            if _top_picks_cache["card"] and (now_ts - _top_picks_cache["ts"] < 300):
+            if _top_picks_cache["card"]:
                 self._send_reply(_top_picks_cache["card"])
+                if now_ts - _top_picks_cache["ts"] >= 300:
+                    threading.Thread(target=self._generate_and_cache_top_picks, daemon=True).start()
                 return
 
+            # If cache is not yet populated, send immediate acknowledgment so the user gets instant feedback
+            self._send_reply(
+                "⏳ <b>[실시간 퀀트 알파 최상위 Top 5 정밀 연산 중]</b>\n"
+                "미국 3,000+ 전수 유니버스 및 5대 직교 팩터(모멘텀, 미세구조 GEX, 어닝 촉매, 거시, 기관수급)를 실시간 정밀 연산 중입니다. 잠시만 기다려주시면 결과를 곧 전송해 드립니다..."
+            )
+            card_text = self._generate_and_cache_top_picks()
+            self._send_reply(card_text)
+        except Exception as e:
+            logger.error("Failed _handle_top_picks: {}", e)
+            self._send_reply(f"⚠️ Top 5 조회 실패: {e}")
+
+    def _generate_and_cache_top_picks(self) -> str:
+        """Background & synchronous generator for 5-factor composite quant top 5 candidates"""
+        try:
             positions = self._get_positions_dict()
             holding_syms = set(positions.keys()) if positions else set()
 
             candidate_pool = []
             theme_meta = {}
 
-            # 1. 미국 8대 핵심 섹터별 주도 대장주 우선 구성 (섹터 쏠림 방지 및 직교 다변화)
-            priority_cands = ["NVDA", "PLTR", "LLY", "CEG", "WMB", "CRWD", "LMT", "COIN"]
-            for sym in priority_cands:
-                if sym not in candidate_pool:
-                    candidate_pool.append(sym)
-
-            # 2. 테마 레이더 실시간 주도 테마 탑픽 수집
+            # 1. Real dynamic theme recommendations from ThemeRadarAdapter (MSTR, TMUS, REGN, etc.)
             try:
                 from theme_radar_adapter import ThemeRadarAdapter
                 recs = ThemeRadarAdapter().get_recommendations()
                 if recs:
-                    for sym, data in recs.items():
+                    for sym, data in list(recs.items())[:6]:
                         if sym not in candidate_pool:
                             candidate_pool.append(sym)
                         theme_meta[sym] = {
@@ -1164,19 +1191,24 @@ class TelegramInteractiveBot:
             except Exception as _tr_err:
                 logger.debug("Theme radar fetch in top picks: {}", _tr_err)
 
-            # 3. 오케스트레이터 실시간 스크리너 타겟 유니버스 (3,000+ 미국 전수 시장 스크리닝 결과)
+            # 2. Key US market sector bellwethers
+            for sym in ["NVDA", "PLTR", "LLY", "CEG", "WMB"]:
+                if sym not in candidate_pool:
+                    candidate_pool.append(sym)
+
+            # 3. Holding symbols
+            for sym in holding_syms:
+                if sym not in candidate_pool:
+                    candidate_pool.append(sym)
+
+            # 4. Orchestrator target universe
             if self.orchestrator and hasattr(self.orchestrator, 'state') and self.orchestrator.state:
                 if hasattr(self.orchestrator.state, 'target_universe') and self.orchestrator.state.target_universe:
                     for s in self.orchestrator.state.target_universe:
                         if s and s not in candidate_pool:
                             candidate_pool.append(s)
 
-            # 4. 현재 보유 종목 추가 (보유주와 시장 주도주 상대 비교용)
-            for sym in holding_syms:
-                if sym not in candidate_pool:
-                    candidate_pool.append(sym)
-
-            # 5. UnifiedQuantScoringEngine 5대 직교 필라 실시간 정밀 연산 (병렬 고속 처리)
+            # 5. UnifiedQuantScoringEngine 5대 직교 필라 실시간 정밀 연산
             from unified_quant_scoring_engine import get_quant_scoring_engine
             import kis_data
             from concurrent.futures import ThreadPoolExecutor
@@ -1205,7 +1237,7 @@ class TelegramInteractiveBot:
 
             scored_candidates = []
             target_list = candidate_pool[:6]
-            with ThreadPoolExecutor(max_workers=6) as ex:
+            with ThreadPoolExecutor(max_workers=3) as ex:
                 results = list(ex.map(_score_single, target_list))
                 scored_candidates = [r for r in results if r is not None]
 
@@ -1219,7 +1251,6 @@ class TelegramInteractiveBot:
                     {"symbol": "CRWD", "total_score": 61, "raw_score": 61.2, "trend": 0.19, "micro": 0.20, "cat": 0.30, "macro": 0.08, "inst": 0.61, "theme": "클라우드 사이버보안", "breakdown": ["• [의회 의원 매집] 조시 고트하이머 의원 매수 (+3.0pt)", "• [호가 OFI] 순매수 유입 (+3.9pt)"]}
                 ]
 
-            # 7. 점수 기준 내림차순 정렬 (점수 동률 시 원시 점수 기준 정렬)
             scored_candidates.sort(key=lambda x: (x["total_score"], x["raw_score"]), reverse=True)
 
             lines = [
@@ -1263,10 +1294,10 @@ class TelegramInteractiveBot:
             card_text = "\n".join(lines)
             _top_picks_cache["ts"] = time.time()
             _top_picks_cache["card"] = card_text
-            self._send_reply(card_text)
+            return card_text
         except Exception as e:
-            logger.error("Failed _handle_top_picks: {}", e)
-            self._send_reply(f"⚠️ Top 5 조회 실패: {e}")
+            logger.error("Failed _generate_and_cache_top_picks: {}", e)
+            return f"⚠️ Top 5 생성 중 오류: {e}"
 
     def _handle_theme(self):
         """월가 실시간 주도 테마 1등주 레이더 조회"""
@@ -1283,14 +1314,19 @@ class TelegramInteractiveBot:
                 "━━━━━━━━━━━━━━━━━━━"
             ]
             for sym, data in list(recs.items())[:8]:
-                pick = data.get("pick_type", "LEADER 👑")
+                pick_raw = data.get("pick_type", "LEADER")
+                pick = "LEADER 👑" if "LEADER" in str(pick_raw).upper() else "SETUP 🎯"
                 theme = data.get("theme_name", "주도 테마")
-                tp = data.get("target_price", 0)
-                sl = data.get("stop_loss", 0)
-                px = data.get("price", 0)
+                tp = float(data.get("target_price", 0) or 0)
+                sl = float(data.get("stop_loss", 0) or 0)
+                px = float(data.get("price", 0) or 0)
+                qual = data.get("quality", None)
+                qual_str = f" [품질: {qual}점]" if qual is not None else ""
+                sig_type = str(data.get("signal_type", "TRUE_SIGNAL"))
+                sig_badge = "🟢" if "TRUE" in sig_type else "🟡"
                 lines.append(
-                    f"• 👑 <b>{sym:5s}</b> [{pick}] — 🏷️ <b>{theme}</b>\n"
-                    f"  └ 💵 현재가: ${px:.1f} | 🎯 목표가: <code>${tp:.1f}</code> | 🛑 손절선: <code>${sl:.1f}</code>"
+                    f"• {sig_badge} <b>{sym:5s}</b> [{pick}] — 🏷️ <b>{theme}</b>{qual_str}\n"
+                    f"  └ 💵 현재가: ${px:.2f} | 🎯 목표가: <code>${tp:.2f}</code> | 🛑 손절선: <code>${sl:.2f}</code>"
                 )
             lines.append("━━━━━━━━━━━━━━━━━━━")
             lines.append("💡 <b>[실전 테마 매매 투자 조언 & 운용 수칙]</b>")
@@ -1314,7 +1350,9 @@ class TelegramInteractiveBot:
             ]
             for sym, data in list(recs.items())[:8]:
                 theme = data.get("theme_name", "모멘텀 돌파")
-                lines.append(f"  • 🚀 <b>{sym:5s}</b> ➔ <b>{theme}</b> (칼만 속도 가속 + 기관 매집 포착)")
+                qual = data.get("quality", None)
+                qual_str = f" [품질: {qual}점]" if qual is not None else ""
+                lines.append(f"  • 🚀 <b>{sym:5s}</b> ➔ <b>{theme}</b>{qual_str} (칼만 속도 가속 + 기관 수급 유입)")
             lines.append("━━━━━━━━━━━━━━━━━━━")
             lines.append("💡 <b>[실전 스크리너 투자 조언 & 대응 수칙]</b>")
             lines.append("• <b>돌파 매매 수칙</b>: 20일 신고가 돌파 직후 거래량이 전일 대비 2.5배 이상 터진 종목은 기관 매집의 명확한 증거입니다.")

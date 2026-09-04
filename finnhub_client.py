@@ -15,7 +15,7 @@ class FinnhubClient:
         self._min_interval = 1.0  # Safe rate limit: 1s between calls (max 60/min)
         self._rate_limit_lock = threading.Lock()
         self._cache_lock = threading.Lock()
-        self.cache_file = "finnhub_cache.json"
+        self.cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "finnhub_cache.json")
         self.cache = self._load_cache()
         self._disabled_until = 0.0
         self._last_save_time = 0.0
@@ -76,17 +76,19 @@ class FinnhubClient:
 
     def _save_cache(self, force: bool = False):
         try:
-            now = time.time()
-            if not force and now - getattr(self, "_last_save_time", 0.0) < 10.0:
-                return
-            self._last_save_time = now
-            self._prune_expired_entries()
-            
-            # Atomic File Write to prevent JSON corruption during concurrent reads/writes
-            temp_file = f"{self.cache_file}.tmp"
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(self.cache, f, ensure_ascii=False)
-            os.replace(temp_file, self.cache_file)
+            with self._cache_lock:
+                now = time.time()
+                if not force and now - getattr(self, "_last_save_time", 0.0) < 10.0:
+                    return
+                self._last_save_time = now
+                self._prune_expired_entries()
+                
+                # Atomic File Write to prevent JSON corruption during concurrent reads/writes
+                temp_file = f"{self.cache_file}.{os.getpid()}.{threading.get_ident()}.tmp"
+                os.makedirs(os.path.dirname(os.path.abspath(self.cache_file)), exist_ok=True)
+                with open(temp_file, "w", encoding="utf-8") as f:
+                    json.dump(self.cache, f, ensure_ascii=False)
+                os.replace(temp_file, self.cache_file)
         except Exception as e:
             logger.error(f"Failed to atomically save Finnhub cache: {e}")
 
