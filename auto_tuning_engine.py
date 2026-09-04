@@ -211,7 +211,9 @@ class AutoTuningEngine:
         """
         try:
             from post_exit_tracker import get_post_exit_tracker
-            get_post_exit_tracker()._init_db()
+            _tracker = get_post_exit_tracker()
+            _tracker._init_db()
+            _tracker.sync_recent_sells_from_trades_db()
         except Exception:
             pass
 
@@ -502,7 +504,12 @@ class AutoTuningEngine:
         causes_str = ", ".join([f"{k}: {v}건" for k, v in loss_analysis.get('root_causes', {}).items() if v > 0]) or "손실 원인 없음 (100% 승리/초기)"
         ic_val = metrics.get('ic', 0.0)
         remorse = self.analyze_post_exit_remorse()
-        remorse_str = f"조기매도 {remorse.get('early_exits', 0)}건, 손실회피 {remorse.get('avoided_drops', 0)}건 (추적: {remorse.get('total_tracked', 0)}건, 평균 변동: {remorse.get('avg_post_return', 0.0):+.1f}%)"
+        tot_cnt = remorse.get('total_tracked', 0)
+        early_cnt = remorse.get('early_exits', 0)
+        avoid_cnt = remorse.get('avoided_drops', 0)
+        opt_cnt = max(0, tot_cnt - early_cnt - avoid_cnt)
+        avg_ret = remorse.get('avg_post_return', 0.0)
+        remorse_str = f"총 {tot_cnt}건 추적 (⚪적정회전 {opt_cnt}건 | 🔴조기매도 {early_cnt}건 | 🟢손실회피 {avoid_cnt}건, 평균 사후변동: {avg_ret:+.1f}%)"
 
         clusters = tuned.get("CLUSTERS", {})
         high_c = clusters.get("HIGH_VOL_GROWTH", {})
@@ -520,7 +527,7 @@ class AutoTuningEngine:
             f"  • 🔮 <b>알파 점수 예측력(IC)</b>: <code>{ic_val:+.2f}</code>\n"
             f"  • 📝 <b>매도 사후 오답노트</b>: <i>{remorse_str}</i>\n\n"
             f"🏛️ <b>3대 자산 성향별 동적 퀀트 튜닝 매트릭스</b>:\n"
-            f"<i>(수학적 산출: 30일 MFE·MAE 실측치 및 변동성 Beta Kestner 모형 최적화)</i>\n"
+            f"<i>(수학적 산출: Kestner 변동성 Beta 모형 & MFE 최적화, 휩소방어 최소안전선 적용)</i>\n"
             f"  🚀 <b>고변동 성장주 (NVDA/PLTR/CRWD 등, β=1.60)</b>\n"
             f"     • 익절선: <code>+{high_c.get('TAKE_PROFIT_PCT', 0.15)*100:.1f}%</code> | 손절선: <code>-{high_c.get('STOP_LOSS_PCT', 0.05)*100:.1f}%</code> | 트레일: <code>{high_c.get('TRAILING_ATR', 2.8)}x ATR</code>\n\n"
             f"  ⚖️ <b>중변동 표준주 (AAPL/MSFT/NOW 등, β=1.00)</b>\n"
