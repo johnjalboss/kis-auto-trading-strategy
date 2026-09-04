@@ -23,8 +23,11 @@ except ImportError:
 
 # Isolate yfinance SQLite cache directory per PID to prevent cross-process futex deadlocks
 try:
+    import yfinance.cache as yfc
     _yf_pid_dir = f"/tmp/py-yf-{os.getpid()}"
     os.makedirs(_yf_pid_dir, exist_ok=True)
+    if hasattr(yfc, 'set_cache_location'):
+        yfc.set_cache_location(_yf_pid_dir)
     if hasattr(yf, 'set_tz_cache_location'):
         yf.set_tz_cache_location(_yf_pid_dir)
 except Exception as _ce:

@@ -40,7 +40,40 @@ class SelfHealingWatchdog:
     def inspect_and_heal(self):
         """
         Inspect live log files for fallback alerts & automatically heal settings.
+        Also inspects orchestrator heartbeat to self-heal process deadlocks.
         """
+        # ── 1. Heartbeat Stalling & Futex Deadlock Protection ──
+        hb_paths = ["/tmp/kis_orchestrator_heartbeat", "kis_orchestrator_heartbeat"]
+        for hbp in hb_paths:
+            if os.path.exists(hbp):
+                try:
+                    mtime = os.path.getmtime(hbp)
+                    stalled_sec = time.time() - mtime
+                    # 900s (15 min) without a single heartbeat means main thread is frozen
+                    if stalled_sec > 900:
+                        logger.critical("🚨 [AUTOPILOT_WATCHDOG] CRITICAL: Main trading loop stalled for {:.0f}s! Initiating self-healing restart...", stalled_sec)
+                        try:
+                            from notification import get_notifier
+                            get_notifier().send_message(
+                                f"🚨 <b>[워치독 긴급 자동복구 발동]</b>\n"
+                                f"메인 트레이딩 루프가 15분 이상 정체되어(교착상태 감지), "
+                                f"프로세스를 안전하게 자동 재기동합니다.\n"
+                                f"• 정체 시간: {int(stalled_sec)}초\n"
+                                f"• 조치: 캐시 격리 리셋 및 systemd 자동 재시작"
+                            )
+                        except Exception:
+                            pass
+                        import shutil, glob
+                        for p in glob.glob("/tmp/py-yf-*"):
+                            try:
+                                shutil.rmtree(p, ignore_errors=True)
+                            except Exception:
+                                pass
+                        os._exit(1)
+                except Exception as hb_e:
+                    logger.debug("Heartbeat check warning: {}", hb_e)
+                break
+
         log_file = "/home/ubuntu/kis-auto-trading/logs/trading_bot.log"
         if not os.path.exists(log_file):
             log_file = "logs/trading_bot.log"

@@ -2350,6 +2350,13 @@ class BotOrchestrator:
         
         try:
             while True:
+                # ── HEARTBEAT SENTINEL (Stalling & Deadlock Protection) ──
+                try:
+                    with open("/tmp/kis_orchestrator_heartbeat", "w") as _hbf:
+                        _hbf.write(f"{time.time()},{datetime.now().isoformat()}\n")
+                except Exception:
+                    pass
+
                 # ── DYNAMIC PARAMETER RELOAD ──────────────────────────
                 # Auto-Tuner .env 반영 (무중단 핫리로드)
                 try:
@@ -2497,6 +2504,11 @@ class BotOrchestrator:
                         if not scheduler.is_market_open():
                             break
                             
+                        try:
+                            with open("/tmp/kis_orchestrator_heartbeat", "w") as _hbf:
+                                _hbf.write(f"{time.time()},{datetime.now().isoformat()}\n")
+                        except Exception:
+                            pass
                         time.sleep(60)
                         sleep_elapsed += 60
                 else:

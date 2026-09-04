@@ -4,6 +4,7 @@ Telegram Interactive Remote Control Bot (v11.3.1 Complete Robust Position & Remo
 Provides bi-directional remote control over the trading orchestrator via Telegram.
 Supports interactive inline keyboard buttons for 100% one-click controls!
 """
+import data_proxy  # MUST be first to prevent yfinance SQLite cache futex deadlocks
 
 import threading
 import time
