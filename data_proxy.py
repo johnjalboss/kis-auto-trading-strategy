@@ -9,6 +9,7 @@ Usage:
     import data_proxy
 """
 
+import os
 import yfinance as yf
 from kis_data import download as kis_download
 from loguru import logger
@@ -19,6 +20,15 @@ try:
     import config
 except ImportError:
     config = None
+
+# Isolate yfinance SQLite cache directory per PID to prevent cross-process futex deadlocks
+try:
+    _yf_pid_dir = f"/tmp/py-yf-{os.getpid()}"
+    os.makedirs(_yf_pid_dir, exist_ok=True)
+    if hasattr(yf, 'set_tz_cache_location'):
+        yf.set_tz_cache_location(_yf_pid_dir)
+except Exception as _ce:
+    pass
 
 # ============================================================
 # PART 1: yf.download() Shim (기존)
