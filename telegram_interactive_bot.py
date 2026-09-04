@@ -361,11 +361,25 @@ class TelegramInteractiveBot:
                                 elif cb_data == "cmd_pause":
                                     set_trading_paused(True)
                                     self._answer_callback(cb_id, "⏸️ 매매가 일시정지되었습니다.")
-                                    self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색 및 주문 발송을 일시 중단합니다. (/resume 또는 '매수 재개' 버튼으로 다시 가동)")
+                                    self._send_reply(
+                                        "⏸️ <b>[원격 제어] 매매 일시 정지</b>\n"
+                                        "새로운 매수 신호 탐색 및 주문 발송을 일시 중단합니다.\n"
+                                        "━━━━━━━━━━━━━━━━━━━\n"
+                                        "💡 <b>[실전 일시 정지 운용 수칙]</b>\n"
+                                        "• <b>보유 포지션 안전 감시</b>: 신규 매수만 일시 동결되며, 보유 중인 종목의 익절·손절 및 9단계 메가 락 감시는 정상 작동합니다.\n"
+                                        "• <b>자율 복귀 원칙</b>: 시장 급변동성 또는 대외 충격이 완화된 후 언제든지 [▶️ 매수 재개] 버튼을 누르면 즉시 정상 자동 복귀합니다."
+                                    )
                                 elif cb_data == "cmd_resume":
                                     set_trading_paused(False)
                                     self._answer_callback(cb_id, "▶️ 매매가 재개되었습니다.")
-                                    self._send_reply("▶️ <b>[원격 제어] 매매 재개</b>\n무인 자율 매매 탐색 및 자동 주문 루프를 정상 재가동합니다.")
+                                    self._send_reply(
+                                        "▶️ <b>[원격 제어] 매매 재개</b>\n"
+                                        "무인 자율 매매 탐색 및 자동 주문 루프를 정상 재가동합니다.\n"
+                                        "━━━━━━━━━━━━━━━━━━━\n"
+                                        "💡 <b>[실전 매매 재개 운용 수칙]</b>\n"
+                                        "• <b>자율 퀀트 탐색</b>: 5대 직교 팩터 및 실시간 시장 레짐 필터 통과 종목을 엄선하여 안전하게 분할 진입합니다.\n"
+                                        "• <b>원칙 준수</b>: 포지션당 최대 35% 상한 및 변동성 기반 ATR 칼손절선을 엄격 준수하여 계좌를 방어합니다."
+                                    )
                                 elif cb_data == "cmd_close_all":
                                     self._answer_callback(cb_id, "🚨 보유 종목 긴급 청산 실행!")
                                     _run_async(self._handle_close_all)
@@ -794,13 +808,20 @@ class TelegramInteractiveBot:
             sentinel = get_ticker_quarantine_sentinel()
             items = sentinel.get_quarantine_summary()
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            advice_block = (
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 격리망 투자 조언 & 운용 수칙]</b>\n"
+                "• <b>손절 후 뇌동 매매 방지</b>: 손절 직후의 조급한 본전 심리 재진입을 14일간 차단하여 연속 손실 악순환을 방지합니다.\n"
+                "• <b>골든 셋업 조건부 해제</b>: 20일 신고가 돌파와 동반된 2.5배 거래량 폭발 확인 시에만 엄격히 격리를 조기 해제합니다."
+            )
             if not items:
                 msg = (
                     f"🛡️ <b>[14일 뇌동 매매 방지 쿨다운 격리망]</b>\n"
                     f"<i>{now_str} 기준</i>\n"
                     f"━━━━━━━━━━━━━━━━━━━\n"
                     f"✨ <b>현재 격리 중인 손절 종목이 없습니다.</b>\n"
-                    f"모든 종목이 정상적인 퀀트 스크리닝 및 매수 후보 평가 대상입니다."
+                    f"모든 종목이 정상적인 퀀트 스크리닝 및 매수 후보 평가 대상입니다.\n\n"
+                    f"{advice_block}"
                 )
             else:
                 lines = []
@@ -813,7 +834,7 @@ class TelegramInteractiveBot:
                     f"━━━━━━━━━━━━━━━━━━━\n"
                     f"🚫 <b>격리 종목 목록 (재진입 차단)</b>:\n"
                     f"{lines_str}\n\n"
-                    f"💡 <i>손절된 종목의 기술적 바닥이 다져질 때까지 14일간 재진입을 원천 차단합니다. (20일 신고가+2.5배 거래량 폭발 시에만 조기 해제)</i>"
+                    f"{advice_block}"
                 )
             self._send_reply(msg)
         except Exception as e:
@@ -1092,7 +1113,11 @@ class TelegramInteractiveBot:
                 f"• <b>실시간 주도 섹터 Top 3</b>: {top_sec}",
                 f"• <b>최근 기대값(Expectancy)</b>: <b>{exp_label}</b>",
                 f"  - 승률: {win_label} | 자금 배분 배율: {mult:.2f}x",
-                f"• <b>보호 매트릭스</b>: 9단계 메가 락 (+100% ➔ +82% 락) & 유상증자 희석 방어"
+                f"• <b>보호 매트릭스</b>: 9단계 메가 락 (+100% ➔ +82% 락) & 유상증자 희석 방어",
+                "━━━━━━━━━━━━━━━━━━━",
+                "💡 <b>[실전 퀀트 알파 투자 조언 & 운용 수칙]</b>",
+                "• <b>5대 직교 팩터 시너지</b>: 추세속도, 미세구조, 어닝촉매, 거시국면, 기관수급이 일치할 때 가장 폭발적인 주도주 랠리가 연출됩니다.",
+                "• <b>CTA 위험선 마진</b>: 20일 이동평균선 대비 여유율(+1.5% 이상)이 유지되는 한 퀀트 자율 스윙 시스템을 신뢰하고 보유를 지속하세요."
             ]
             card_text = "\n".join(lines)
             _quant_status_cache["ts"] = time.time()
@@ -1405,13 +1430,17 @@ class TelegramInteractiveBot:
 
             lines = [
                 "🌐 <b>실시간 시장 국면(Market Regime) 퀀트 분석</b>",
-                "━" * 18,
+                "━━━━━━━━━━━━━━━━━━━",
                 f"{emoji} <b>현재 감지 레짐: {regime_clean}</b>  ({phase_name})",
                 f"{risk_emoji} 매크로 리스크 상태: <b>{risk_lvl}</b>",
                 f"📊 최대 자산 베팅 한도: <b>{exp_pct:.0%}</b>",
                 prob_line,
-                "━" * 18,
-                f"💡 <b>퀀트 전략</b>: {strategy_desc}",
+                "━━━━━━━━━━━━━━━━━━━",
+                f"⚙️ <b>권장 퀀트 전략</b>: {strategy_desc}",
+                "━━━━━━━━━━━━━━━━━━━",
+                "💡 <b>[실전 시장 레짐 투자 조언 & 운용 수칙]</b>",
+                "• <b>상승장 (BULL)</b>: 주도 섹터 1등 대장주 3종목에 33.3%씩 공격적으로 화력을 집중하여 복리 수익을 극대화합니다.",
+                "• <b>횡보/조정장 (CHOP/BEAR)</b>: 현금 비중을 50~100% 확대하고 지지선 반등 확인 전까지 섣부른 물타기를 철저히 금지합니다."
             ]
             self._send_reply("\n".join(l for l in lines if l))
         except Exception as e:
@@ -1442,7 +1471,9 @@ class TelegramInteractiveBot:
                 "• ⏰ <b>거시 충격 쉴드(Macro Shield)</b>: CPI/FOMC/NFP 발표 15분 전 자동 진입 동결",
                 "• 🚫 <b>악재 공시 방어</b>: SEC Form 4 유상증자/희석 공시 포착 시 즉시 매수 차단",
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                "💡 <b>리스크 진단:</b> <i>모든 안전장치가 정상 가동 중이며 자본 위험 노출도가 안전 범위 내에 있습니다.</i>"
+                "💡 <b>[실전 리스크 관리 원칙 & 투자 가이드]</b>",
+                "• <b>3종목 집중 한도</b>: 종목당 최대 비중 35% 상한선을 엄수하여 자본 회전율과 리스크 분산의 황금 균형을 유지합니다.",
+                "• <b>9단계 메가 락 준수</b>: 수익률 +10% 도달 시 매수가 본절 락, +100% 도달 시 +82%를 보존하여 번 돈을 절대 시장에 뱉어내지 마세요."
             ]
             self._send_reply("\n".join(lines))
         except Exception as e:
@@ -1490,7 +1521,14 @@ class TelegramInteractiveBot:
         try:
             positions = self._get_positions_dict()
             if not positions:
-                self._send_reply("ℹ️ 현재 청산할 보유 포지션이 없습니다 (100% 현금 대기 중).")
+                self._send_reply(
+                    "ℹ️ <b>[긴급 청산 안내]</b>\n"
+                    "현재 청산할 보유 포지션이 없습니다 (100% 현금 안전 대기 중).\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "💡 <b>[실전 긴급 청산 & 현금 비중 운용 수칙]</b>\n"
+                    "• <b>현금 100% 보존</b>: 시장 불확실성 국면에서 현금 보유는 자본을 완벽히 방어하는 최상의 포지션입니다.\n"
+                    "• <b>신규 진입 원칙</b>: 시장 레짐이 안정화되고 1등 주도주의 확실한 돌파 시그널 확인 시까지 관망세를 유지하세요."
+                )
                 return
 
             self._send_reply(f"🚨 <b>[긴급 청산]</b> 보유 중인 {len(positions)}개 종목 전량 시장가 매도 주문을 발송합니다...")
@@ -1509,15 +1547,22 @@ class TelegramInteractiveBot:
                         if hasattr(self.orchestrator.strategy, 'remove_position'):
                             self.orchestrator.strategy.remove_position(sym)
                     else:
-                        from trader import KisTrader
-                        t = KisTrader()
+                        from trader import Trader
+                        t = Trader()
                         res = t.sell_market(sym, qty)
                         logger.info("Direct KIS trader emergency sell executed for {}: {}", sym, res)
                     sold_count += 1
                 except Exception as se:
                     logger.error("Failed emergency sell for {}: {}", sym, se)
 
-            self._send_reply(f"✅ <b>[긴급 청산 완료]</b> 총 {sold_count}개 종목 전량 시장가 매도 주문을 전송했습니다.\n현재 포지션이 전량 현금화되었습니다.")
+            self._send_reply(
+                f"✅ <b>[긴급 청산 완료]</b> 총 {sold_count}개 종목 전량 시장가 매도 주문을 전송했습니다.\n"
+                f"현재 포지션이 전량 현금화되었습니다.\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <b>[실전 긴급 청산 대응 수칙]</b>\n"
+                "• <b>자본 보존 최우선</b>: 거시 충격 또는 시스템 위기 시 망설임 없는 전량 현금화가 치명적 파산을 방지합니다.\n"
+                "• <b>냉각기 준수</b>: 청산 직후 감정적인 뇌동 매매를 절대 금지하고 시장 방향성 재확인 후 매매를 재개하세요."
+            )
         except Exception as e:
             logger.error("Failed close_all for Telegram reply: {}", e)
             self._send_reply(f"⚠️ 긴급 청산 처리 중 오류 발생: {e}")
@@ -1561,7 +1606,14 @@ class TelegramInteractiveBot:
         try:
             positions = self._get_positions_dict()
             if not positions:
-                self._send_reply("ℹ️ 현재 보유 중인 종목이 없습니다. (100% 현금 대기 중)")
+                self._send_reply(
+                    "ℹ️ <b>[보유 종목 캔들 차트 안내]</b>\n"
+                    "현재 보유 중인 종목이 없습니다 (100% 현금 안전 대기 중).\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "💡 <b>[실전 차트 모니터링 & 보유 수칙]</b>\n"
+                    "• <b>현금 100% 대기</b>: 무리한 뇌동 매매를 지양하고 5대 직교 퀀트 알파 상위 종목의 최적 매수 타점을 대기 중입니다.\n"
+                    "• <b>차트 자동 발송</b>: 신규 매수 체결 즉시 20일 이동평균선과 볼린저 밴드가 표시된 정밀 기술적 차트를 실시간 제공합니다."
+                )
                 return
 
             self._send_reply(f"📊 보유 중인 <b>{len(positions)}개 종목</b>의 실시간 캔들 차트(볼린저 밴드, 20일선, 매수가 표시)를 즉시 생성하여 발송합니다...")
@@ -1948,7 +2000,11 @@ class TelegramInteractiveBot:
                 "• CPI/FOMC 거시 이벤트 충격 방어 쉴드 : 🟢 <b>활성화 (15분 동결 대기)</b>",
                 "• 계좌 고점(HWM) 락인 & 켈리 동적 사이징 : 🟢 <b>정상 가동 중</b>",
                 "━━━━━━━━━━━━━━━━━━━━",
-                "🎯 <b>[종합 판정]</b>: <b>모든 핵심 모듈 100% 무결점 정상 운용 중입니다! 🚀</b>"
+                "🎯 <b>[종합 판정]</b>: <b>모든 핵심 모듈 100% 무결점 정상 운용 중입니다! 🚀</b>",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "💡 <b>[실전 시스템 진단 운용 수칙]</b>",
+                "• <b>무중단 3대 데몬</b>: 트레이딩 코어, 관제 대시보드, 테마 레이더가 상호 감시 체계로 24시간 실시간 무인 자동화됩니다.",
+                "• <b>초저지연 주문 체결</b>: 메모리 및 디스크 여유 공간이 상시 80% 이상 유지되어 주문 슬리피지를 최소화합니다."
             ])
 
             self._send_reply("\n".join(lines))

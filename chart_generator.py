@@ -442,7 +442,11 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
         f"📈 <b>{bm_symbol} ({bm_name})</b>: <b>${final_bm:+,.2f} USD</b> (<b>{bm_pct:+.2f}%</b>)\n"
         f"🔥 <b>{bm_symbol} 대비 초과 알파</b>: <b>${final_alpha:+,.2f} USD</b> (<b>{alpha_pct:+.2f}%</b>)\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 <i>현재 보유 종목: {held_symbols_str} (미실현 손익: ${current_unrealized:+,.2f} USD)</i>"
+        f"💼 <i>현재 보유 종목: {held_symbols_str} (미실현 손익: ${current_unrealized:+,.2f} USD)</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💡 <b>[실전 벤치마크 차트 투자 조언 & 수익 관리 원칙]</b>\n"
+        f"• <b>시장 대비 초과 알파</b>: 지수({bm_symbol}) 대비 초과 수익 곡선이 유지되는 한 퀀트 자율 스윙 시스템을 신뢰하세요.\n"
+        f"• <b>복리 효과 극대화</b>: 일시적 일간 잔물결에 일희일비하지 마시고 3~10일 스윙 사이클의 누적 복리에 집중하세요."
     )
 
     return out_path, caption_text
@@ -571,7 +575,13 @@ def generate_stock_technical_chart(symbol: str, days: int = 40, entry_price: flo
             f"🎯 <b>볼린저 상/하단</b>: ${float(bb_upper.iloc[-1]):.2f} / ${float(bb_lower.iloc[-1]):.2f}\n"
         )
         if entry_price and entry_price > 0:
-            caption += f"💼 <b>내 진입가</b>: ${entry_price:.2f} (손익 <b>{pnl_pct:+.2f}%</b>)"
+            caption += f"💼 <b>내 진입가</b>: ${entry_price:.2f} (손익 <b>{pnl_pct:+.2f}%</b>)\n"
+        caption += (
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 <b>[실전 캔들 차트 기술적 분석 & 대응 수칙]</b>\n"
+            "• <b>20일선 안착 롱 추종</b>: 주가가 20일선 위에 안착해 있을 때는 롱 추세를 강력 유지하고 볼린저 상단 돌파 시 1차 분할 익절을 준비하세요.\n"
+            "• <b>추세 이탈 방어</b>: 20일선 이탈 또는 볼린저 하단 위협 시에는 즉시 안전 스탑선 준수로 계좌를 방어합니다."
+        )
 
         return out_path, caption
     except Exception as e:
