@@ -265,8 +265,11 @@ class ShadowPaperEngine:
                 # Resolve dynamic ATR
                 atr = pos.get("atr")
                 atr_pct = pos.get("atr_pct")
-                if not atr or atr <= 0:
-                    atr, atr_pct = self._estimate_atr(symbol, entry)
+                if not atr or atr <= 0 or not atr_pct or atr_pct <= 0:
+                    if atr and atr > 0 and entry > 0:
+                        atr_pct = atr / entry
+                    else:
+                        atr, atr_pct = self._estimate_atr(symbol, entry)
                     pos["atr"] = round(atr, 4)
                     pos["atr_pct"] = round(atr_pct, 4)
 
