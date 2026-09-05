@@ -234,7 +234,7 @@ class FinnhubClient:
             "to": to_date
         }
         res = self._request("company-news", params)
-        data = res if isinstance(res, list) else []
+        data = (res if isinstance(res, list) else [])[:50]
         self._set_cached("company-news", symbol, data)
         return data
 
@@ -247,9 +247,7 @@ class FinnhubClient:
 
         params = {"symbol": symbol}
         res = self._request("stock/insider-transactions", params)
-        data = []
-        if res and isinstance(res, dict):
-            data = res.get("data", [])
+        data = (res.get("data", []) if res and isinstance(res, dict) else [])[:50]
         self._set_cached("stock/insider-transactions", symbol, data)
         return data
 
