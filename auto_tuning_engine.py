@@ -374,38 +374,38 @@ class AutoTuningEngine:
         loss_analysis = self.analyze_loss_root_causes(lookback_days=30)
         remorse = self.analyze_post_exit_remorse()
         
-        # 1. Base Global Parameters
+        # 1. Base Global Parameters (QQQ Outperformance Alpha Mode)
         tuned_params = {
-            "MIN_ENTRY_SCORE": 80,
+            "MIN_ENTRY_SCORE": 78,
             "STOP_LOSS_PCT": 0.040,
-            "TAKE_PROFIT_PCT": 0.090,
-            "MAX_POSITION_PCT": 0.25,
+            "TAKE_PROFIT_PCT": 0.120,
+            "MAX_POSITION_PCT": 0.33,
             "RVOL_MIN": 1.5,
             "MAX_RSI_ENTRY": 72,
             "TUNED_AT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "REASON": "Baseline Balanced Institutional Matrix"
+            "REASON": "QQQ 초과 알파 집중 모드 (현금 드래그 방지 33% x 3슬롯)"
         }
 
         # 2. Cluster-Specific Parameter Matrix (종목 성향별 분리 매트릭스)
         cluster_params = {
             "HIGH_VOL_GROWTH": {
                 "label": "🚀 고변동 성장주",
-                "TAKE_PROFIT_PCT": 0.150,
+                "TAKE_PROFIT_PCT": 0.180,
                 "STOP_LOSS_PCT": 0.050,
                 "TRAILING_ATR": 2.8,
                 "MIN_HOLD_HOURS": 24.0
             },
             "MID_VOL_MOMENTUM": {
                 "label": "⚖️ 중변동 표준주",
-                "TAKE_PROFIT_PCT": 0.090,
-                "STOP_LOSS_PCT": 0.038,
+                "TAKE_PROFIT_PCT": 0.120,
+                "STOP_LOSS_PCT": 0.040,
                 "TRAILING_ATR": 2.0,
                 "MIN_HOLD_HOURS": 12.0
             },
             "LOW_VOL_DEFENSIVE": {
                 "label": "🛡️ 저변동 방어주",
-                "TAKE_PROFIT_PCT": 0.055,
-                "STOP_LOSS_PCT": 0.028,
+                "TAKE_PROFIT_PCT": 0.080,
+                "STOP_LOSS_PCT": 0.030,
                 "TRAILING_ATR": 1.4,
                 "MIN_HOLD_HOURS": 6.0
             }
@@ -422,38 +422,38 @@ class AutoTuningEngine:
         reasons = []
 
         if n_trades >= 3:
-            optimal_sl = min(0.055, max(0.025, mae_wins_95 + 0.005))
-            optimal_tp = min(0.150, max(0.050, mfe_median * (1.0 + 0.25 * max(0.0, min(1.5, pf - 1.0)))))
+            optimal_sl = min(0.055, max(0.038, mae_wins_95 + 0.005))
+            optimal_tp = min(0.200, max(0.120, mfe_median * (1.0 + 0.25 * max(0.0, min(1.5, pf - 1.0)))))
             
             tuned_params["STOP_LOSS_PCT"] = round(optimal_sl, 3)
             tuned_params["TAKE_PROFIT_PCT"] = round(optimal_tp, 3)
 
             # [QUANT MATHEMATICAL VOLATILITY MULTIPLIER SCALING]
             # 고변동 성장주: Beta = 1.60x, 변동성 비례 확장
-            cluster_params["HIGH_VOL_GROWTH"]["TAKE_PROFIT_PCT"] = round(min(0.240, max(0.080, optimal_tp * 1.60)), 3)
-            cluster_params["HIGH_VOL_GROWTH"]["STOP_LOSS_PCT"] = round(min(0.060, max(0.035, optimal_sl * 1.35)), 3)
+            cluster_params["HIGH_VOL_GROWTH"]["TAKE_PROFIT_PCT"] = round(min(0.240, max(0.150, optimal_tp * 1.50)), 3)
+            cluster_params["HIGH_VOL_GROWTH"]["STOP_LOSS_PCT"] = round(min(0.060, max(0.045, optimal_sl * 1.25)), 3)
             cluster_params["HIGH_VOL_GROWTH"]["TRAILING_ATR"] = round(min(3.5, max(2.2, 2.0 * (cluster_params["HIGH_VOL_GROWTH"]["TAKE_PROFIT_PCT"] / cluster_params["HIGH_VOL_GROWTH"]["STOP_LOSS_PCT"]))), 1)
 
             # 중변동 표준주: Beta = 1.00x 기준선
-            cluster_params["MID_VOL_MOMENTUM"]["TAKE_PROFIT_PCT"] = round(min(0.140, max(0.050, optimal_tp * 1.00)), 3)
-            cluster_params["MID_VOL_MOMENTUM"]["STOP_LOSS_PCT"] = round(min(0.045, max(0.025, optimal_sl * 1.00)), 3)
+            cluster_params["MID_VOL_MOMENTUM"]["TAKE_PROFIT_PCT"] = round(min(0.160, max(0.100, optimal_tp * 1.00)), 3)
+            cluster_params["MID_VOL_MOMENTUM"]["STOP_LOSS_PCT"] = round(min(0.048, max(0.035, optimal_sl * 1.00)), 3)
             cluster_params["MID_VOL_MOMENTUM"]["TRAILING_ATR"] = round(min(2.6, max(1.6, 1.8 * (cluster_params["MID_VOL_MOMENTUM"]["TAKE_PROFIT_PCT"] / cluster_params["MID_VOL_MOMENTUM"]["STOP_LOSS_PCT"]))), 1)
 
             # 저변동 방어주: Beta = 0.65x 압축 (노이즈 필터링 및 안정적 마진 보호)
-            cluster_params["LOW_VOL_DEFENSIVE"]["TAKE_PROFIT_PCT"] = round(min(0.080, max(0.035, optimal_tp * 0.65)), 3)
-            cluster_params["LOW_VOL_DEFENSIVE"]["STOP_LOSS_PCT"] = round(min(0.035, max(0.018, optimal_sl * 0.72)), 3)
+            cluster_params["LOW_VOL_DEFENSIVE"]["TAKE_PROFIT_PCT"] = round(min(0.120, max(0.070, optimal_tp * 0.70)), 3)
+            cluster_params["LOW_VOL_DEFENSIVE"]["STOP_LOSS_PCT"] = round(min(0.038, max(0.025, optimal_sl * 0.75)), 3)
             cluster_params["LOW_VOL_DEFENSIVE"]["TRAILING_ATR"] = round(min(1.8, max(1.2, 1.4 * (cluster_params["LOW_VOL_DEFENSIVE"]["TAKE_PROFIT_PCT"] / cluster_params["LOW_VOL_DEFENSIVE"]["STOP_LOSS_PCT"]))), 1)
 
             if ic >= 0.25:
-                tuned_params["MIN_ENTRY_SCORE"] = 78
-                reasons.append(f"고예측 알파(IC={ic:+.2f} ➔ 78점)")
+                tuned_params["MIN_ENTRY_SCORE"] = 75
+                reasons.append(f"고예측 알파(IC={ic:+.2f} ➔ 75점)")
             elif ic < -0.10:
-                tuned_params["MIN_ENTRY_SCORE"] = 84
-                reasons.append(f"노이즈 방어(IC={ic:+.2f} ➔ 84점)")
+                tuned_params["MIN_ENTRY_SCORE"] = 78
+                reasons.append(f"노이즈 방어(IC={ic:+.2f} ➔ 78점)")
 
             if causes.get("FALSE_BREAKOUT", 0) >= 2:
                 tuned_params["RVOL_MIN"] = 2.0
-                tuned_params["MIN_ENTRY_SCORE"] = max(tuned_params["MIN_ENTRY_SCORE"], 83)
+                tuned_params["MIN_ENTRY_SCORE"] = max(tuned_params["MIN_ENTRY_SCORE"], 78)
                 reasons.append("가짜돌파 방어(RVOL 2.0배)")
                 
             if causes.get("OVERBOUGHT_CLIMAX", 0) >= 2:
@@ -461,12 +461,14 @@ class AutoTuningEngine:
                 reasons.append("상투 과열 차단(RSI 68)")
 
             if win_rate < 50.0 or pf < 1.2:
-                tuned_params["MIN_ENTRY_SCORE"] = max(tuned_params["MIN_ENTRY_SCORE"], 85)
-                tuned_params["MAX_POSITION_PCT"] = 0.18
-                reasons.append(f"계좌 방어 모드(승률 {win_rate:.1f}%)")
+                # [QQQ 초과 알파 보호] 단기 승률 하락 시에도 슬롯당 비중 30% 미만으로 축소 금지 (현금 드래그 원천 차단)
+                # 진입 점수도 78점을 초과하여 주도주 매수를 원천 봉쇄하지 않도록 상한선 78점으로 캡
+                tuned_params["MIN_ENTRY_SCORE"] = min(78, max(tuned_params["MIN_ENTRY_SCORE"], 75))
+                tuned_params["MAX_POSITION_PCT"] = max(0.30, tuned_params.get("MAX_POSITION_PCT", 0.33))
+                reasons.append(f"계좌 안정화 모드(승률 {win_rate:.1f}%, 비중 30% 유지)")
             elif win_rate >= 65.0 and pf >= 1.8:
-                tuned_params["MAX_POSITION_PCT"] = 0.30
-                reasons.append(f"알파 집중 모드(승률 {win_rate:.1f}%)")
+                tuned_params["MAX_POSITION_PCT"] = 0.33
+                reasons.append(f"알파 집중 모드(승률 {win_rate:.1f}%, 비중 33%)")
 
         # 3. Dynamic Cluster-Level Remorse Feedback Calibration (군집별 독립 튜닝)
         by_cluster = remorse.get("by_cluster", {})
@@ -480,6 +482,16 @@ class AutoTuningEngine:
                 reasons.append(f"{lbl} 조기매도({c_data['early_exits']}건) ➔ 익절 {cluster_params[c_name]['TAKE_PROFIT_PCT']*100:.1f}%·트레일 {cluster_params[c_name]['TRAILING_ATR']}x 상향")
             elif c_data.get("avoided_drops", 0) >= 1:
                 reasons.append(f"{lbl} 손실회피({c_data['avoided_drops']}건) 고점탈출 확인")
+
+        # [CONSTITUTION INVARIANT: QQQ 알파 집중 투자 보장]
+        # 비중은 최소 30% ~ 최대 35%로 고정 (현금 드래그 완전 해소)
+        tuned_params["MAX_POSITION_PCT"] = round(max(0.30, min(0.35, float(tuned_params.get("MAX_POSITION_PCT", 0.33)))), 3)
+        # 진입 문턱은 78점을 절대 초과하지 않음 (주도주 진입 봉쇄 방지)
+        tuned_params["MIN_ENTRY_SCORE"] = min(78, max(75, int(tuned_params.get("MIN_ENTRY_SCORE", 78))))
+        # 손절선은 3.8% ~ 5.5% 사이로 관리하여 단기 휩소 방지
+        tuned_params["STOP_LOSS_PCT"] = round(max(0.038, min(0.055, float(tuned_params.get("STOP_LOSS_PCT", 0.040)))), 3)
+        # 익절 목표선은 최소 12% 이상 확보하여 QQQ 대비 초과 수익 창출
+        tuned_params["TAKE_PROFIT_PCT"] = round(max(0.120, float(tuned_params.get("TAKE_PROFIT_PCT", 0.120))), 3)
 
         tuned_params["CLUSTERS"] = cluster_params
         if reasons:

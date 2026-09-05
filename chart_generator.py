@@ -22,7 +22,11 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, date, timedelta
 from loguru import logger
-import yfinance as yf
+import math
+try:
+    import kis_data as yf
+except ImportError:
+    import yfinance as yf
 import pytz
 
 _matplotlib_lock = threading.Lock()
@@ -62,34 +66,42 @@ def _fetch_benchmark_returns_since_baseline(benchmark: str, start_date: date, en
             else:
                 close_series = df.iloc[:, 0]
 
+            close_series = close_series.dropna()
             close_series.index = pd.to_datetime(close_series.index).tz_localize(None).normalize()
             close_series = close_series.sort_index()
 
-            # Baseline reference: the close on 2026-08-13 (pre-open baseline for 2026-08-14)
-            aug14_dt = pd.to_datetime(DAY_ZERO_DATE).normalize()
-            pre_aug14 = close_series[close_series.index < aug14_dt]
-            base_price = float(pre_aug14.iloc[-1]) if not pre_aug14.empty else float(close_series.iloc[0])
+            if not close_series.empty:
+                # Baseline reference: the close on 2026-08-13 (pre-open baseline for 2026-08-14)
+                aug14_dt = pd.to_datetime(DAY_ZERO_DATE).normalize()
+                pre_aug14 = close_series[close_series.index < aug14_dt]
+                base_price = float(pre_aug14.iloc[-1]) if not pre_aug14.empty else float(close_series.iloc[0])
+                if math.isnan(base_price) or base_price <= 0:
+                    base_price = float(close_series.dropna().iloc[0]) if not close_series.dropna().empty else 480.0
 
-            # Aug 14 close price
-            aug14_match = close_series[close_series.index <= aug14_dt]
-            aug14_price = float(aug14_match.iloc[-1]) if not aug14_match.empty else base_price
+                # Aug 14 close price
+                aug14_match = close_series[close_series.index <= aug14_dt]
+                aug14_price = float(aug14_match.iloc[-1]) if not aug14_match.empty else base_price
 
-            # If timeline is Day 1 (Baseline -> Close)
-            if len(date_list) == 2 and "08-14 (Open)" in date_list[0]:
-                day1_pct = (aug14_price / base_price - 1.0) if base_price > 0 else 0.0
-                return [0.0, base_capital * day1_pct]
+                # If timeline is Day 1 (Baseline -> Close)
+                if len(date_list) == 2 and "08-14 (Open)" in date_list[0]:
+                    day1_pct = (aug14_price / base_price - 1.0) if base_price > 0 else 0.0
+                    return [0.0, base_capital * day1_pct]
 
-            bm_returns = []
-            last_price = base_price
-            for d_str in date_list:
-                cur_dt = pd.to_datetime(d_str).normalize()
-                match = close_series[close_series.index <= cur_dt]
-                if not match.empty:
-                    last_price = float(match.iloc[-1])
-                pct = (last_price / base_price - 1.0) if base_price > 0 else 0.0
-                bm_returns.append(base_capital * pct)
+                bm_returns = []
+                last_price = base_price
+                for d_str in date_list:
+                    cur_dt = pd.to_datetime(d_str).normalize()
+                    match = close_series[close_series.index <= cur_dt]
+                    if not match.empty:
+                        p_val = float(match.iloc[-1])
+                        if not math.isnan(p_val) and p_val > 0:
+                            last_price = p_val
+                    pct = (last_price / base_price - 1.0) if base_price > 0 else 0.0
+                    if math.isnan(pct):
+                        pct = 0.0
+                    bm_returns.append(round(base_capital * pct, 2))
 
-            return bm_returns
+                return bm_returns
     except Exception as e:
         logger.debug("Failed to fetch {} benchmark history: {}", bm_symbol, e)
 
@@ -376,9 +388,18 @@ def generate_daily_pnl_chart(db_path: str = None, days: int = 30, benchmark: str
     final_bot = cum_pnls[-1] if cum_pnls else 0.0
     final_bm = bm_dollars[-1] if bm_dollars else 0.0
     final_alpha = alpha_dollars[-1] if alpha_dollars else 0.0
-    bot_pct = (final_bot / current_total_equity) * 100 if current_total_equity > 0 else 0.0
-    bm_pct = (final_bm / current_total_equity) * 100 if current_total_equity > 0 else 0.0
+    
+    if math.isnan(final_bot): final_bot = 0.0
+    if math.isnan(final_bm): final_bm = 0.0
+    if math.isnan(final_alpha): final_alpha = 0.0
+
+    current_total_equity = current_total_equity if (current_total_equity and not math.isnan(current_total_equity) and current_total_equity > 0) else 1000.0
+    bot_pct = (final_bot / current_total_equity) * 100
+    bm_pct = (final_bm / current_total_equity) * 100
+    if math.isnan(bot_pct): bot_pct = 0.0
+    if math.isnan(bm_pct): bm_pct = 0.0
     alpha_pct = bot_pct - bm_pct
+    if math.isnan(alpha_pct): alpha_pct = 0.0
     real_live_equity = current_total_equity
 
     ann_text = (

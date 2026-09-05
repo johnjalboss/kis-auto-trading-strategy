@@ -1,32 +1,32 @@
 {
-  "MIN_ENTRY_SCORE": 80,
-  "STOP_LOSS_PCT": 0.04,
-  "TAKE_PROFIT_PCT": 0.09,
-  "MAX_POSITION_PCT": 0.25,
+  "MIN_ENTRY_SCORE": 78,
+  "STOP_LOSS_PCT": 0.038,
+  "TAKE_PROFIT_PCT": 0.12,
+  "MAX_POSITION_PCT": 0.33,
   "RVOL_MIN": 1.5,
   "MAX_RSI_ENTRY": 72,
-  "TUNED_AT": "2026-09-04 02:20:03",
-  "REASON": "Baseline Balanced Institutional Matrix",
+  "TUNED_AT": "2026-09-05 08:02:29",
+  "REASON": "노이즈 방어(IC=-0.14 ➔ 78점) + 계좌 안정화 모드(승률 50.0%, 비중 30% 유지)",
   "CLUSTERS": {
     "HIGH_VOL_GROWTH": {
       "label": "🚀 고변동 성장주",
-      "TAKE_PROFIT_PCT": 0.15,
-      "STOP_LOSS_PCT": 0.05,
-      "TRAILING_ATR": 2.8,
+      "TAKE_PROFIT_PCT": 0.18,
+      "STOP_LOSS_PCT": 0.048,
+      "TRAILING_ATR": 3.5,
       "MIN_HOLD_HOURS": 24.0
     },
     "MID_VOL_MOMENTUM": {
       "label": "⚖️ 중변동 표준주",
-      "TAKE_PROFIT_PCT": 0.09,
+      "TAKE_PROFIT_PCT": 0.12,
       "STOP_LOSS_PCT": 0.038,
-      "TRAILING_ATR": 2.0,
+      "TRAILING_ATR": 2.6,
       "MIN_HOLD_HOURS": 12.0
     },
     "LOW_VOL_DEFENSIVE": {
       "label": "🛡️ 저변동 방어주",
-      "TAKE_PROFIT_PCT": 0.055,
+      "TAKE_PROFIT_PCT": 0.084,
       "STOP_LOSS_PCT": 0.028,
-      "TRAILING_ATR": 1.4,
+      "TRAILING_ATR": 1.8,
       "MIN_HOLD_HOURS": 6.0
     }
   }

@@ -21,6 +21,9 @@ psutil>=5.9.0
 # Data (legacy compat - shimmed by data_proxy.py)
 yfinance>=0.2.30
 
+# AI Sentiment & Commentary
+google-generativeai>=0.8.0
+
 # Optional: Dashboard (not needed for headless oracle)
 # streamlit>=1.30.0
 # plotly>=5.18.0
