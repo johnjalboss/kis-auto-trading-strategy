@@ -139,8 +139,9 @@ class DynamicScreener:
             inverse_cands = self._screen_inverse()
             candidates = inverse_cands + defensive_cands
         elif regime == MarketRegime.NEUTRAL:
-            mode = ScreenMode.OVERSOLD
-            candidates = self._screen_oversold()
+            # [QQQ 초과 알파 전략] 중립장에서도 지수를 능가하는 주도주(수렴돌파/모멘텀)를 우선 선별
+            mode = ScreenMode.MOMENTUM
+            candidates = self._screen_squeeze_leaders()
         elif use_momentum:
             mode = ScreenMode.MOMENTUM
             candidates = self._screen_squeeze_leaders()
@@ -468,11 +469,15 @@ class DynamicScreener:
         except Exception:
             theme_top = []
             
-        core_growth = ["NVDA", "PLTR", "KNSA", "ARWR", "LLY", "AMD", "META", "CRWD", "APP", "VRT", "TSLA", "AXON", "AKTS", "FCX", "TWST", "BMY", "GH"]
+        core_growth = [
+            "NVDA", "PLTR", "MSFT", "AAPL", "AMZN", "GOOGL", "META", "TSLA",
+            "AVGO", "SMH", "AMD", "ARM", "MU", "CRWD", "APP", "VRT",
+            "LLY", "ORCL", "NFLX", "NOW", "PANW", "MSTR", "COIN", "ISRG", "AXON", "KNSA", "ARWR"
+        ]
         prioritized = [s for s in (theme_top + core_growth) if s in all_symbols]
         remaining = [s for s in all_symbols if s not in prioritized]
         random.shuffle(remaining)
-        symbols_to_scan = (prioritized + remaining)[:80]
+        symbols_to_scan = (prioritized + remaining)[:100]
         
         rs_scores = []  # (symbol, rs_score)
         _lock = threading.Lock()
@@ -861,12 +866,19 @@ class DynamicScreener:
         except Exception as e:
             logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
-        # 후보 풀: BASE_UNIVERSE 전체 (최대 80개 고속 스캔)
+        # 후보 풀: 핵심 주도주 우선 검사 + BASE_UNIVERSE 전체 셔플 (최대 85개 고속 스캔)
         import random
+        prioritized_leads = [
+            "NVDA", "PLTR", "MSFT", "AAPL", "AMZN", "META", "TSLA", "AVGO",
+            "AMD", "SMH", "ARM", "MU", "CRWD", "VRT", "APP", "LLY", "ORCL",
+            "NOW", "PANW", "MSTR", "COIN"
+        ]
         all_symbols = list(BASE_UNIVERSE)
-        random.shuffle(all_symbols)
-        max_sqz = min(80, getattr(config, 'SCREENER_MAX_CANDIDATES', 75))
-        candidates = all_symbols[:max_sqz]
+        leads_in_universe = [s for s in prioritized_leads if s in all_symbols]
+        rem = [s for s in all_symbols if s not in leads_in_universe]
+        random.shuffle(rem)
+        max_sqz = min(85, getattr(config, 'SCREENER_MAX_CANDIDATES', 80))
+        candidates = (leads_in_universe + rem)[:max_sqz]
 
         def _scan_symbol(sym: str):
             """단일 종목 BB Squeeze 스캔 (스레드 워커)"""
