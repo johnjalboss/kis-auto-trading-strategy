@@ -91,19 +91,18 @@ class NewsAnalyzer:
         Judge news sentiment using Gemini Free Tier API.
         Returns: (sentiment: str, score: float, has_catastrophic: bool, catastrophic_reason: str, reason: str) or None if failed.
         """
-        import os
-        import json
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            logger.debug("GEMINI_API_KEY not found. Skipping Gemini sentiment analysis.")
-            return None
-            
         if not news_items:
             return "NEUTRAL", 0.0, False, None, "No news items to judge"
-            
+
+        from gemini_client import get_gemini_client
+        client = get_gemini_client()
+        if not client.is_available():
+            logger.debug("GEMINI_API_KEY not found. Skipping Gemini sentiment analysis.")
+            return None
+
         # Limit to top 8 news items to minimize prompt size and token usage
         headlines = [item.title for item in news_items[:8]]
-        
+
         prompt = (
             f"You are an expert financial news sentiment judge. Analyze the short-term market impact of the following news headlines for stock symbol '{symbol}'.\n"
             "Evaluate:\n"
@@ -120,25 +119,10 @@ class NewsAnalyzer:
             + "\n".join(f"- {h}" for h in headlines) + "\n\n"
             "Output JSON only (no markdown block, no ```json):"
         )
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "responseMimeType": "application/json"
-            }
-        }
-        
+
         try:
-            # Short timeout to prevent blocking the trading execution thread
-            resp = requests.post(url, headers=headers, json=payload, timeout=6)
-            if resp.status_code == 200:
-                res_json = resp.json()
-                text = res_json['candidates'][0]['content']['parts'][0]['text']
-                data = json.loads(text.strip())
+            data = client.generate_json(prompt, timeout=8)
+            if data:
                 sentiment = data.get("sentiment", "NEUTRAL").upper()
                 score = float(data.get("sentiment_score", 0.0))
                 has_catastrophic = bool(data.get("has_catastrophic_risk", False))

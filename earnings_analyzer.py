@@ -244,16 +244,13 @@ class EarningsAnalyzer:
         Check if the company recently reported bad earnings, lowered guidance, or had negative executive changes.
         Returns: (has_earnings_shock: bool, reason: Optional[str])
         """
-        import os
-        import json
-        import requests
-        
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            logger.debug("GEMINI_API_KEY not found. Skipping Gemini earnings shock filter.")
-            return False, None
-            
         if not news_items:
+            return False, None
+
+        from gemini_client import get_gemini_client
+        client = get_gemini_client()
+        if not client.is_available():
+            logger.debug("GEMINI_API_KEY not found. Skipping Gemini earnings shock filter.")
             return False, None
             
         # Filter news headlines with earnings keywords (case-insensitive)
@@ -291,24 +288,9 @@ class EarningsAnalyzer:
             "Output JSON only (no markdown block, no ```json):"
         )
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "responseMimeType": "application/json"
-            }
-        }
-        
         try:
-            # Let's set a 6-second timeout to prevent blocking
-            resp = requests.post(url, headers=headers, json=payload, timeout=6)
-            if resp.status_code == 200:
-                res_json = resp.json()
-                text = res_json['candidates'][0]['content']['parts'][0]['text']
-                data = json.loads(text.strip())
+            data = client.generate_json(prompt, timeout=8)
+            if data:
                 has_shock = bool(data.get("has_earnings_shock", False))
                 shock_type = data.get("shock_type", "NONE")
                 reason = data.get("reason", None)

@@ -52,7 +52,9 @@ class MacroNewsAnalyzer:
 
     def _analyze_with_gemini(self, headlines: List[str]) -> Optional[Dict]:
         """Use Gemini to analyze global macro news sentiment and identify scheduled/unscheduled events"""
-        if not self.gemini_key:
+        from gemini_client import get_gemini_client
+        client = get_gemini_client(self.gemini_key)
+        if not client.is_available():
             return None
             
         prompt = (
@@ -76,23 +78,9 @@ class MacroNewsAnalyzer:
             "Output JSON only (no markdown block, no ```json):"
         )
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "responseMimeType": "application/json"
-            }
-        }
-        
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=8)
-            if resp.status_code == 200:
-                res_json = resp.json()
-                text = res_json['candidates'][0]['content']['parts'][0]['text']
-                data = json.loads(text.strip())
+            data = client.generate_json(prompt, timeout=10)
+            if data:
                 logger.info("[MACRO_NEWS_GEMINI] Risk Level: {}, Penalty: {}, Reason: {}", 
                             data.get("risk_level"), data.get("penalty"), data.get("reason"))
                 return data

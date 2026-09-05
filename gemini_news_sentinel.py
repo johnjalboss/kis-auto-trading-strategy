@@ -98,30 +98,17 @@ class GeminiNewsSentinel:
                     _NEWS_CACHE[f"hash_{text_hash}"] = (now, res)
                     return res
 
-            # 3. Gemini Flash AI Call (Only if API Key is present and throttled to >=4s apart)
-            global _LAST_GEMINI_CALL
-            if self.api_key and (now - _LAST_GEMINI_CALL >= 4.0):
+            # 3. Gemini Flash AI Call (Only if API Key is present)
+            if self.api_key:
                 try:
-                    import google.generativeai as genai
+                    from gemini_client import get_gemini_client
                     prompt = f"Analyze market sentiment for stock {symbol} from headlines: {combined_text}. Respond ONLY with a single integer score from -100 (extreme negative/disaster) to +100 (extreme positive/catalyst)."
                     
-                    response = None
-                    for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
-                        try:
-                            m = genai.GenerativeModel(m_name)
-                            response = m.generate_content(prompt)
-                            if response and hasattr(response, 'text') and response.text:
-                                break
-                        except Exception:
-                            continue
-                    
-                    if response and hasattr(response, 'text') and response.text:
-                        _LAST_GEMINI_CALL = time.time()
-                        score_str = response.text.strip()
-                        
+                    score_str = get_gemini_client(self.api_key).generate_text(prompt, temperature=0.1, max_tokens=15)
+                    if score_str:
                         # Extract numeric integer score
                         import re
-                        match = re.search(r'(-?\d+)', score_str)
+                        match = re.search(r'(-?\d+)', score_str.strip())
                         if match:
                             sent_score = int(match.group(1))
                             sent_score = max(-100, min(100, sent_score))

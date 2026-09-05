@@ -269,7 +269,7 @@ class WeeklyAIReportGenerator:
         pnl_sign = "+" if stats["gross_pnl"] >= 0 else ""
         if self.api_key:
             try:
-                import google.generativeai as genai
+                from gemini_client import get_gemini_client
                 prompt = (
                     f"너는 세계 최정상 퀀트 헤지펀드 수석 펀드매니저야. "
                     f"아래 우리 봇의 최근 7일간 실전 매매 데이터를 바탕으로, 대표님(투자자)께 보고할 주간 퀀트 운용 코멘터리를 작성해줘.\n\n"
@@ -281,15 +281,7 @@ class WeeklyAIReportGenerator:
                     f"- 활용 퀀트 팩터: 마크 미네르비니 VCP 돌파, 잔차 모멘텀, 다크풀 블록, 1D 칼만 필터, 볼륨 프로파일 POC\n\n"
                     f"요구사항: 1) 전문적이고 신뢰감 있는 헤지펀드 어조로, 2) 이번 주 시장 평가와 봇의 리스크 방어 성과를 3~4문장으로 명쾌하게 총평해줘."
                 )
-                for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
-                    try:
-                        m = genai.GenerativeModel(m_name)
-                        resp = m.generate_content(prompt)
-                        if resp and resp.text:
-                            ai_commentary = resp.text.strip()
-                            break
-                    except Exception:
-                        continue
+                ai_commentary = get_gemini_client(self.api_key).generate_text(prompt, temperature=0.3)
             except Exception as e:
                 logger.debug("Gemini AI weekly commentary failed: {}", e)
 

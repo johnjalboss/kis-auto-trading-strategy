@@ -47,8 +47,7 @@ class AITradePostMortem:
         ai_review = ""
         if self.api_key:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=self.api_key)
+                from gemini_client import get_gemini_client
                 prompt = (
                     f"너는 세계 최정상 퀀트 트레이더이자 리스크 매니저야. "
                     f"방금 완료된 아래 실전 매매 건에 대해, 다음 3가지 항목으로 구성된 명쾌하고 전문적인 3줄 트레이딩 복기 노트를 작성해줘:\n\n"
@@ -62,15 +61,7 @@ class AITradePostMortem:
                     f"2) 헤지펀드 매니저 어조로, 승리 시에는 팩터 유효성을 칭찬하고 손실 시에는 리스크 방어 성과를 객관적으로 분석할 것\n"
                     f"3) 총 150자 내외로 매우 간결하게 작성"
                 )
-                for m_name in ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]:
-                    try:
-                        m = genai.GenerativeModel(m_name)
-                        resp = m.generate_content(prompt)
-                        if resp and resp.text:
-                            ai_review = resp.text.strip()
-                            break
-                    except Exception:
-                        continue
+                ai_review = get_gemini_client(self.api_key).generate_text(prompt, temperature=0.2)
             except Exception as e:
                 logger.debug("Gemini post-mortem generation failed: {}", e)
 
