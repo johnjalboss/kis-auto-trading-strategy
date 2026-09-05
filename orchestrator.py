@@ -2315,14 +2315,38 @@ class BotOrchestrator:
         from scheduler import TradingScheduler
         scheduler = TradingScheduler()
         
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         # PHASE 1: Boot (once)
         self.phase_1_boot_infrastructure()
         
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         # PHASE 2: Initial macro evaluation
         self.phase_2_macro_evaluation()
         
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         # PHASE 3: Initial screen
         self.phase_3_run_screener()
+        
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
         
         # Load composite signal engine
         from composite_signal import get_composite_engine

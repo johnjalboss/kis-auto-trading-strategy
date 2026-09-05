@@ -89,14 +89,27 @@ class UniverseExpander:
                 return candidates[:top_n]
 
         try:
-            logger.info("⚡ [v8.0 UNIVERSE_EXPANDER] Bulk scanning {} Full US Market stocks in batches...", len(self.pool))
+            try:
+                from self_healing_watchdog import touch_heartbeat
+                touch_heartbeat()
+            except Exception:
+                pass
+
+            # Prioritize liquid leadership pool first, capped to top 400 liquid stocks for sub-10s ultra-fast screening
+            ordered_targets = list(dict.fromkeys(_EXPANDED_TICKER_POOL + self.pool))
+            scan_targets = ordered_targets[:400]
+            logger.info("⚡ [v8.0 UNIVERSE_EXPANDER] Bulk scanning top {} liquid US Market leaders (from {} pool)...", len(scan_targets), len(self.pool))
             
             chunk_size = 100
             scored_candidates = []
-            scan_targets = self.pool
             import gc
             
             for i in range(0, len(scan_targets), chunk_size):
+                try:
+                    from self_healing_watchdog import touch_heartbeat
+                    touch_heartbeat()
+                except Exception:
+                    pass
                 chunk = scan_targets[i:i + chunk_size]
                 try:
                     data = yf.download(chunk, period='5d', progress=False, group_by='ticker', threads=True)
