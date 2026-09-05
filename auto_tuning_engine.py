@@ -549,8 +549,15 @@ class AutoTuningEngine:
             if token and chat_id:
                 import requests
                 url = f"https://api.telegram.org/bot{token}/sendMessage"
-                requests.post(url, json={"chat_id": chat_id, "text": card_text, "parse_mode": "HTML"}, timeout=10)
-                return True
+                resp = requests.post(url, json={"chat_id": chat_id, "text": card_text, "parse_mode": "HTML"}, timeout=10)
+                if resp.ok:
+                    logger.success("AutoTuning report sent to Telegram!")
+                    return True
         except Exception as e:
             logger.error("Failed sending autotune report: {}", e)
         return False
+
+if __name__ == "__main__":
+    engine = AutoTuningEngine()
+    engine.run_autotune()
+    engine.send_tuning_report_to_telegram()
