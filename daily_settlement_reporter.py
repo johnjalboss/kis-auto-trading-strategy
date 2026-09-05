@@ -15,6 +15,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from loguru import logger
 
+try:
+    import config
+except ImportError:
+    config = None
+
 class DailySettlementReporter:
     """Generates daily settlement reports and Korean capital gains tax export files"""
 
