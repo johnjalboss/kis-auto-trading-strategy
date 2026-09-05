@@ -13,8 +13,8 @@ class FinnhubClient:
         self.base_url = "https://finnhub.io/api/v1"
         self._last_call_time = 0.0
         self._min_interval = 1.0  # Safe rate limit: 1s between calls (max 60/min)
-        self._rate_limit_lock = threading.Lock()
-        self._cache_lock = threading.Lock()
+        self._rate_limit_lock = threading.RLock()
+        self._cache_lock = threading.RLock()
         self.cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "finnhub_cache.json")
         self.cache = self._load_cache()
         self._disabled_until = 0.0
