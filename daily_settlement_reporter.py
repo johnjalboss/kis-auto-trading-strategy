@@ -193,6 +193,20 @@ class DailySettlementReporter:
         """Sends daily settlement report card to Telegram."""
         try:
             res = self.generate_daily_report(target_date)
+            target_str = res.get("date", "")
+
+            # Check if target date was a market holiday or weekend with 0 trades
+            try:
+                from scheduler import TradingScheduler
+                sched = TradingScheduler()
+                if res.get("trades_count", 0) == 0:
+                    if sched.is_holiday(target_str) or not sched.is_trading_day(target_str):
+                        h_name = sched.get_holiday_name(target_str) or "휴장일"
+                        logger.info("Market was closed on {} ({}) with 0 trades. Skipping daily settlement card.", target_str, h_name)
+                        return True
+            except Exception as _sched_err:
+                logger.debug("Holiday check in settlement report error: {}", _sched_err)
+
             msg = res.get("telegram_msg", "")
             if not msg:
                 return False

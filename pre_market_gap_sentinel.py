@@ -162,12 +162,40 @@ class PreMarketGapSentinel:
         }
 
     def generate_report(self) -> str:
-        """Generates pre-market opening intelligence brief."""
-        res = self.scan_gaps()
+        """Generates pre-market opening intelligence brief or holiday notice."""
+        from scheduler import TradingScheduler
+        sched = TradingScheduler()
+        now_est = sched.now_est()
+        today_ny_str = now_est.strftime("%Y-%m-%d")
+        holiday_name = sched.get_holiday_name(today_ny_str)
+        is_trading = sched.is_trading_day()
+
         now_dt = datetime.now()
         now_str = now_dt.strftime("%Y-%m-%d %H:%M")
-        now_ny = datetime.now(pytz.timezone('US/Eastern')).strftime("%H:%M EDT")
-        is_weekend = now_dt.weekday() in (5, 6)  # Saturday or Sunday
+        now_ny = now_est.strftime("%H:%M EDT")
+
+        # 1. Holiday Briefing
+        if holiday_name:
+            lines = [
+                f"🏖️ <b>[미국 증시 공휴일 휴장 안내]</b>",
+                f"<i>{now_str} KST ({now_ny} 기준)</i>",
+                "━━━━━━━━━━━━━━━━━━━",
+                f"오늘은 미국 <b>{holiday_name}</b> 공휴일로 뉴욕 증시(NYSE / NASDAQ)가 <b>전면 휴장</b>합니다.\n",
+                "• ☕ <b>장 운영 안내:</b> 프리마켓, 정규장, 애프터마켓 거래가 모두 진행되지 않습니다.",
+                "• 🛡️ <b>시스템 상태:</b> 자동매매 봇은 현금 및 보유 포지션을 안전하게 보존하며 대기 모드를 유지합니다.",
+                "• ⏰ <b>다음 정규장:</b> 익일 22:30 KST (09:30 EDT) 정상 개장 예정입니다.",
+                "━━━━━━━━━━━━━━━━━━━",
+                "💡 <i>휴장일에는 불필요한 매매 신호 연산 및 갭 스캔이 안전하게 건너뛰어집니다.</i>"
+            ]
+            return "\n".join(lines)
+
+        # 2. Weekend Silence
+        if not is_trading:
+            logger.info("Today is weekend. Skipping pre-market report.")
+            return ""
+
+        # 3. Regular Trading Day Gap Scan
+        res = self.scan_gaps()
 
         lines = [
             f"🌅 <b>[정규장 개장 30분 전 프리마켓 레이더]</b>",
@@ -175,10 +203,6 @@ class PreMarketGapSentinel:
             "━━━━━━━━━━━━━━━━━━━",
             "📊 <b>데이터 기준:</b> <code>전일 정규장 공식 종가 vs 당일 프리마켓 실시간 체결가</code>\n"
         ]
-
-        if is_weekend:
-            lines.append("☕ <b>[주말 휴장 안내]</b>: 현재 미국 증시 주말 휴장 상태입니다.")
-            lines.append("   (프리마켓 시세는 금요일 종가 기준으로 고정되어 있습니다)\n")
 
         lines.append("💼 <b>보유 종목 프리마켓 현황</b>:")
         if res["held_status"]:
@@ -200,10 +224,7 @@ class PreMarketGapSentinel:
             lines.append("  • 특이 갭(±3.0%) 발생 종목 없음 (안정적 보합 출발 예상)")
 
         lines.append("━━━━━━━━━━━━━━━━━━━")
-        if not is_weekend:
-            lines.append("💡 <i>22:30 KST (09:30 EDT) 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
-        else:
-            lines.append("💡 <i>월요일 밤 22:30 KST 정규장 개장 시 실시간 자동 매매가 재개됩니다.</i>")
+        lines.append("💡 <i>22:30 KST (09:30 EDT) 정규장 개장 직후 스마트 오더 라우터가 실시간 감시를 개시합니다.</i>")
 
         return "\n".join(lines)
 
@@ -214,6 +235,10 @@ class PreMarketGapSentinel:
             return False
 
         card_text = self.generate_report()
+        if not card_text:
+            logger.info("Pre-market alert skipped (Not a trading day).")
+            return True
+
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,

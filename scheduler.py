@@ -28,7 +28,7 @@ class TradingScheduler:
     AFTERHOURS_OPEN = time(16, 0)
     AFTERHOURS_CLOSE = time(20, 0)
     
-    # Holidays 2024-2025
+    # Holidays 2024-2027
     HOLIDAYS = [
         "2024-01-01", "2024-01-15", "2024-02-19", "2024-03-29",
         "2024-05-27", "2024-06-19", "2024-07-04", "2024-09-02",
@@ -39,42 +39,104 @@ class TradingScheduler:
         "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03",
         "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07",
         "2026-11-26", "2026-12-25",
+        "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26",
+        "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06",
+        "2027-11-25", "2027-12-24",
     ]
     US_HOLIDAYS = HOLIDAYS
+
+    HOLIDAY_NAMES = {
+        "2024-01-01": "New Year's Day (신년)",
+        "2024-01-15": "Martin Luther King Jr. Day (마틴 루터 킹의 날)",
+        "2024-02-19": "Presidents' Day (대통령의 날)",
+        "2024-03-29": "Good Friday (성금요일)",
+        "2024-05-27": "Memorial Day (메모리얼 데이)",
+        "2024-06-19": "Juneteenth (준틴스 국경일)",
+        "2024-07-04": "Independence Day (독립기념일)",
+        "2024-09-02": "Labor Day (노동절)",
+        "2024-11-28": "Thanksgiving Day (추수감사절)",
+        "2024-12-25": "Christmas Day (크리스마스)",
+        "2025-01-01": "New Year's Day (신년)",
+        "2025-01-20": "Martin Luther King Jr. Day (마틴 루터 킹의 날)",
+        "2025-02-17": "Presidents' Day (대통령의 날)",
+        "2025-04-18": "Good Friday (성금요일)",
+        "2025-05-26": "Memorial Day (메모리얼 데이)",
+        "2025-06-19": "Juneteenth (준틴스 국경일)",
+        "2025-07-04": "Independence Day (독립기념일)",
+        "2025-09-01": "Labor Day (노동절)",
+        "2025-11-27": "Thanksgiving Day (추수감사절)",
+        "2025-12-25": "Christmas Day (크리스마스)",
+        "2026-01-01": "New Year's Day (신년)",
+        "2026-01-19": "Martin Luther King Jr. Day (마틴 루터 킹의 날)",
+        "2026-02-16": "Presidents' Day (대통령의 날)",
+        "2026-04-03": "Good Friday (성금요일)",
+        "2026-05-25": "Memorial Day (메모리얼 데이)",
+        "2026-06-19": "Juneteenth (준틴스 국경일)",
+        "2026-07-03": "Independence Day (Observed, 독립기념일 대체휴일)",
+        "2026-09-07": "Labor Day (노동절)",
+        "2026-11-26": "Thanksgiving Day (추수감사절)",
+        "2026-12-25": "Christmas Day (크리스마스)",
+        "2027-01-01": "New Year's Day (신년)",
+        "2027-01-18": "Martin Luther King Jr. Day (마틴 루터 킹의 날)",
+        "2027-02-15": "Presidents' Day (대통령의 날)",
+        "2027-03-26": "Good Friday (성금요일)",
+        "2027-05-31": "Memorial Day (메모리얼 데이)",
+        "2027-06-18": "Juneteenth (Observed, 준틴스 대체휴일)",
+        "2027-07-05": "Independence Day (Observed, 독립기념일 대체휴일)",
+        "2027-09-06": "Labor Day (노동절)",
+        "2027-11-25": "Thanksgiving Day (추수감사절)",
+        "2027-12-24": "Christmas Day (Observed, 크리스마스 대체휴일)",
+    }
     
     def __init__(self):
         pass
     
     def now_est(self) -> datetime:
         return datetime.now(self.TZ)
+
+    def is_holiday(self, target_date: str = None) -> bool:
+        if not target_date:
+            target_date = self.now_est().strftime("%Y-%m-%d")
+        return target_date in self.HOLIDAYS
+
+    def get_holiday_name(self, target_date: str = None) -> str:
+        if not target_date:
+            target_date = self.now_est().strftime("%Y-%m-%d")
+        return self.HOLIDAY_NAMES.get(target_date, "")
     
-    def is_market_open(self) -> bool:
-        now = self.now_est()
-        if now.weekday() >= 5:  # Weekend
-            return False
-        if now.strftime("%Y-%m-%d") in self.HOLIDAYS:
-            return False
-        return self.MARKET_OPEN <= now.time() < self.MARKET_CLOSE
-    
-    def is_premarket(self) -> bool:
-        now = self.now_est()
-        if now.weekday() >= 5:
-            return False
-        return self.PREMARKET_OPEN <= now.time() < self.MARKET_OPEN
-    
-    def is_afterhours(self) -> bool:
-        now = self.now_est()
-        if now.weekday() >= 5:
-            return False
-        return self.AFTERHOURS_OPEN < now.time() <= self.AFTERHOURS_CLOSE
-    
-    def is_trading_day(self) -> bool:
+    def is_trading_day(self, target_date: str = None) -> bool:
+        if target_date:
+            try:
+                dt = datetime.strptime(target_date, "%Y-%m-%d")
+                if dt.weekday() >= 5 or target_date in self.HOLIDAYS:
+                    return False
+                return True
+            except Exception:
+                pass
         now = self.now_est()
         if now.weekday() >= 5:
             return False
         if now.strftime("%Y-%m-%d") in self.HOLIDAYS:
             return False
         return True
+
+    def is_market_open(self) -> bool:
+        if not self.is_trading_day():
+            return False
+        now = self.now_est()
+        return self.MARKET_OPEN <= now.time() < self.MARKET_CLOSE
+    
+    def is_premarket(self) -> bool:
+        if not self.is_trading_day():
+            return False
+        now = self.now_est()
+        return self.PREMARKET_OPEN <= now.time() < self.MARKET_OPEN
+    
+    def is_afterhours(self) -> bool:
+        if not self.is_trading_day():
+            return False
+        now = self.now_est()
+        return self.AFTERHOURS_OPEN < now.time() <= self.AFTERHOURS_CLOSE
     
     def time_to_open(self) -> timedelta:
         """Time until market opens"""
