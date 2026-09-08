@@ -1250,6 +1250,11 @@ class DynamicScreener:
     def _score_stock(self, symbol: str, mode: ScreenMode, preliminary: bool = False) -> Optional[StockScore]:
         """Calculate comprehensive score for a stock using KIS API data"""
         try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+        try:
             # ✅ 캐시 우선 사용 — gather 단계에서 이미 다운로드한 데이터 재활용
             import kis_data
             if symbol in self._ohlcv_cache:

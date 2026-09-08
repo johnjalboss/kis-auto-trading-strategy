@@ -646,6 +646,12 @@ class BotOrchestrator:
         Screener is cached for 45 minutes to prevent hammering 1000+ symbols
         with OHLCV API calls on every orchestrator cycle.
         """
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         logger.info("=" * 60)
         logger.info("[PHASE 3] Running Universe Screener (5 modules)")
         logger.info("=" * 60)
@@ -743,6 +749,12 @@ class BotOrchestrator:
         - Priority 3: Entry signal scanning
         - Priority 4: Position upgrade (Portfolio optimization)
         """
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         # --- PRIORITY 0: REAL-TIME AUTOTUNE OVERRIDES SYNC ---
         try:
             from auto_tuning_engine import load_autotune_overrides
@@ -770,6 +782,11 @@ class BotOrchestrator:
         if positions:
             logger.info("🔍 Checking exits for {} positions first...", len(positions))
             for sym, pos in list(positions.items()):
+                try:
+                    from self_healing_watchdog import touch_heartbeat
+                    touch_heartbeat()
+                except Exception:
+                    pass
                 try:
                     # [v11.0.6 EXTENDED HOURS DEFENSE] Check Pre-Market & After-Hours Emergency Liquidation (-7.0% gap down / disaster news)
                     try:
@@ -956,6 +973,11 @@ class BotOrchestrator:
                 for future in as_completed(future_to_sym):
                     sym = future_to_sym[future]
                     try:
+                        from self_healing_watchdog import touch_heartbeat
+                        touch_heartbeat()
+                    except Exception:
+                        pass
+                    try:
                         _, signal = future.result()
                         if signal:
                             signals_to_process.append(signal)
@@ -978,6 +1000,11 @@ class BotOrchestrator:
             return (c_score, raw_score, kalman_vel, rs_alpha)
 
         signals_to_process.sort(key=_tie_breaker_key, reverse=True)
+
+        # Cap candidate evaluation to top 20 to prevent excessive sequential API latency
+        if len(signals_to_process) > 20:
+            logger.info("⚡ [PHASE_4] Capping signals_to_process from {} down to top 20 highest-conviction candidates.", len(signals_to_process))
+            signals_to_process = signals_to_process[:20]
 
         # [v2026 TAIL-RISK CIRCUIT BREAKER GUARD]
         try:
@@ -1002,6 +1029,11 @@ class BotOrchestrator:
 
         trade_executed = False
         for signal in signals_to_process:
+            try:
+                from self_healing_watchdog import touch_heartbeat
+                touch_heartbeat()
+            except Exception:
+                pass
             symbol = signal.symbol
             try:
                 logger.info("Signal for {}: score={}, action={}", symbol, signal.composite_score, signal.action)

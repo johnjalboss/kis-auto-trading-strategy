@@ -75,8 +75,8 @@ class SelfHealingWatchdog:
                     # Never evaluate an mtime older than the current process start time
                     mtime = max(raw_mtime, self._start_time)
                     stalled_sec = time.time() - mtime
-                    # 1200s (20 min) without a single heartbeat means main thread is truly frozen
-                    if stalled_sec > 1200:
+                    # 1800s (30 min) without a single heartbeat means main thread is truly frozen
+                    if stalled_sec > 1800:
                         logger.critical("🚨 [AUTOPILOT_WATCHDOG] CRITICAL: Main trading loop stalled for {:.0f}s! Initiating self-healing restart...", stalled_sec)
                         try:
                             from notification import get_notifier

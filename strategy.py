@@ -390,6 +390,12 @@ class StrategyEngine:
         - Setup A: Technical Breakout or Structural Pullback (Chart-driven)
         - Setup B: Quant Liquidity & Accumulation (Flow-driven, front-running smart money)
         """
+        try:
+            from self_healing_watchdog import touch_heartbeat
+            touch_heartbeat()
+        except Exception:
+            pass
+
         if symbol in self._positions:
             return EntrySignal("HOLD", 0, "Already in position", 0)
         
