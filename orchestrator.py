@@ -2161,20 +2161,36 @@ class BotOrchestrator:
 
             # [NEW SOTA QUANT MODULE 17: DAILY SETTLEMENT TELEGRAM CARD & TAX CSV]
             try:
-                from daily_settlement_reporter import DailySettlementReporter
-                from notification import get_notifier
-                ds_rep = DailySettlementReporter()
-                rep_data = ds_rep.generate_daily_report()
-                if rep_data.get('telegram_msg'):
-                    get_notifier().send_message(rep_data['telegram_msg'])
-                ds_rep.export_tax_csv()
+                from database import get_db
+                from scheduler import TradingScheduler
+                _td = TradingScheduler().now_est().date()
+                _db = get_db()
+                if _db.claim_report_sending_lock("DAILY_SETTLEMENT", _td):
+                    from daily_settlement_reporter import DailySettlementReporter
+                    from notification import get_notifier
+                    ds_rep = DailySettlementReporter()
+                    rep_data = ds_rep.generate_daily_report()
+                    if rep_data.get('telegram_msg'):
+                        get_notifier().send_message(rep_data['telegram_msg'])
+                    ds_rep.export_tax_csv()
+                    logger.info("📄 [DAILY_SETTLEMENT] Daily settlement report sent for {}", _td)
+                else:
+                    logger.info("📄 [DAILY_SETTLEMENT] Report already claimed/sent today ({}). Skipping duplicate.", _td)
             except Exception as _ds_err:
                 logger.debug("Daily settlement reporter error: {}", _ds_err)
 
             # [월스트리트 AI 퀀트 일일 장 마감 성적표 자동 발송]
             try:
-                from daily_quant_report import DailyQuantReportCard
-                DailyQuantReportCard().generate_and_send_report(self.trader)
+                from database import get_db
+                from scheduler import TradingScheduler
+                _td = TradingScheduler().now_est().date()
+                _db = get_db()
+                if _db.claim_report_sending_lock("DAILY_QUANT_CARD", _td):
+                    from daily_quant_report import DailyQuantReportCard
+                    DailyQuantReportCard().generate_and_send_report(self.trader)
+                    logger.info("🏆 [DAILY_QUANT_CARD] Quant report card sent for {}", _td)
+                else:
+                    logger.info("🏆 [DAILY_QUANT_CARD] Report already claimed/sent today ({}). Skipping duplicate.", _td)
             except Exception as _dqr_err:
                 logger.debug("DailyQuantReportCard error: {}", _dqr_err)
 
