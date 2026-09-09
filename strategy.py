@@ -25,6 +25,7 @@ from enum import Enum
 import os
 import numpy as np
 import pandas as pd
+import kis_data
 import kis_data as yf  # KIS API drop-in replacement for yfinance
 import pytz
 from loguru import logger
@@ -999,7 +1000,6 @@ class StrategyEngine:
 
         # 5. Market Breadth Guard with High-Score (>= 70) Bypass
         try:
-            import kis_data
             _spy_df = kis_data.get_daily_ohlcv("SPY", days=25)
             if _spy_df is not None and len(_spy_df) >= 20:
                 _spy_close = _spy_df['Close']
