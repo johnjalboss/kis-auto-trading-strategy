@@ -88,12 +88,13 @@ class OrthogonalMacroSuite:
         return False, "REGULAR_CALENDAR"
 
     def fetch_skew(self) -> SkewSnapshot:
-        """Fetches CBOE SKEW Index (^SKEW)."""
+        """Fetches CBOE SKEW Index (^SKEW) with strict timeout."""
         try:
-            ticker = yf.Ticker('^SKEW')
-            hist = ticker.history(period='5d')
-            if not hist.empty:
-                val = float(hist['Close'].iloc[-1])
+            df = yf.download('^SKEW', period='5d', progress=False)
+            if df is not None and not df.empty:
+                c = df['Close']
+                last_val = c.iloc[-1]
+                val = float(last_val.iloc[0] if hasattr(last_val, 'iloc') else last_val)
                 if val >= 140.0:
                     return SkewSnapshot(val, True, False, "HIGH_HEDGING", f"SKEW elevated ({val:.1f} >= 140), institutions buying crash puts")
                 elif val < 125.0:
@@ -106,19 +107,23 @@ class OrthogonalMacroSuite:
         return SkewSnapshot(130.0, False, True, "NORMAL", "SKEW baseline (130.0)")
 
     def fetch_credit_spread(self) -> tuple:
-        """Calculates HYG / IEI smart-money credit risk ratio."""
+        """Calculates HYG / IEI smart-money credit risk ratio with strict timeout."""
         try:
-            hyg = yf.Ticker('HYG').history(period='5d')
-            iei = yf.Ticker('IEI').history(period='5d')
-            if not hyg.empty and not iei.empty:
-                r_now = float(hyg['Close'].iloc[-1]) / float(iei['Close'].iloc[-1])
-                r_prev = float(hyg['Close'].iloc[-2]) / float(iei['Close'].iloc[-2]) if len(hyg) >= 2 else r_now
-                chg = (r_now - r_prev) / r_prev
-                if chg >= 0.002:
-                    return r_now, "RISK_ON"
-                elif chg <= -0.003:
-                    return r_now, "RISK_OFF"
-                return r_now, "NEUTRAL"
+            df = yf.download(['HYG', 'IEI'], period='5d', progress=False)
+            if df is not None and not df.empty and 'Close' in df:
+                close = df['Close']
+                if 'HYG' in close and 'IEI' in close:
+                    hyg = close['HYG'].dropna()
+                    iei = close['IEI'].dropna()
+                    if not hyg.empty and not iei.empty:
+                        r_now = float(hyg.iloc[-1]) / float(iei.iloc[-1])
+                        r_prev = float(hyg.iloc[-2]) / float(iei.iloc[-2]) if len(hyg) >= 2 and len(iei) >= 2 else r_now
+                        chg = (r_now - r_prev) / r_prev
+                        if chg >= 0.002:
+                            return r_now, "RISK_ON"
+                        elif chg <= -0.003:
+                            return r_now, "RISK_OFF"
+                        return r_now, "NEUTRAL"
         except Exception as e:
             logger.debug("Failed to fetch credit spread: {}", e)
         return 0.65, "NEUTRAL"
@@ -128,9 +133,23 @@ class OrthogonalMacroSuite:
         if self._cache and (now - self._last_fetch < self._ttl):
             return self._cache
 
-        skew_snap = self.fetch_skew()
-        is_totm, totm_desc = self.is_turn_of_the_month()
-        cred_ratio, cred_sent = self.fetch_credit_spread()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut_skew = executor.submit(self.fetch_skew)
+            fut_cred = executor.submit(self.fetch_credit_spread)
+            is_totm, totm_desc = self.is_turn_of_the_month()
+
+            try:
+                skew_snap = fut_skew.result(timeout=4.0)
+            except Exception as e:
+                logger.debug("SKEW fetch timed out or failed: {}", e)
+                skew_snap = SkewSnapshot(130.0, False, True, "NORMAL", "SKEW baseline (130.0)")
+
+            try:
+                cred_ratio, cred_sent = fut_cred.result(timeout=4.0)
+            except Exception as e:
+                logger.debug("Credit spread fetch timed out or failed: {}", e)
+                cred_ratio, cred_sent = 0.65, "NEUTRAL"
 
         boost = 0
         if is_totm:

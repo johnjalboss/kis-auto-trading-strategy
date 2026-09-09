@@ -1140,7 +1140,8 @@ def download(tickers: Union[str, List[str]],
             if symbol.startswith("^"):
                 try:
                     import yfinance as _orig_yf
-                    df_idx = _orig_yf.download(symbol, period=period, interval=interval, progress=False)
+                    _download_func = getattr(_orig_yf, "_original_yf_download", _orig_yf.download)
+                    df_idx = _download_func(symbol, period=period, interval=interval, progress=False)
                     if df_idx is not None and not df_idx.empty:
                         all_data[symbol] = df_idx
                 except Exception:

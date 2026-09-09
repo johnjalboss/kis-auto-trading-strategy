@@ -93,6 +93,7 @@ def _proxy_download(tickers, *args, **kwargs):
         "KRW=X", "TIP", "HYG", "TLT", "XLI", "XLF", 
         "VIXY", "UUP", "LQD", "GLD", "SPY", "QQQ", "IWM", "USO", "BTC-USD", "CL=F",
         "CPER", "FXY", "EEM", "KBE", "^VIX", "^TNX", "^IRX", "^GSPC", "^DJI", "^IXIC",
+        "^SKEW", "IEI", "SHY", "IEF",
         "XLK", "XLV", "XLC", "XLY", "XLP", "XLE", "XLU", "XLRE", "XLB"
     ]
     
@@ -119,10 +120,10 @@ def _proxy_download(tickers, *args, **kwargs):
         if now - timestamp < effective_expiry:
             return cached_df.copy()
             
-    # Get or create lock for this specific cache_key
+    # Get or create lock for this specific cache_key (RLock to prevent recursive deadlocks)
     with _locks_lock:
         if cache_key not in _download_locks:
-            _download_locks[cache_key] = threading.Lock()
+            _download_locks[cache_key] = threading.RLock()
         lock = _download_locks[cache_key]
         
     with lock:
@@ -133,13 +134,13 @@ def _proxy_download(tickers, *args, **kwargs):
             if now - timestamp < effective_expiry:
                 return cached_df.copy()
                 
-        # Check if we should bypass KIS for specific macro/FX tickers
+        # Check if we should bypass KIS for specific macro/FX tickers or indices
         is_bypass = False
         if isinstance(tickers, str):
-            if any(bt in tickers.upper() for bt in BYPASS_TICKERS):
+            if tickers.startswith('^') or '=' in tickers or '/' in tickers or any(bt in tickers.upper() for bt in BYPASS_TICKERS):
                 is_bypass = True
         elif isinstance(tickers, list):
-            if any(any(bt in t.upper() for bt in BYPASS_TICKERS) for t in tickers):
+            if any(t.startswith('^') or '=' in t or '/' in t or any(bt in t.upper() for bt in BYPASS_TICKERS) for t in tickers):
                 is_bypass = True
 
         # 2. Non-bypassed KIS path
