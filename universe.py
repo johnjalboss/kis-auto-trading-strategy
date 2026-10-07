@@ -3842,6 +3842,8 @@ CORE_UNIVERSE = [
     "RKLB", "AXON", "KTOS",
     # Biotech
     "MRNA", "CRSP", "BEAM",
+    # Major Market ETFs & Quality Sector Benchmarks
+    "SPY", "QQQ", "TQQQ", "SOXL", "IWM", "SMH", "XLK", "XLF", "XLE", "GLD", "TLT",
 ]
 
 # 위 Fallback(CORE) 유니버스 종목인지 판별하기 위한 세트
@@ -3873,9 +3875,9 @@ def get_all_symbols() -> list:
         except Exception as e:
             logger.error("Dynamic fetch failed: {}", e)
     
-    # 3) 폴백
-    if not symbols or len(symbols) < 50000000000000:
-        logger.warning("Using core universe fallback ({} symbols)", len(CORE_UNIVERSE))
+    # 3) 폴백 - 시장 지배적 우량주 및 핵심 주도주(CORE_UNIVERSE) 보장
+    if not symbols or len(symbols) < 500:
+        logger.info("Using Tier-1 core universe ({} liquid quality leaders)", len(CORE_UNIVERSE))
         symbols = MASTER_3500_UNIVERSE.copy()
     
     _universe_cache = symbols

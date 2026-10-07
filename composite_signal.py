@@ -249,8 +249,8 @@ class CompositeSignalEngine:
         sentiment = self._calculate_sentiment_score(df, symbol, **kwargs)
         risk = self._calculate_risk_score(df, symbol, **kwargs)
         
-        # Weighted composite with continuous scaling
-        raw_composite = (
+        # Weighted composite
+        composite = (
             macro.score * self.WEIGHTS['macro'] +
             technical.score * self.WEIGHTS['technical'] +
             fundamental.score * self.WEIGHTS['fundamental'] +
@@ -258,26 +258,23 @@ class CompositeSignalEngine:
             sentiment.score * self.WEIGHTS['sentiment'] +
             risk.score * self.WEIGHTS['risk']
         )
+        composite = int(max(-100, min(100, composite)))
         
-        # 📐 Continuous Asymptotic Scaling (100점 포화 방지 및 세부 변별력 확보)
-        # 70점 이상 최상위 구간에서 점진적 tanh 수렴 적용: 70 -> 70, 90 -> 83, 110 -> 91, 130 -> 94
-        if raw_composite > 70.0:
-            compressed = 70.0 + 26.0 * np.tanh((raw_composite - 70.0) / 35.0)
-            composite = int(round(compressed))
-        elif raw_composite < -70.0:
-            compressed = -70.0 + 26.0 * np.tanh((raw_composite + 70.0) / 35.0)
-            composite = int(round(compressed))
-        else:
-            composite = int(round(raw_composite))
-        
-        composite = int(max(-99, min(99, composite)))
-        
-        # Determine action (Aggressive Thresholds)
-        if composite > 50:
+        # 🛡️ [TREND & QUALITY GATE] 하락 추세/역배열 종목의 매크로 무임승차 가짜 매수 차단
+        # 종목 가격이 50일선 아래이거나 테크니컬 점수가 부실한 경우, 매크로가 좋아도 절대 BUY 신호 불허
+        sma50_val = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else float(close.mean())
+        is_downtrend_stock = (current_price < sma50_val * 0.99) or (technical.score <= 0)
+        if is_downtrend_stock and composite > 20:
+            logger.info("🛡️ [TREND_GATE_CAP] {} in downtrend (${:.2f} < SMA50 ${:.2f} or Tech {}<=0). Capping composite {} -> 15 (HOLD)",
+                        symbol, current_price, sma50_val, technical.score, composite)
+            composite = 15
+
+        # Determine action (Institutional Grade Thresholds)
+        if composite >= 60:
             action = ActionType.STRONG_BUY
-        elif composite > 25:
+        elif composite >= 40:
             action = ActionType.BUY
-        elif composite > 10:
+        elif composite >= 20:
             action = ActionType.WEAK_BUY
         elif composite > -15:
             action = ActionType.HOLD
@@ -366,26 +363,6 @@ class CompositeSignalEngine:
         summary = self._generate_summary(action, composite, confidence, 
                                          bullish[:3], bearish[:3], warnings)
         
-        # Calculate relative strength alpha vs SPY
-        rs_alpha = 0.0
-        try:
-            if len(close) >= 20:
-                stock_ret_20d = (float(close.iloc[-1]) / float(close.iloc[-20]) - 1.0) * 100.0
-                spy_df = self._fetch_data("SPY")
-                if spy_df is not None and len(spy_df) >= 20:
-                    spy_ret_20d = (float(spy_df['Close'].iloc[-1]) / float(spy_df['Close'].iloc[-20]) - 1.0) * 100.0
-                    rs_alpha = stock_ret_20d - spy_ret_20d
-        except Exception:
-            pass
-
-        # Calculate momentum slope (Kalman velocity proxy)
-        kalman_vel = 0.0
-        try:
-            if len(close) >= 10:
-                kalman_vel = float((close.iloc[-1] - close.iloc[-5]) / close.iloc[-5] * 100.0)
-        except Exception:
-            pass
-
         return CompositeSignal(
             symbol=symbol,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -403,13 +380,10 @@ class CompositeSignalEngine:
             stop_loss=stop_loss,
             take_profit=take_profit,
             risk_reward=risk_reward,
-            bullish_signals=bullish,
+                    bullish_signals=bullish,
             bearish_signals=bearish,
             warnings=warnings,
-            summary=summary,
-            raw_score=round(float(raw_composite), 2),
-            kalman_velocity=round(float(kalman_vel), 2),
-            rs_alpha=round(float(rs_alpha), 2)
+            summary=summary
         )
     
     def _calculate_macro_score(self, df: pd.DataFrame, symbol: str, **kwargs) -> CategoryScore:

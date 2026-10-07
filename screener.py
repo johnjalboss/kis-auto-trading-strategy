@@ -19,6 +19,7 @@ from enum import Enum
 import kis_data as yf  # KIS API drop-in replacement
 import kis_data
 import pandas as pd
+import numpy as np
 from loguru import logger
 
 from macro import MarketRegime
@@ -94,7 +95,7 @@ def get_defensive_universe() -> List[str]:
                     return res
             except Exception:
                 pass
-    return [s for s in BASE_UNIVERSE if any(k in s for k in ['PFE', 'JNJ', 'PG', 'KO', 'UNH', 'ABBV', 'MRK', 'WMT', 'NEE', 'DUK', 'COST', 'CL', 'BMY', 'LLY', 'T', 'VZ', 'MDT', 'BEN', 'GIS', 'MO'])]
+    return [s for s in BASE_UNIVERSE if any(k in s for k in ['LLY', 'UNH', 'JNJ', 'ABBV', 'MRK', 'WMT', 'COST', 'PG', 'KO', 'PEP', 'NEE', 'DUK', 'CL', 'BMY', 'T', 'VZ', 'GIS', 'MO'])]
 
 
 class DynamicScreener:
@@ -282,12 +283,13 @@ class DynamicScreener:
         except Exception as cs_err:
             logger.debug("CrossSectionalMomentum filter skipped: {}", cs_err)
         if not candidates:
-            # 제외 후 후보 없으면 전체 유니버스에서 제외 목록만 빼고 랜덤 선택
-            import random
-            fallback = [s for s in BASE_UNIVERSE if s not in _exclude]
-            random.shuffle(fallback)
-            candidates = fallback[:30]
-            logger.warning("All candidates excluded — using shuffled fallback ({} stocks)", len(candidates))
+            # 제외 후 후보 없으면 미국 시장 최우량 주도주 우선순위로 결정적 폴백 제공 (잡주 랜덤 셔플 절대 금지)
+            priority_leaders = [
+                "NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "QQQ", "SPY",
+                "AMD", "COST", "NFLX", "PLTR", "CRM", "NOW", "PANW", "LIN", "LLY", "JPM"
+            ]
+            candidates = [s for s in priority_leaders if s not in _exclude]
+            logger.info("Candidates fallback: Using top quality market leaders ({} stocks)", len(candidates))
 
         if not candidates:
             logger.warning("No candidates found in initial screen")
@@ -891,6 +893,19 @@ class DynamicScreener:
                 with _lock:
                     self._ohlcv_cache[sym] = df
 
+                # ── Dead-Money Volatility Filter ──
+                # 변동성이 고갈되어 밴드가 수축된 가짜 스퀴즈(Dead Money) 사전 배제
+                c = float(df['Close'].iloc[-1])
+                if c > 0:
+                    tr = pd.concat([
+                        df['High'] - df['Low'],
+                        (df['High'] - df['Close'].shift(1)).abs(),
+                        (df['Low'] - df['Close'].shift(1)).abs()
+                    ], axis=1).max(axis=1)
+                    natr = (float(tr.tail(14).mean()) / c) * 100.0
+                    if natr < 1.75 or natr > 6.5:
+                        return
+
                 # BB Squeeze 계산
                 sq = calculate_bb_squeeze(
                     df,
@@ -1266,36 +1281,121 @@ class DynamicScreener:
                 return None
             
             # ============================================================
-            # 🔵 LIQUIDITY FILTER — 유동성 낮은 종목 및 페니주 제거
-            # - 주가 $5.0 미만 페니주 제외 (스프레드 비율 과다 및 작전 방지)
-            # - 20일 평균 거래대금(Dollar Volume) $2M 미만 제외 (슬리피지 최소화)
+            # 🔵 LIQUIDITY FILTER — 유동성 낮은 종목 및 페니주 원천 차단
+            # - 주가 $12.0 미만 소형/페니주 배제 (스프레드 비율 과다, 작전주 및 희석 리스크 방지)
+            # - 20일 평균 거래대금(Dollar Volume) $15M 미만 배제 (슬리피지 최소화 및 월가 대형 기관 수급 보장)
             # ============================================================
             last_close = float(hist['Close'].iloc[-1])
             avg_volume_20d = float(hist['Volume'].tail(20).mean())
             avg_dollar_volume_20d = last_close * avg_volume_20d
             
-            if last_close < 5.0:
-                logger.debug("LIQUIDITY_FILTER: {} price ${:.2f} < 5.0 — skipped", symbol, last_close)
+            if last_close < 12.0:
+                logger.debug("LIQUIDITY_FILTER: {} price ${:.2f} < 12.0 — skipped", symbol, last_close)
                 return None
                 
-            if avg_dollar_volume_20d < 2_000_000:
-                logger.debug("LIQUIDITY_FILTER: {} avg dollar vol ${:.0f} < 2M — skipped",
+            # [CAPITAL EFFICIENCY & SCALE-OUT GUARD]
+            # 소액 포트폴리오($2k~$5k)에서 1주 단위 분할 익절(Scale-Out)을 보장하기 위해 주당 $380 초과 초고가주 배제
+            # (1주만 사게 되면 50% 분할 익절이 물리적으로 불가능하므로, 2주 이상 매수 가능한 주가 종목 우선 배정)
+            is_mega_tech = symbol in {"AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "NVDA", "META", "TSLA", "AVGO"}
+            if last_close > 380.0 and not is_mega_tech:
+                logger.debug("PRICE_CAP_FILTER: {} price ${:.2f} > $380 (prevents single-share lockup) — skipped", symbol, last_close)
+                return None
+
+            if avg_dollar_volume_20d < 15_000_000:
+                logger.debug("LIQUIDITY_FILTER: {} avg dollar vol ${:.0f} < 15M — skipped",
                              symbol, avg_dollar_volume_20d)
                 return None
             
             # ============================================================
-            # 📅 EARNINGS FILTER — 실적 발표 3일 이내 종목 제거
+            # ⚡ VOLATILITY SWEET-SPOT FILTER — 데드머니(변동성 고갈) & 과열 잡주 사전 배제
+            # - 스윙 매매의 기대 수익률을 확보하기 위해 NATR(14) 및 HV20이 고갈된 종목(SLAB, KO 등) 배제.
+            # - 시총 대형주(Apple, MSFT 등)는 1.55% 이상으로 통과 보장.
+            # ============================================================
+            try:
+                c_series = hist['Close']
+                tr_series = pd.concat([
+                    hist['High'] - hist['Low'],
+                    (hist['High'] - c_series.shift(1)).abs(),
+                    (hist['Low'] - c_series.shift(1)).abs()
+                ], axis=1).max(axis=1)
+                atr14_val = float(tr_series.tail(14).mean())
+                natr_val = (atr14_val / last_close) * 100.0 if last_close > 0 else 0.0
+
+                log_ret_series = np.log(c_series / c_series.shift(1)).dropna()
+                hv20_val = float(log_ret_series.tail(20).std() * np.sqrt(252) * 100.0) if len(log_ret_series) >= 20 else 25.0
+
+                is_mega_sym = symbol in {"AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "NVDA", "META", "TSLA", "BRK.B", "LLY", "AVGO", "JPM", "V", "SPY", "QQQ", "IWM"}
+                is_inv_sym = symbol in getattr(config, 'INVERSE_ETFS', set())
+
+                min_natr_req = getattr(config, 'VOL_SWEETSPOT_MEGA_MIN_NATR', 1.55) if is_mega_sym else getattr(config, 'VOL_SWEETSPOT_NON_MEGA_MIN_NATR', 1.75)
+                min_hv_req = getattr(config, 'VOL_SWEETSPOT_MEGA_MIN_HV20', 16.5) if is_mega_sym else getattr(config, 'VOL_SWEETSPOT_NON_MEGA_MIN_HV20', 17.5)
+                max_natr_req = getattr(config, 'VOL_SWEETSPOT_INVERSE_MAX_NATR', 12.0) if is_inv_sym else getattr(config, 'VOL_SWEETSPOT_MAX_NATR', 6.5)
+
+                if natr_val < min_natr_req or hv20_val < min_hv_req:
+                    logger.debug("DEAD_MONEY_FILTER: {} NATR {:.2f}% < {:.2f}% or HV20 {:.1f}% < {:.1f}% — skipped",
+                                 symbol, natr_val, min_natr_req, hv20_val, min_hv_req)
+                    return None
+
+                if natr_val > max_natr_req:
+                    logger.debug("EXCESSIVE_VOLATILITY_FILTER: {} NATR {:.2f}% > {:.2f}% — skipped",
+                                 symbol, natr_val, max_natr_req)
+                    return None
+            except Exception as _vol_flt_err:
+                logger.debug("Volatility filter error for {}: {}", symbol, _vol_flt_err)
+            
+            # ============================================================
+            # 📅 EARNINGS SHOCK SHIELD — 실적 발표 D-3일 이내 종목 100% 원천 배제
             # ============================================================
             try:
                 from earnings_calendar import get_earnings_calendar
                 e_info = get_earnings_calendar().check(symbol)
-                if e_info.recommendation == "AVOID":
-                    logger.debug("EARNINGS_FILTER: {} 실적 {}일 후 — 스크리너 제외",
-                                 symbol, e_info.days_until)
+                # D-3일 이내 AVOID 및 CAUTION 종목까지 완벽 차단하여 어닝 쇼크 갭다운 지뢰 원천 방어
+                if e_info.recommendation in ("AVOID", "CAUTION") or (0 <= e_info.days_until <= 3):
+                    logger.info("🚫 [EARNINGS_SHOCK_SHIELD] {} earnings in {} days ({}) — skipped to protect capital",
+                                symbol, e_info.days_until, e_info.earnings_date)
                     return None
             except Exception as e:
                 logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
             
+            # ============================================================
+            # 🏆 INSTITUTIONAL TREND TEMPLATE & 상투잡기/낙폭과대 원천 차단
+            # ============================================================
+            is_inv_sym = symbol in getattr(config, 'INVERSE_ETFS', set())
+            if not is_inv_sym and len(hist) >= 50:
+                c_hist = hist['Close']
+                sma50_val = float(c_hist.tail(50).mean())
+                sma20_val = float(c_hist.tail(20).mean()) if len(hist) >= 20 else sma50_val
+                sma200_val = float(c_hist.tail(200).mean()) if len(hist) >= 200 else None
+                
+                # 1. Price > SMA50 (50일 이평선 아래 역배열 종목 원천 차단 — BBSI/ICLR 같은 하락주 방지)
+                if last_close < sma50_val * 0.995:
+                    logger.debug("TREND_TEMPLATE_FILTER: {} price ${:.2f} < SMA50 ${:.2f} — skipped",
+                                 symbol, last_close, sma50_val)
+                    return None
+                
+                # 2. SMA50 > SMA200 (200일선 데이터 있을 경우 장기 상승 국면 필수)
+                if sma200_val and sma50_val < sma200_val * 0.98:
+                    logger.debug("TREND_TEMPLATE_FILTER: {} SMA50 ${:.2f} < SMA200 ${:.2f} — skipped",
+                                 symbol, sma50_val, sma200_val)
+                    return None
+                
+                # 3. 52주 고점/저점 경계선 (신저가 잡주 및 낙폭과대 칼날 차단)
+                high_52w = float(hist['High'].tail(252).max()) if len(hist) >= 252 else float(hist['High'].max())
+                low_52w = float(hist['Low'].tail(252).min()) if len(hist) >= 252 else float(hist['Low'].min())
+                if low_52w > 0 and last_close < low_52w * 1.20:
+                    logger.debug("TREND_TEMPLATE_FILTER: {} price ${:.2f} < 20% above 52W low — skipped", symbol, last_close)
+                    return None
+                if high_52w > 0 and (high_52w - last_close) / high_52w > 0.22:
+                    logger.debug("TREND_TEMPLATE_FILTER: {} price is > 22% below 52W high (falling knife) — skipped", symbol)
+                    return None
+
+                # 4. 🛡️ [상투잡기 원천 차단] 20일선 대비 과열 이격 종목 배제
+                # 20일 이동평균선보다 4.5% 이상 붕 뜬 폭등주는 이미 상투이므로 스크리너에서 원천 제외
+                if sma20_val > 0 and (last_close - sma20_val) / sma20_val > 0.045:
+                    logger.debug("OVEREXTENSION_TOP_GUARD: {} +{:.1%} above SMA20 (chasing climax) — skipped",
+                                 symbol, ((last_close - sma20_val) / sma20_val) * 100)
+                    return None
+
             # Build info dict from OHLCV data (proxy for yf.Ticker.info)
             avg_volume = float(hist['Volume'].mean())
             current_volume = float(hist['Volume'].iloc[-1])
@@ -1318,10 +1418,10 @@ class DynamicScreener:
             
             details = {}
             
-            # 1. Short Squeeze & Institutional Sponsorship Score (25 pts)
-            # Calculated via smart_money_footprint (13F institutional ownership + short interest continuous tanh model)
-            short_score = self._calc_short_squeeze_score(info, symbol=symbol)
-            details['short_float'] = info.get('shortPercentOfFloat', 0)
+            # 1. Volume & Institutional Accumulation Score (25 pts)
+            # Replaces high short-interest trap with real institutional volume accumulation
+            short_score = self._calc_volume_accumulation_score(hist)
+            details['accumulation_score'] = short_score
             
             # 2. Momentum Score (25 pts)
             momentum_score = self._calc_momentum_score(info, hist)
@@ -1460,8 +1560,11 @@ class DynamicScreener:
                     logger.error("PEAD analyzer failed for {}: {}", symbol, e)
 
             # ============================================================
-            # 🔄 섹터 로테이션 보너스/페널티 (실시간 동적 반영)
-            # 선도 섹터 종목: +15, 하락 섹터 종목: -20
+            # 🔄 [QUANT SECTOR ROTATION & REGIME COUPLING ENGINE]
+            # 시장 국면(Regime)과 실시간 11대 섹터 자금 흐름에 100% 동적 연동:
+            # - 강세장(BULL): 모멘텀 상위(OVERWEIGHT/EARLY_ACCEL) 선도 성장 섹터에 알파 가산점 (+25)
+            # - 약세장(BEAR/PANIC): 고베타 기술주 과열 억제, 피난처 방어주(XLP/XLV/XLU/XLE 등) 상위 섹터에 방어 프리미엄 (+25)
+            # - 시장 소외/자금 유출 섹터(UNDERWEIGHT): 국면 불문 강력 감점 (-25)
             # ============================================================
             sector_bonus = 0
             try:
@@ -1472,12 +1575,42 @@ class DynamicScreener:
                     _rankings = _sr2.analyze()
                     _rec_map = {r.etf: r.recommendation for r in _rankings}
                     _rec = _rec_map.get(_sym_etf2, 'NEUTRAL')
-                    if _rec == 'OVERWEIGHT':
-                        sector_bonus = 15
-                    elif _rec == 'EARLY_ACCELERATION':
-                        sector_bonus = 15  # Early rotation capture bonus!
+                    
+                    # 현재 매크로 시장 국면(Regime) 조회
+                    _curr_regime = getattr(self, '_last_regime', '')
+                    if not _curr_regime:
+                        try:
+                            from hidden_markov_regime import get_current_regime
+                            _curr_regime = get_current_regime()
+                        except Exception:
+                            _curr_regime = "BULL_NORMAL"
+                    
+                    _is_bull = any(b in _curr_regime for b in ["BULL", "ACCEL", "RISK_ON"])
+                    _is_bear = any(b in _curr_regime for b in ["BEAR", "PANIC", "CRASH", "HIGH_VOLATILITY"])
+                    
+                    # 1) 실시간 모멘텀 상위 선도 섹터 (Top 3 or Early Acceleration)
+                    if _rec in ('OVERWEIGHT', 'EARLY_ACCELERATION'):
+                        if _is_bull:
+                            # 강세장: 시장을 견인하는 선도 주도 섹터에 최대 알파 보너스
+                            sector_bonus = 25
+                            logger.info("🚀 [REGIME_BULL_LEADER] {} in leading sector {} (+25 bonus)", symbol, _sym_etf2)
+                        elif _is_bear:
+                            # 약세장: 자금이 몰리는 방어적 피난처(필수소비, 헬스케어, 유틸리티, 에너지)에만 방어 프리미엄
+                            _defensive_etfs = {"XLP", "XLV", "XLU", "XLE", "XLRE"}
+                            if _sym_etf2 in _defensive_etfs:
+                                sector_bonus = 25
+                                logger.info("🛡️ [REGIME_BEAR_DEFENDER] {} in defensive haven {} (+25 bonus)", symbol, _sym_etf2)
+                            else:
+                                sector_bonus = 10
+                        else:
+                            sector_bonus = 15
+                            
+                    # 2) 실시간 자금 유출/모멘텀 하위 섹터 (Bottom 3)
                     elif _rec == 'UNDERWEIGHT':
-                        sector_bonus = -20
+                        sector_bonus = -25
+                        logger.info("📉 [SECTOR_UNDERWEIGHT_PENALTY] {} in lagging sector {} (-25 penalty)", symbol, _sym_etf2)
+                    else:
+                        sector_bonus = 0
             except Exception as e:
                 logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
@@ -1495,47 +1628,61 @@ class DynamicScreener:
             except Exception as tr_err:
                 logger.debug("Failed to calculate Theme Radar bonus for {}: {}", symbol, tr_err)
 
-            # ── [CRITICAL FIX] Dynamic Relative Strength (RS) Bonus/Penalty ──
-            # - Evaluates if the stock is actually outperforming SPY (strong trend leader)
-            # - Overcomes static defensive blocks by naturally favoring leaders in bull markets, 
-            #   and defensive plays ONLY if they are genuinely outperforming in bear/choppy markets.
+            # ── [CRITICAL FIX] Dynamic Relative Strength (RS) Engine vs SPY & QQQ ──
+            # - 시장(SPY 및 QQQ)을 이기지 못하는 소외주/침체주(BEN, DX 등)는 원천 차단!
+            # - Jegadeesh-Titman & William O'Neil 핵심 원칙: 시장 주도주(Market Leaders)만 매수
             rs_bonus = 0
+            is_severe_laggard = False
             try:
-                # Load SPY data from cache
+                # Load SPY and QQQ data from cache
                 spy_df = self._ohlcv_cache.get("SPY")
                 if spy_df is None:
                     spy_df = kis_data.get_daily_ohlcv("SPY", days=135)
                     if spy_df is not None:
                         self._ohlcv_cache["SPY"] = spy_df
+
+                qqq_df = self._ohlcv_cache.get("QQQ")
+                if qqq_df is None:
+                    qqq_df = kis_data.get_daily_ohlcv("QQQ", days=135)
+                    if qqq_df is not None:
+                        self._ohlcv_cache["QQQ"] = qqq_df
+
                 if spy_df is not None and len(spy_df) >= 65 and len(hist) >= 65:
-                    # SPY returns
                     spy_close = spy_df['Close'].values
                     spy_ret_3m = (float(spy_close[-1]) / float(spy_close[-65]) - 1) * 100
                     spy_ret_6m = (float(spy_close[-1]) / float(spy_close[0]) - 1) * 100 if len(spy_close) >= 130 else spy_ret_3m
-                    
-                    # Stock returns
+
                     close = hist['Close'].values
                     curr = float(close[-1])
                     ret_3m = (curr / float(close[-65]) - 1) * 100
                     ret_6m = (curr / float(close[0]) - 1) * 100 if len(close) >= 130 else ret_3m
-                    
-                    # RS Score (3M 60% / 6M 40%)
-                    rs_val = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
-                    
+
+                    rs_spy = (ret_3m - spy_ret_3m) * 0.6 + (ret_6m - spy_ret_6m) * 0.4
+
+                    rs_qqq = rs_spy
+                    if qqq_df is not None and len(qqq_df) >= 65:
+                        qqq_close = qqq_df['Close'].values
+                        qqq_ret_3m = (float(qqq_close[-1]) / float(qqq_close[-65]) - 1) * 100
+                        qqq_ret_6m = (float(qqq_close[-1]) / float(qqq_close[0]) - 1) * 100 if len(qqq_close) >= 130 else qqq_ret_3m
+                        rs_qqq = (ret_3m - qqq_ret_3m) * 0.6 + (ret_6m - qqq_ret_6m) * 0.4
+
+                    rs_val = min(rs_spy, rs_qqq)  # SPY와 QQQ 둘 다 이겨야 진정한 시장 주도주
+
                     if rs_val > 15:
-                        rs_bonus = 20  # Alpha leader (explosive momentum)
-                        logger.info("🔥 [RS_BONUS] {} is leading SPY by {:.1f}%! Applying +20 bonus.", symbol, rs_val)
+                        rs_bonus = 25  # Alpha market leader (폭발적 주도주)
+                        logger.info("🔥 [RS_ALPHA_LEADER] {} outperforms Market by +{:.1f}%! Applying +25 bonus.", symbol, rs_val)
                     elif rs_val > 5:
-                        rs_bonus = 10  # Moderate outperformance
-                        logger.info("📈 [RS_BONUS] {} is outperforming SPY by {:.1f}%! Applying +10 bonus.", symbol, rs_val)
-                    elif rs_val < -10:
-                        rs_bonus = -30  # Stagnant value trap / severe underperformance
-                        logger.info("🚨 [RS_PENALTY] {} is lagging SPY by {:.1f}%! Applying -30 penalty.", symbol, rs_val)
-                    elif rs_val < -3:
-                        rs_bonus = -10  # Weak performer
-                        logger.info("⚠️ [RS_PENALTY] {} is lagging SPY by {:.1f}%! Applying -10 penalty.", symbol, rs_val)
+                        rs_bonus = 15  # Solid leader
+                        logger.info("📈 [RS_BONUS] {} outperforms Market by +{:.1f}%! Applying +15 bonus.", symbol, rs_val)
+                    elif rs_val < -5:
+                        rs_bonus = -40  # 시장(QQQ/SPY) 대비 명백한 역배열/소외주
+                        is_severe_laggard = True
+                        logger.info("🚨 [RS_LAGGARD_VETO] {} lags Market by {:.1f}%! Capping score & vetting out.", symbol, rs_val)
+                    elif rs_val < 0:
+                        rs_bonus = -15
+                        logger.info("⚠️ [RS_PENALTY] {} slightly lags Market by {:.1f}%.", symbol, rs_val)
             except Exception as e:
-                logger.debug("Failed to calculate RS bonus for {}: {}", symbol, e)
+                logger.debug("Failed to calculate RS benchmark for {}: {}", symbol, e)
 
             # ============================================================
             # 📐 5대 필라 정밀 결합 및 점수 연속 정규화 (Continuous Asymptotic Scaling)
@@ -1545,16 +1692,13 @@ class DynamicScreener:
             bonus_sum = (mode_bonus + multi_bonus + news_bonus + insider_bonus +
                          high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + rs_bonus)
 
-            # Raw Combined Score
-            raw_total = float(base_score) + 0.4 * float(bonus_sum)
+            # Raw Combined Score (Base factors 65% weight, bonuses 35% weight)
+            raw_total = float(base_score) * 0.65 + float(bonus_sum) * 0.35
+            total = float(np.clip(raw_total, 0.0, 95.0))
 
-            if raw_total <= 80.0:
-                total = max(0.0, raw_total)
-            else:
-                # 80점 초과 구간: 점수 쏠림(100점 도배) 방지 및 세부 변별력 확보를 위한 tanh 점진 수렴
-                total = 80.0 + 18.0 * np.tanh((raw_total - 80.0) / 25.0)
-
-            total = min(99.0, max(0.0, total))
+            # 시장(SPY/QQQ) 대비 심각한 언더퍼폼 종목은 점수를 30점 이하로 강제 캡 (스크리너 통과 원천 차단)
+            if is_severe_laggard:
+                total = min(total, 30.0)
             
             # Apply absolute News-Shock Blacklist & PEAD Shock Blacklist
             if news_blacklist or pead_blacklist:
@@ -1578,21 +1722,51 @@ class DynamicScreener:
             logger.debug("Score calculation failed for {}: {}", symbol, e)
             return None
     
-    def _calc_short_squeeze_score(self, info: dict, symbol: str = "") -> int:
-        """13F Institutional Sponsorship & Short Squeeze Pressure Score (0-25)
-        Calculated via live SEC 13F institutional ownership and short interest tanh models."""
-        if not symbol:
-            return 0
+    def _calc_volume_accumulation_score(self, hist: pd.DataFrame) -> int:
+        """Volume & Institutional Accumulation Score (0-25 pts)
+        Measures real institutional buying pressure:
+        1. Up-Day vs Down-Day Volume Ratio (15 pts max)
+        2. Wyckoff Low-Volume Pullback Dry-Up (10 pts max)
+        Avoids high short-interest traps (dying/distressed companies)."""
+        if len(hist) < 20:
+            return 10
         try:
             import numpy as np
-            from smart_money_footprint import get_smart_money_footprint
-            sm = get_smart_money_footprint().analyze_ticker(symbol)
-            bonus = float(sm.get("bonus_points", 0.0))
-            # Scale bonus points (~0-8.0 pts) up to full 25 pt scale: S = 25 * tanh(bonus / 5.0)
-            score = float(25.0 * np.tanh(max(0.0, bonus) / 5.0))
-            return int(np.clip(score, 0, 25))
+            recent = hist.tail(20)
+            up_days = recent[recent['Close'] >= recent['Open']]
+            down_days = recent[recent['Close'] < recent['Open']]
+            
+            up_vol = float(up_days['Volume'].sum()) if not up_days.empty else 0.0
+            down_vol = float(down_days['Volume'].sum()) if not down_days.empty else 1.0
+            
+            vol_ratio = up_vol / max(1.0, down_vol)
+            # Center at 1.0 (neutral = 8 pts, 1.6x = 15 pts, 0.6x = 2 pts)
+            acc_pts = float(7.0 * np.tanh((vol_ratio - 1.0) / 0.40)) + 8.0
+            
+            # Pullback volume dry-up bonus: if stock pulled back on low volume, supply is exhausted
+            close = hist['Close'].values
+            volume = hist['Volume'].values
+            dry_up_pts = 0.0
+            if len(close) >= 5 and close[-1] <= close[-2]:
+                avg_vol = float(np.mean(volume[-20:-1])) if len(volume) >= 20 else float(volume[-1])
+                if volume[-1] < avg_vol * 0.70:
+                    dry_up_pts = 8.0
+                elif volume[-1] < avg_vol * 0.85:
+                    dry_up_pts = 4.0
+            else:
+                # If advancing on above-average volume
+                avg_vol = float(np.mean(volume[-20:-1])) if len(volume) >= 20 else float(volume[-1])
+                if volume[-1] > avg_vol * 1.2:
+                    dry_up_pts = 6.0
+                    
+            total = acc_pts + dry_up_pts
+            return int(np.clip(total, 0, 25))
         except Exception:
-            return 0
+            return 10
+    
+    def _calc_short_squeeze_score(self, info: dict, symbol: str = "") -> int:
+        """Deprecated compatibility shim: forwards to volume accumulation score"""
+        return 0
     
     def _calc_momentum_score(self, info: dict, hist: pd.DataFrame) -> int:
         """Continuous Swing Momentum Score (0-25)

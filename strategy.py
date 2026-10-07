@@ -232,6 +232,7 @@ class StrategyEngine:
     def __init__(self):
         self._positions: Dict[str, Position] = {}
         self._data_cache: Dict[str, pd.DataFrame] = {}
+        self._data_fail_count: Dict[str, int] = {}  # [FIX] Track consecutive data fetch failures per symbol
         self._day_type_cache: str = "TRENDING"       #   
         self._day_type_date = None                   #     
         self._dynamic_sector_cache: Dict[str, str] = {}
@@ -365,20 +366,34 @@ class StrategyEngine:
             if data is None or len(data) < 30:
                 logger.warning("Insufficient data for {}: {} bars (need 30+)",
                               symbol, len(data) if data is not None else 0)
+                # [FIX] Track consecutive failures; fall back to cache after 5 failures
+                self._data_fail_count[symbol] = self._data_fail_count.get(symbol, 0) + 1
+                fail_cnt = self._data_fail_count[symbol]
+                if fail_cnt >= 5 and symbol in self._data_cache:
+                    logger.warning("[DATA_FALLBACK] {} consecutive data failures for {}. Using cached data to continue exit checks.",
+                                   fail_cnt, symbol)
+                    return self._data_cache[symbol]
                 return None
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             self._data_cache[symbol] = data
+            self._data_fail_count[symbol] = 0  # Reset on success
             logger.debug("Fetched {} bars for {}", len(data), symbol)
             return data
         except Exception as e:
             logger.error("Data fetch error for {}: {}", symbol, e)
+            # [FIX] Count exceptions too
+            self._data_fail_count[symbol] = self._data_fail_count.get(symbol, 0) + 1
+            if self._data_fail_count.get(symbol, 0) >= 5 and symbol in self._data_cache:
+                logger.warning("[DATA_FALLBACK] Using cached data for {} after exception.", symbol)
+                return self._data_cache[symbol]
             try:
                 from health_monitor import get_health_monitor
                 get_health_monitor().record_error(f"Data fetch error: {symbol}")
             except Exception as err:
                 logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
             return None
+
     
     # ==============================================
     # Entry Logic
@@ -522,6 +537,19 @@ class StrategyEngine:
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Sector Guard fallback triggered: {}", err)
 
+        # 5d. Macro & Geopolitical Sector Alignment Guard (거시 악재/유가급등 국면 역행 섹터 진입 원천 차단)
+        # 유가 급등($105) 및 지정학 위기, 금리 긴축 등 매크로 불안 시기에는
+        # 자금이 이탈하는 Lagging 섹터(경기소비재, 소외 제조 등)의 진입을 엄격히 차단하고 
+        # 자금이 쏠리는 Leading 주도 섹터(에너지, 방산, 유틸리티, 가치주)로 포트폴리오를 정렬.
+        try:
+            lagging_secs = getattr(self, '_lagging_sectors', [])
+            sym_sector = self._get_symbol_sector(symbol)
+            if lagging_secs and sym_sector and sym_sector in lagging_secs:
+                return EntrySignal("HOLD", 0,
+                    f"SECTOR_REGIME_GUARD: '{sym_sector}' is a lagging sector under current macro headwinds", 0)
+        except Exception as _sec_err:
+            logger.debug("Sector regime guard check skipped: {}", _sec_err)
+
         # 5c. Statistical Return De-Correlation Guard (실제 일일 수익률 피어슨 상관계수 rho >= 0.75 검증)
         # 텍스트 테마 분류와 무관하게, 실제 주가 움직임이 75% 이상 일치하는 종목이 이미 2개 이상이면 3번째 진입 차단
         try:
@@ -550,6 +578,42 @@ class StrategyEngine:
 
         current_price = float(df_daily['Close'].iloc[-1])
         
+        # 6b. Quant Volatility Sweet-Spot Guard (Dead-Money & Wild Penny Pump Protection)
+        # 스윙 매매는 2~7일 내 가격 스윙을 취하는 모델이므로, 일일 변동성(NATR)과 20일 역사적 변동성(HV20)이
+        # 고갈된 종목(예: SLAB, KO 등)은 자금이 묶여 기회비용을 날리는 Dead Money가 되므로 사전 원천 차단.
+        # 반면, 대형주(Apple, MSFT, Amazon 등)는 약 2.0% 변동폭을 안정적으로 유지하므로 안전하게 통과.
+        try:
+            _c_hist = df_daily['Close']
+            _tr_series = pd.concat([
+                df_daily['High'] - df_daily['Low'],
+                (df_daily['High'] - _c_hist.shift(1)).abs(),
+                (df_daily['Low'] - _c_hist.shift(1)).abs()
+            ], axis=1).max(axis=1)
+            _atr14 = float(_tr_series.tail(14).mean())
+            _natr = (_atr14 / current_price) * 100.0 if current_price > 0 else 0.0
+
+            _log_ret = np.log(_c_hist / _c_hist.shift(1)).dropna()
+            _hv20 = float(_log_ret.tail(20).std() * np.sqrt(252) * 100.0) if len(_log_ret) >= 20 else 25.0
+
+            _mega_caps = {"AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "NVDA", "META", "TSLA", "BRK.B", "LLY", "AVGO", "JPM", "V", "SPY", "QQQ", "IWM"}
+            _is_mega = symbol in _mega_caps
+            _is_inv = symbol in getattr(config, 'INVERSE_ETFS', set())
+
+            _min_natr = getattr(config, 'VOL_SWEETSPOT_MEGA_MIN_NATR', 1.55) if _is_mega else getattr(config, 'VOL_SWEETSPOT_NON_MEGA_MIN_NATR', 1.75)
+            _min_hv = getattr(config, 'VOL_SWEETSPOT_MEGA_MIN_HV20', 16.5) if _is_mega else getattr(config, 'VOL_SWEETSPOT_NON_MEGA_MIN_HV20', 17.5)
+            _max_natr = getattr(config, 'VOL_SWEETSPOT_INVERSE_MAX_NATR', 12.0) if _is_inv else getattr(config, 'VOL_SWEETSPOT_MAX_NATR', 6.5)
+
+            if _natr < _min_natr or _hv20 < _min_hv:
+                logger.info("🚫 [LOW_VOLATILITY_DEAD_MONEY_GUARD] {} rejected: NATR={:.2f}% (min {:.2f}%), HV20={:.1f}% (min {:.1f}%)",
+                            symbol, _natr, _min_natr, _hv20, _min_hv)
+                return EntrySignal("HOLD", 0, f"LOW_VOLATILITY_DEAD_MONEY_GUARD: NATR {_natr:.2f}% < {_min_natr:.2f}% or HV20 {_hv20:.1f}% < {_min_hv:.1f}%", current_price)
+
+            if _natr > _max_natr:
+                logger.info("🚫 [EXCESSIVE_VOLATILITY_GUARD] {} rejected: NATR={:.2f}% > {:.2f}% (extreme whipsaw risk)",
+                            symbol, _natr, _max_natr)
+                return EntrySignal("HOLD", 0, f"EXCESSIVE_VOLATILITY_GUARD: NATR {_natr:.2f}% > {_max_natr:.2f}%", current_price)
+        except Exception as _vol_err:
+            logger.warning("⚠️ [strategy.py] Volatility guard check error for {}: {}", symbol, _vol_err)
         # 7. Intraday Morning Volatility Guards (Bull Trap / Fade Guards)
         phase = get_market_phase()
         if phase == MarketPhase.OPENING:
@@ -669,11 +733,80 @@ class StrategyEngine:
         sma20 = float(df_daily['Close'].rolling(20).mean().iloc[-1])
         sma50 = float(df_daily['Close'].rolling(50).mean().iloc[-1])
         sma200_series = df_daily['Close'].rolling(200).mean()
-        sma200 = float(sma200_series.iloc[-1]) if len(sma200_series.dropna()) > 0 else sma50 * 0.9
-        structural_uptrend = sma20 > sma50
+        sma200 = float(sma200_series.dropna().iloc[-1]) if len(sma200_series.dropna()) > 0 else sma50 * 0.9
 
         _52w_high = float(df_daily['High'].tail(252).max()) if len(df_daily) >= 252 else float(df_daily['High'].max())
         pct_from_high = (current_price - _52w_high) / _52w_high
+
+        # ── 0. INSTITUTIONAL MINERVINI TREND TEMPLATE & ANTI-CHASING GATE ────────
+        is_inverse = symbol in getattr(config, 'INVERSE_ETFS', set())
+        if not is_inverse:
+            # Rule 1 & 2: PTJ 200-day SMA & Stage 2 Confirmation
+            if len(df_daily) >= 150 and len(sma200_series.dropna()) >= 10:
+                sma200_val = float(sma200_series.dropna().iloc[-1])
+                # Price MUST be above SMA200 (Never buy a stock in a primary downtrend)
+                if current_price < sma200_val:
+                    logger.info("🚫 [MINERVINI_TREND_TEMPLATE] {} rejected: Price ${:.2f} < SMA200 ${:.2f} (Downtrend)",
+                                symbol, current_price, sma200_val)
+                    return EntrySignal("HOLD", 0, f"MINERVINI_TREND_TEMPLATE: Price ${current_price:.2f} < SMA200 ${sma200_val:.2f} (Downtrend)", current_price)
+                
+                # SMA50 MUST be above SMA200 (Stage 2 Uptrend confirmed)
+                if sma50 < sma200_val * 0.98:
+                    logger.info("🚫 [MINERVINI_TREND_TEMPLATE] {} rejected: SMA50 ${:.2f} < SMA200 ${:.2f} (Non-Stage 2)",
+                                symbol, sma50, sma200_val)
+                    return EntrySignal("HOLD", 0, f"MINERVINI_TREND_TEMPLATE: SMA50 ${sma50:.2f} < SMA200 ${sma200_val:.2f} (Non-Stage 2)", current_price)
+
+            # Rule 2.5: Price MUST be above SMA50 (Never buy stocks in intermediate downtrend!)
+            if current_price < sma50 * 0.995:
+                logger.info("🚫 [MINERVINI_TREND_TEMPLATE] {} rejected: Price ${:.2f} < SMA50 ${:.2f} (Below 50MA)",
+                            symbol, current_price, sma50)
+                return EntrySignal("HOLD", 0, f"MINERVINI_TREND_TEMPLATE: Price ${current_price:.2f} < SMA50 ${sma50:.2f} (Below 50MA)", current_price)
+
+            # Rule 3: Must be at least 20% above 52-week low (Eliminates bottom-fishing / falling knives)
+            _52w_low = float(df_daily['Low'].tail(252).min()) if len(df_daily) >= 252 else float(df_daily['Low'].min())
+            if _52w_low > 0 and current_price < _52w_low * 1.20:
+                logger.info("🚫 [MINERVINI_TREND_TEMPLATE] {} rejected: Price ${:.2f} < 20% above 52W Low ${:.2f}",
+                            symbol, current_price, _52w_low)
+                return EntrySignal("HOLD", 0, f"MINERVINI_TREND_TEMPLATE: Price ${current_price:.2f} < 20% above 52W Low ${_52w_low:.2f}", current_price)
+
+            # Rule 4: Must be within 22% of 52-week high (Market leaders only)
+            if pct_from_high < -0.22:
+                logger.info("🚫 [MINERVINI_TREND_TEMPLATE] {} rejected: Price is {:.1%} below 52W High", symbol, pct_from_high)
+                return EntrySignal("HOLD", 0, f"MINERVINI_TREND_TEMPLATE: Price is {pct_from_high:.1%} below 52W High (max -22%)", current_price)
+
+            # Rule 5: 🛡️ [상투잡기 원천 차단] ANTI-CHASING EXTENSION CEILING
+            dist_sma20 = (current_price - sma20) / sma20 if sma20 > 0 else 0.0
+            dist_sma50 = (current_price - sma50) / sma50 if sma50 > 0 else 0.0
+            if dist_sma20 > 0.035:
+                logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: Price +{:.1%} above 20MA (max +3.5% to prevent buying the top)", symbol, dist_sma20 * 100)
+                return EntrySignal("HOLD", 0, f"OVEREXTENDED_CHASING_GUARD: Price +{dist_sma20:.1%} above 20MA (max +3.5%)", current_price)
+
+            if dist_sma50 > 0.110:
+                logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: Price +{:.1%} above 50MA (max +11.0%)", symbol, dist_sma50 * 100)
+                return EntrySignal("HOLD", 0, f"OVEREXTENDED_CHASING_GUARD: Price +{dist_sma50:.1%} above 50MA (max +11.0%)", current_price)
+
+            # Rule 6: RSI Exhaustion Guard
+            if indicators and indicators.rsi > 70.0:
+                logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: RSI {:.1f} > 70.0 (Overbought)", symbol, indicators.rsi)
+                return EntrySignal("HOLD", 0, f"OVEREXTENDED_CHASING_GUARD: RSI {indicators.rsi:.1f} > 70.0 (Overbought)", current_price)
+
+            # Rule 7: 🏆 [MARKET LEADER RELATIVE STRENGTH GATE]
+            # 지수(SPY/QQQ) 대비 심각하게 소외된 역배열/침체주(BEN, DX 등)의 매수를 100% 원천 차단
+            try:
+                if len(df_daily) >= 40:
+                    _spy_bench = kis_data.get_daily_ohlcv("SPY", days=50)
+                    if _spy_bench is not None and len(_spy_bench) >= 30:
+                        _spy_ret20 = (float(_spy_bench['Close'].iloc[-1]) / float(_spy_bench['Close'].iloc[-21]) - 1.0) * 100
+                        _sym_ret20 = (float(df_daily['Close'].iloc[-1]) / float(df_daily['Close'].iloc[-21]) - 1.0) * 100
+                        _rs_20 = _sym_ret20 - _spy_ret20
+                        if _rs_20 < -4.0:
+                            logger.info("🚫 [MARKET_LEADER_RS_GATE] {} rejected: 20D Return ({:+.1f}%) lags SPY ({:+.1f}%) by {:.1f}% (Non-leader)",
+                                        symbol, _sym_ret20, _spy_ret20, _rs_20)
+                            return EntrySignal("HOLD", 0, f"MARKET_LEADER_RS_GATE: Lags SPY by {_rs_20:.1f}% over 20 days", current_price)
+            except Exception as _rs_gate_err:
+                logger.debug("Market leader RS gate evaluation skipped for {}: {}", symbol, _rs_gate_err)
+
+        structural_uptrend = (sma20 > sma50) and (current_price >= sma50 * 0.99) and (current_price >= sma200 * 0.99)
 
         # ── 1. Opening Range Breakout (ORB) & Gap-Fade Bull Trap Guard ───────────────
         try:
@@ -942,8 +1075,8 @@ class StrategyEngine:
         logger.info("DYNAMIC REGIME THRESHOLD: Calculated effective threshold for {} = {} (Base: {}, Adjustment: {})",
                     symbol, min_required, base_required, regime_desc)
 
-        # Enforce technical filter checks for Setup A (Setup B bypasses some filters due to flow momentum)
-        if not is_quant_accumulation and not filter_res['passed']:
+        # Enforce strict technical filter checks: NO BACKDOORS. All stocks must pass.
+        if not filter_res['passed']:
             return EntrySignal("HOLD", confidence, f"Failed entry filters: {', '.join(filter_res['failed'])}", current_price)
 
         # Volume verification tag
@@ -993,12 +1126,12 @@ class StrategyEngine:
 
         if current_regime in _bear_regimes:
             if not self.is_defensive_stock(symbol):
-                if confidence < 70:
-                    return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 70)", current_price)
+                if confidence < 75:
+                    return EntrySignal("HOLD", confidence, f"BEAR_REGIME_BLOCK: {current_regime} (Score {confidence} < 75)", current_price)
                 else:
-                    setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 70)"
+                    setup_reason += f" | BEAR_BYPASS (Score {confidence} >= 75)"
 
-        # 5. Market Breadth Guard with High-Score (>= 70) Bypass
+        # 5. Market Breadth Guard (SPY below SMA20 requires genuine high-conviction leader >= 80)
         try:
             _spy_df = kis_data.get_daily_ohlcv("SPY", days=25)
             if _spy_df is not None and len(_spy_df) >= 20:
@@ -1008,11 +1141,11 @@ class StrategyEngine:
                 _spy_sma20 = float(_spy_close.rolling(20).mean().iloc[-1])
                 _spy_current = float(_spy_close.iloc[-1])
                 if _spy_current < _spy_sma20 * 0.995:
-                    if not self.is_defensive_stock(symbol):
-                        if confidence < 70:
-                            return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 70)", current_price)
+                    if not self.is_defensive_stock(symbol) and not is_inverse:
+                        if confidence < 80:
+                            return EntrySignal("HOLD", confidence, f"BREADTH_GUARD: SPY (${_spy_current:.1f}) below SMA20 (${_spy_sma20:.1f}) (Score {confidence} < 80)", current_price)
                         else:
-                            setup_reason += f" | BREADTH_BYPASS (Score {confidence} >= 70)"
+                            setup_reason += f" | BREADTH_BYPASS (Score {confidence} >= 80)"
         except Exception as e:
             logger.debug("Breadth guard check failed: {}", e)
 
@@ -1056,6 +1189,11 @@ class StrategyEngine:
         except Exception:
             pass
 
+        # 🛡️ Kalman Velocity Guard: Decelerating or falling momentum must NEVER be bought!
+        if k_vel < 0.0 and not is_inverse:
+            logger.info("🚫 [KALMAN_GUARD] {} rejected: Negative Kalman Velocity ({:.4f} < 0.0, price decelerating)", symbol, k_vel)
+            return EntrySignal("HOLD", 0, f"KALMAN_DECELERATION_GUARD: Velocity ({k_vel:.4f}) < 0", current_price)
+
         rs_a = 0.0
         try:
             if _spy_df is not None and len(_spy_df) >= 2 and len(df_daily) >= 2:
@@ -1093,13 +1231,14 @@ class StrategyEngine:
         if not is_inverse and ind.adx < cfg.min_adx:
             failed.append(f"ADX:{ind.adx:.0f}<{cfg.min_adx}")
         
-        # RSI - Extreme Climax Guard (Allow momentum up to 80, block climax > 80)
-        max_rsi_allowed = float(getattr(config, 'MAX_RSI_ENTRY', 78))
-        if not is_inverse and (ind.rsi < 28 or ind.rsi > max_rsi_allowed):
+        # 🛡️ [상투잡기 원천 차단] RSI 진입 구간 제한 (35 <= RSI <= 66)
+        # 35 미만: 떨어지는 칼날 배제 / 66 초과: 꼭대기 추격 매수 배제
+        max_rsi_allowed = float(getattr(config, 'MAX_RSI_ENTRY', 66.0))
+        if not is_inverse and (ind.rsi < 35 or ind.rsi > max_rsi_allowed):
             failed.append(f"RSI:{ind.rsi:.0f}")
         
-        # Bollinger - Climax Overextension Guard (Allow breakout up to 1.10, block runaway spike > 1.12)
-        if not is_inverse and ind.bollinger.percent_b > 1.12:
+        # Bollinger - Climax Overextension Guard (Allow up to 0.95, block runaway spike > 0.95)
+        if not is_inverse and ind.bollinger.percent_b > 0.95:
             failed.append(f"BB%:{ind.bollinger.percent_b:.2f}")
         
         # OBV Volume Trend - Require non-down volume trend for non-inverse entries
@@ -1159,7 +1298,14 @@ class StrategyEngine:
         
         df = self.fetch_data(symbol)
         if df is None:
-            return ExitSignal("HOLD", "No data", 0)
+            # [FIX] Even without full data, enforce hard stop loss using realtime_price
+            if realtime_price and realtime_price > 0 and pos.stop_price > 0:
+                if realtime_price <= pos.stop_price:
+                    logger.warning("[EMERGENCY_STOP_NO_DATA] {} stop triggered: price={:.2f} <= stop={:.2f}",
+                                   symbol, realtime_price, pos.stop_price)
+                    return ExitSignal("SELL", f"HARD_STOP_NO_DATA: {realtime_price:.2f}<={pos.stop_price:.2f}", realtime_price)
+            return ExitSignal("HOLD", "No data - emergency stop checked", 0)
+
         
         # [Quant-Shield] Gemini AI Catastrophic Black-Swan News Emergency Exit
         try:
@@ -1327,74 +1473,39 @@ class StrategyEngine:
         # =================================================================
         try:
             from datetime import timedelta
-            import pytz as _pytz_hold
-            _et_tz = _pytz_hold.timezone('US/Eastern')
-            _market_open_time = time(9, 30)
-            _market_close_time = time(16, 0)
+            
+            _now_sys = datetime.now()
+            _entry_sys = pos.entry_time
+            
+            # If entry_time is string, parse it
+            if isinstance(_entry_sys, str):
+                try:
+                    _entry_sys = datetime.fromisoformat(_entry_sys)
+                except Exception:
+                    pass
 
-            _now_raw = datetime.now()
-            _entry_raw = pos.entry_time
-
-            # timezone-aware conversion to Eastern Time (ET) naive datetime objects
-            if _now_raw.tzinfo is None:
-                _now_et = datetime.now(_pytz_hold.utc).astimezone(_et_tz)
+            # Calculate raw elapsed time safely without timezone distortion
+            if hasattr(_entry_sys, 'tzinfo') and _entry_sys.tzinfo is not None:
+                _entry_clean = _entry_sys.replace(tzinfo=None)
             else:
-                _now_et = _now_raw.astimezone(_et_tz)
+                _entry_clean = _entry_sys
                 
-            if _entry_raw.tzinfo is None:
-                _entry_et = _entry_raw.replace(tzinfo=_pytz_hold.utc).astimezone(_et_tz)
+            if hasattr(_now_sys, 'tzinfo') and _now_sys.tzinfo is not None:
+                _now_clean = _now_sys.replace(tzinfo=None)
             else:
-                _entry_et = _entry_raw.astimezone(_et_tz)
-                
-            _now_raw = _now_et.replace(tzinfo=None)
-            _entry_raw = _entry_et.replace(tzinfo=None)
+                _now_clean = _now_sys
 
-            is_same_day = (_now_raw.date() == _entry_raw.date())
-
-            if is_same_day:
-                #       (shakeout )
-                _hold_hours = (_now_raw - _entry_raw).total_seconds() / 3600
-                _hold_minutes = _hold_hours * 60
-            else:
-                # ---      ---
-                _hold_hours = 0.0
-
-                # 1)  :   (16:00) 
-                _entry_date = _entry_raw.date()
-                if _entry_date.weekday() < 5:  # 
-                    _entry_time_of_day = _entry_raw.time()
-                    _start_t = max(_entry_time_of_day, _market_open_time)
-                    _end_t = _market_close_time
-                    if _start_t < _end_t:
-                        from datetime import date as _date_cls
-                        _dummy = _date_cls(2000, 1, 1)
-                        _dt_s = datetime.combine(_dummy, _start_t)
-                        _dt_e = datetime.combine(_dummy, _end_t)
-                        _hold_hours += (_dt_e - _dt_s).total_seconds() / 3600.0
-
-                # 2)   : (+1) ~ (-1)  6.5h
-                _curr_date = _entry_raw.date() + timedelta(days=1)
-                _today_date = _now_raw.date()
-                while _curr_date < _today_date:
-                    if _curr_date.weekday() < 5:
-                        _hold_hours += 6.5
-                    _curr_date += timedelta(days=1)
-
-                # 3)  (): (09:30)  
-                if _today_date.weekday() < 5:  # 
-                    _now_time_of_day = _now_raw.time()
-                    if _now_time_of_day > _market_open_time:
-                        from datetime import date as _date_cls2
-                        _dummy2 = _date_cls2(2000, 1, 1)
-                        _dt_o = datetime.combine(_dummy2, _market_open_time)
-                        _dt_n = datetime.combine(_dummy2, min(_now_time_of_day, _market_close_time))
-                        _hold_hours += (_dt_n - _dt_o).total_seconds() / 3600.0
-
-                _hold_minutes = _hold_hours * 60
+            _elapsed_seconds = max(0.0, (_now_clean - _entry_clean).total_seconds())
+            _hold_minutes = _elapsed_seconds / 60.0
+            
+            # Approximate regular trading hours (6.5 hours per day)
+            _elapsed_days = _elapsed_seconds / 86400.0
+            _hold_hours = max(0.1, _elapsed_days * 6.5)
+            is_same_day = (_elapsed_seconds < 86400.0 and _now_clean.date() == _entry_clean.date())
         except Exception as e:
             logger.error("Failed to calculate real hold hours: {}", e)
-            _hold_hours = 999
-            _hold_minutes = 9990
+            _hold_hours = 999.0
+            _hold_minutes = 9990.0
             is_same_day = False
 
         # =================================================================
@@ -1593,6 +1704,13 @@ class StrategyEngine:
                             atr: float, cfg: PhaseConfig) -> Optional[ExitSignal]:
         """Trailing stop based on high since entry with dynamic tightening"""
         if pos.high_since_entry <= pos.entry_price:
+            return None
+
+        pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
+
+        # [SWING BREATHING ROOM] Do NOT choke position with trailing stop until it achieves at least +3.0% profit (or half sold)
+        # Normal pullbacks below +3.0% are safely protected by pos.stop_price (-3.8% standard stop loss).
+        if not pos.half_sold and pnl_pct_high < 0.030:
             return None
             
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
@@ -1824,7 +1942,7 @@ class StrategyEngine:
             high_since_entry=entry_price,
             low_since_entry=entry_price,
             stop_price=stop_price,
-            trailing_stop=entry_price,
+            trailing_stop=0.0,
             phase_at_entry=get_market_phase()
         )
         try:
@@ -1948,7 +2066,7 @@ class StrategyEngine:
                     high_since_entry=true_high,
                     low_since_entry=true_low if 'true_low' in locals() else pos.avg_price,
                     stop_price=stop_price,
-                    trailing_stop=pos.avg_price,
+                    trailing_stop=0.0,
                     phase_at_entry=get_market_phase()
                 )
                 synced += 1

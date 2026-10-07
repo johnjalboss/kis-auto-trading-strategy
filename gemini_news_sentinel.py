@@ -85,7 +85,9 @@ class GeminiNewsSentinel:
 
             # 2. Local Fast Lexicon Scan for Catastrophic Keyword Emergency (Zero API cost & 0ms speed!)
             lower_text = combined_text.lower()
-            catastrophic_keywords = ["bankruptcy", "sec investigation", "fraud", "class action", "ceo resigned", "fda rejection", "subpoena"]
+            # CRITICAL FIX: "class action" is common lawyer spam for US mega-caps (AAPL, MSFT, etc.). Removed!
+            # Only trigger emergency liquidation on TRUE catastrophic risks: bankruptcy, accounting fraud, delisting.
+            catastrophic_keywords = ["filed for bankruptcy", "chapter 11", "accounting fraud", "sec criminal", "delisting notice"]
             
             for kw in catastrophic_keywords:
                 if kw in lower_text:
