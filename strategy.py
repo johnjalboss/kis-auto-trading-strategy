@@ -445,15 +445,23 @@ class StrategyEngine:
 
         # BEAR_REGIME_BLOCK moved to the end of check_entry to support High-Score Bypass
 
-        # 2. Earnings Risk Guard
+        # 2. Earnings Risk Guard (Dual Shield: earnings_calendar + pre_earnings_shield)
         try:
             from earnings_calendar import get_earnings_calendar
             ec = get_earnings_calendar()
             e_info = ec.check(symbol)
-            if e_info.recommendation == "AVOID":
+            if e_info.recommendation in ("AVOID", "CAUTION") or (0 <= e_info.days_until <= 3):
                 return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: Avoid entry within {e_info.days_until} days of earnings", 0)
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
+
+        try:
+            from pre_earnings_shield import PreEarningsShield
+            pe = PreEarningsShield().analyze(symbol)
+            if pe.get('is_pre_earnings_danger', False) or (0 <= pe.get('days_to_earnings', 999) <= 3):
+                return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: PreEarningsShield blocked entry (Earnings in {pe.get('days_to_earnings')}d)", 0)
+        except Exception as _pe_guard_err:
+            logger.debug("PreEarningsShield check in check_entry failed for {}: {}", symbol, _pe_guard_err)
 
         # 3. High Impact Economic Events Guard
         try:
@@ -1720,6 +1728,24 @@ class StrategyEngine:
             effective_stop = max(effective_stop, pos.entry_price * 1.005)
         
         if price <= effective_stop:
+            # [OPENING NOISE SHIELD] 09:30 ~ 09:40 ET 시장 개장 직후 10분간 호가 공백으로 인한 일시적 언더슈팅 방어
+            # 단, -8.0% 이상의 심각한 폭락이나 긴급 재난은 즉시 손절
+            is_opening_bell = False
+            try:
+                et = pytz.timezone('US/Eastern')
+                now_et = datetime.now(et)
+                if time(9, 30) <= now_et.time() < time(9, 40):
+                    is_opening_bell = True
+            except Exception:
+                pass
+
+            if is_opening_bell and pnl_pct > -0.08:
+                logger.warning(
+                    "🛡️ [OPENING_NOISE_SHIELD] {} breached stop ({:+.1%}), holding through opening bell noise (09:30-09:40 ET) to avoid MM shakeout",
+                    pos.symbol, pnl_pct
+                )
+                return None
+
             reason = f"STOP: ${price:.2f} <= ${effective_stop:.2f} (ATR={pos.atr_at_entry:.2f})"
             if effective_stop == hard_stop_price:
                 reason = f"HARD_STOP: P&L {pnl_pct:+.1%} <= -{hard_stop_pct:.1%}"

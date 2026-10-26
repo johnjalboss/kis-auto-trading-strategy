@@ -443,6 +443,10 @@ class BotOrchestrator:
                     adjusted_penalty = min(15, adjusted_penalty)
                     logger.info("[MACRO_NEWS] Bull regime detected. Capping news penalty to 15 to prevent false RISK_OFF.")
                     
+                self.state.macro_data['news_events'] = news_result.get("events_identified", [])
+                self.state.macro_data['news_reason'] = news_result.get("reason", "")
+                self.state.macro_data['news_risk_level'] = news_result.get("risk_level", "NORMAL")
+
                 logger.info("  -> macro_news_analyzer.py: Level={}, Penalty={}(raw={}), Identified={}",
                             news_result.get("risk_level"), adjusted_penalty, raw_penalty, news_result.get("events_identified"))
                 penalty += adjusted_penalty
@@ -470,13 +474,27 @@ class BotOrchestrator:
                     logger.warning("[MACRO_SHIELD] Failed to record macro decision: {}", db_err)
 
                 try:
+                    events_list = self.state.macro_data.get('news_events', [])
+                    events_str = "\n".join([f"  • {e}" for e in events_list[:3]]) if events_list else "  • 글로벌 지정학적 긴장 및 거시 지표 충격"
+                    news_reason = self.state.macro_data.get('news_reason', '지정학/에너지 위기로 인한 단기 변동성 확대')
+                    news_lvl = self.state.macro_data.get('news_risk_level', 'EXTREME')
+
                     from watchdog import send_tg
                     send_tg(
-                        f"🚨 <b>매크로 리스크 경보 작동 (RISK_OFF)</b>\n"
+                        f"🚨 <b>매크로 리스크 긴급 경보 (RISK_OFF 발동)</b>\n"
                         f"━━━━━━━━━━━━━━━━━━\n"
-                        f"• 뉴스 감지 페널티: {penalty}점\n"
-                        f"• 결과: 비중 제한 강제 축소 ({self.state.max_exposure_pct:.0%})\n"
-                        f"• 감시 레짐: {self.state.current_regime}"
+                        f"<b>[ 🌐 긴급 거시 악재 분석 ]</b>\n"
+                        f"• 종합 위험 페널티: <b>{penalty}점</b> (위험 등급: {news_lvl})\n"
+                        f"• 감시 시장 레짐: <b>{self.state.current_regime}</b>\n"
+                        f"• 주요 감지 사건:\n{events_str}\n"
+                        f"• AI 상세 브리핑: <i>{news_reason}</i>\n\n"
+                        f"<b>[ 🛡️ 퀀트 포트폴리오 방어 조치 ]</b>\n"
+                        f"• 신규 주식 비중 한도: <b>{self.state.max_exposure_pct:.0%}</b>로 긴급 방어 축소\n"
+                        f"• 신규 매수 통제: 고위험 뇌동 추격 매수 전면 동결 (현금 수성)\n"
+                        f"• 보유 종목 관리: 스탑로스(-4.5%) 및 이익 보존선 밀착 감시\n\n"
+                        f"<b>[ 💡 대표님을 위한 실전 투자 수칙 ]</b>\n"
+                        f"• 거시적 악재가 쏟아지는 국면에서는 무리한 진입보다 <b>'자본 보존(현금)'</b>이 최선의 알파입니다.\n"
+                        f"• 시장이 악재를 소화하고 지수가 안정을 되찾으면 경보가 자동 해제되며 주도주 매매를 재개합니다."
                     )
                 except Exception as err:
                     logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
@@ -486,10 +504,16 @@ class BotOrchestrator:
                 try:
                     from watchdog import send_tg
                     send_tg(
-                        f"✅ <b>매크로 리스크 경보 해제 (NORMAL)</b>\n"
+                        f"✅ <b>매크로 리스크 경보 해제 (NORMAL 정상 복구)</b>\n"
                         f"━━━━━━━━━━━━━━━━━━\n"
-                        f"• 뉴스 감지 페널티: {penalty}점\n"
-                        f"• 결과: 정상 투자 비중 한도 복구"
+                        f"<b>[ 🌐 시장 국면 안정화 확인 ]</b>\n"
+                        f"• 종합 리스크 페널티: <b>{penalty}점</b> (정상 안정권 진입)\n"
+                        f"• 감시 시장 레짐: <b>{self.state.current_regime}</b>\n\n"
+                        f"<b>[ 🚀 정상 운용 복귀 조치 ]</b>\n"
+                        f"• 주식 비중 한도: <b>100% 정상 복구</b>\n"
+                        f"• 신규 매수 재개: 5대 직교 팩터 1위 최우량 주도주 정상 편입\n\n"
+                        f"<b>[ 💡 대표님을 위한 실전 투자 수칙 ]</b>\n"
+                        f"• 거시 악재 소화 완료 확인 후, 탄탄한 지지선을 형성한 주도주를 선별하여 정교하게 공략합니다."
                     )
                 except Exception as err:
                     logger.warning("⚠️ [orchestrator.py] Fallback triggered: {}", err)
@@ -1350,6 +1374,18 @@ class BotOrchestrator:
                             worst_sym = sym
 
                     
+                    # [UPGRADE PRE-EARNINGS SHIELD] Prevent upgrading into a stock that reports earnings within 3 days
+                    if worst_sym and best_buy_signal:
+                        try:
+                            from pre_earnings_shield import PreEarningsShield
+                            pe_up = PreEarningsShield().analyze(best_buy_signal.symbol)
+                            if pe_up.get('is_pre_earnings_danger', False) or (0 <= pe_up.get('days_to_earnings', 999) <= 3):
+                                logger.info("UPGRADE BLOCKED: Target candidate {} has earnings in {}d ({})", 
+                                            best_buy_signal.symbol, pe_up.get('days_to_earnings'), pe_up.get('reason'))
+                                worst_sym = None
+                        except Exception as _pe_up_err:
+                            logger.debug("UPGRADE pre-earnings check error: {}", _pe_up_err)
+
                     # Execute upgrade if score gap is large enough
                     if worst_sym and (best_buy_signal.composite_score - worst_score) >= config.UPGRADE_SCORE_GAP:
                         # Small Account Safety Filter: Skip stocks that are too expensive relative to portfolio size
@@ -1542,25 +1578,25 @@ class BotOrchestrator:
                         continue
 
                 pnl_pct = ((curr_price - pos.entry_price) / pos.entry_price) if pos.entry_price > 0 else 0.0
-                if pnl_pct > 0.02:
-                    logger.info("SKIP REBALANCE {}: Price up {:.2%} > 2.0% above entry. Protecting average cost basis.", symbol, pnl_pct*100)
+                if pnl_pct > 0.035:
+                    logger.info("SKIP REBALANCE {}: Price up {:.2%} > 3.5% above entry. Protecting average cost basis.", symbol, pnl_pct*100)
                     continue
 
-                # 목표 슬롯 금액의 75% 미만으로 부족하게 담긴 경우만 추매
-                if current_val < target_val * 0.75:
-                    # 퀀트 분석 Action이 BUY 또는 STRONG_BUY (고득점)인 종목만 추매 승인
-                    if signal.action not in [ActionType.STRONG_BUY, ActionType.BUY]:
-                        logger.info("SKIP REBALANCE {}: action is {} (score: {}). No active buy edge.", 
+                # 목표 슬롯 금액($743)에 미달하여 최소 1주 이상 추가 매수 가능한 경우 슬롯 채우기 (자본 활용률 95%+ 극대화)
+                gap_dollars = target_val - current_val
+                if gap_dollars >= curr_price and bp >= curr_price:
+                    # 퀀트 분석 Action이 SELL, STRONG_SELL 등 하락/이탈 경고가 아닌 정상 보유 종목 추매 승인
+                    if signal.action in [ActionType.STRONG_SELL, ActionType.SELL]:
+                        logger.info("SKIP REBALANCE {}: action is {} (score: {}). Negative sell signal.", 
                                     symbol, signal.action.name, signal.composite_score)
                         continue
                         
-                    gap_dollars = target_val - current_val
-                    allowed_dollars = min(gap_dollars, bp - 30.0)
+                    allowed_dollars = min(gap_dollars, bp - 10.0)
                     if allowed_dollars >= curr_price:
                         buy_qty = int(allowed_dollars / curr_price)
                         if buy_qty > 0:
-                            logger.info("🔍 [REBALANCE] {} top-scored under-allocated (${:.2f} < ${:.2f}) with score {} ({}). Scaling up by {} shares.", 
-                                        symbol, current_val, target_val, signal.composite_score, signal.action.name, buy_qty)
+                            logger.info("🔍 [REBALANCE] {} under-allocated (${:.2f} < target ${:.2f}). Scaling up by {} shares to full slot.", 
+                                        symbol, current_val, target_val, buy_qty)
                             self.phase_5_execute_trade(symbol, "BUY", buy_qty, curr_price, 
                                                        f"REBALANCE_SCALE_UP: Fill slot to target ${target_val:.1f} (score: {signal.composite_score})")
                             bp -= (buy_qty * curr_price)
@@ -1710,8 +1746,8 @@ class BotOrchestrator:
             except Exception as _ev_err:
                 logger.debug("Macro event shield check skipped: {}", _ev_err)
 
-        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing)
-        if action == "BUY" and not reason.startswith("REBALANCE"):
+        # 4. [QUANT FEEDBACK v1.0.8] Advanced Feedback & Dynamic Expectancy Position Sizer (Bypassed for rebalancing and scale-in)
+        if action == "BUY" and not reason.startswith("REBALANCE") and not reason.startswith("LEADER_PYRAMID_SCALE_IN"):
             try:
                 from position_sizer import get_position_sizer
                 from dynamic_expectancy_sizer import DynamicExpectancySizer
@@ -1719,16 +1755,16 @@ class BotOrchestrator:
                 live_positions = self.trader.get_positions()
                 total_equity = bp + sum(p.market_value for p in live_positions)
                 
-                # Get empirical expectancy sizing multiplier (0.50x - 1.25x)
+                # Get empirical expectancy sizing multiplier (하한 1.00x: 풀 슬롯 자본 활용률 95%+ 보장)
                 exp_res = DynamicExpectancySizer().get_sizing_multiplier()
-                exp_mult = exp_res.get('multiplier', 1.0)
+                exp_mult = max(1.0, float(exp_res.get('multiplier', 1.0)))
 
                 # [NEW SOTA QUANT MODULE 16: ACCOUNT HIGH-WATER MARK PROFIT SENTINEL]
                 hwm_mult = 1.0
                 try:
                     from account_high_water_mark_sentinel import AccountHighWaterMarkSentinel
                     hwm_eval = AccountHighWaterMarkSentinel().evaluate_equity(total_equity)
-                    hwm_mult = hwm_eval.get('sizing_multiplier', 1.0)
+                    hwm_mult = max(1.0, float(hwm_eval.get('sizing_multiplier', 1.0)))
                 except Exception as _hwm_err:
                     logger.debug("HWM sentinel check skipped: {}", _hwm_err)
 
@@ -1737,14 +1773,23 @@ class BotOrchestrator:
                 try:
                     from fed_net_liquidity_engine import FedNetLiquidityEngine
                     liq_data = FedNetLiquidityEngine().get_liquidity_summary()
-                    liq_mult = liq_data.get("sizing_multiplier", 1.0)
+                    liq_mult = max(1.0, float(liq_data.get("sizing_multiplier", 1.0)))
                 except Exception as _liq_err:
                     logger.debug("Fed Net Liquidity sizing multiplier check skipped: {}", _liq_err)
 
-                # Get the live portfolio sizer with current total equity
-                sizer = get_position_sizer(portfolio=total_equity)
-                # Allocate dynamic target slot capital adjusted by Expectancy, HWM, and Fed Liquidity Multipliers
-                target_slot_capital = (total_equity / config.MAX_POSITIONS) * exp_mult * hwm_mult * liq_mult
+                # 잔여 오픈 슬롯 수 계산 (남은 예수금을 마지막 슬롯까지 남김없이 배분하기 위함)
+                held_symbols = {p.symbol for p in live_positions if p.quantity > 0}
+                if symbol not in held_symbols:
+                    open_slots = max(1, config.MAX_POSITIONS - len(held_symbols))
+                else:
+                    open_slots = 1
+
+                # 기본 슬롯 자본 (총자산의 33.3%)
+                base_slot_capital = total_equity / config.MAX_POSITIONS
+                # 잔여 예수금 기준 슬롯 자본 (이전 슬롯에서 정수 1주 단위 절사로 남은 잔돈을 후속 슬롯이 완전 흡수)
+                bp_slot_capital = (bp * 0.98) / open_slots
+                target_slot_capital = max(base_slot_capital, bp_slot_capital) * exp_mult * hwm_mult * liq_mult
+
                 raw_full_qty = int(target_slot_capital / price) if price > 0 else 0
                 max_allowed_qty = int((bp * 0.98) / price) if price > 0 else 0
 
@@ -1756,11 +1801,31 @@ class BotOrchestrator:
                 if qty == 0 and max_allowed_qty >= 1 and price <= (bp * 0.98):
                     qty = 1
 
-                logger.info("🚀 [FULL_SLOT_ENTRY] {}: Price=${:.2f} | ExpectancyMult={:.2f}x | TargetSlotCap=${:.2f} -> Buying {} shares (Max BP Qty: {})", 
-                            symbol, price, exp_mult, target_slot_capital, qty, max_allowed_qty)
+                logger.info("🚀 [FULL_CAPITAL_SLOT_ENTRY] {}: Price=${:.2f} | TargetCap=${:.2f} | OpenSlots={} -> Buying {} shares (Max BP Qty: {})", 
+                            symbol, price, target_slot_capital, open_slots, qty, max_allowed_qty)
             except Exception as sizer_err:
                 logger.error("Failed to run advanced Quant Sizer for {}: {}. Falling back to default raw qty.", symbol, sizer_err)
             
+        # [MANDATORY PORTFOLIO RISK CAP] Strict MAX_POSITION_PCT Guard (종목당 최대 33.3% 상한 엄격 준수)
+        if action == "BUY":
+            try:
+                live_pos = self.trader.get_positions()
+                existing_val = sum(p.market_value for p in live_pos if p.symbol == symbol)
+                total_eq = self.trader.get_buying_power() + sum(p.market_value for p in live_pos)
+                max_pct = getattr(config, 'MAX_POSITION_PCT', 0.333)
+                max_val_allowed = total_eq * max_pct
+                if (existing_val + (qty * price)) > (max_val_allowed * 1.05):
+                    allowed_add_val = max(0.0, max_val_allowed - existing_val)
+                    allowed_add_qty = int(allowed_add_val / price) if price > 0 else 0
+                    logger.warning("⚠️ [PORTFOLIO_CAP_GUARD] {} exceeds MAX_POSITION_PCT ({:.1%}): Existing=${:.2f}, Add=${:.2f}, MaxAllowed=${:.2f} -> Clamping qty from {} -> {}",
+                                   symbol, max_pct, existing_val, qty * price, max_val_allowed, qty, allowed_add_qty)
+                    qty = allowed_add_qty
+                    if qty <= 0:
+                        logger.warning("🚨 [PORTFOLIO_CAP_GUARD] {} already at or above max position cap. Additional BUY aborted.", symbol)
+                        return
+            except Exception as _cap_err:
+                logger.error("Portfolio cap guard check failed: {}", _cap_err)
+
         if qty <= 0:
             logger.warning("Risk modules reduced size to 0 for {}", symbol)
             return
@@ -2081,6 +2146,16 @@ class BotOrchestrator:
     # ==========================================
     def phase_6_post_market(self):
         """Run 10+ daily evaluation, optimization, and reporting modules"""
+        # Guard: Phase 6 Post-Market should NEVER run while the regular market is active!
+        try:
+            from scheduler import TradingScheduler
+            _sch = TradingScheduler()
+            if _sch.is_market_open():
+                logger.warning("🚫 [PHASE 6 BLOCKED] Market is currently OPEN! Suppressing post-market settlement & reports.")
+                return
+        except Exception as _sch_err:
+            logger.debug("Scheduler check in phase 6: {}", _sch_err)
+
         logger.info("=" * 60)
         logger.info("[PHASE 6] Running Post-Market Analytics (10 modules)")
         logger.info("=" * 60)
@@ -2607,16 +2682,19 @@ class BotOrchestrator:
                                     if curr_price > 0:
                                         exit_sig = self.strategy.check_exit(sym, curr_price)
                                         if exit_sig and exit_sig.action != "HOLD":
-                                            # In extended hours (pre-market/after-hours), only trigger for EMERGENCY risk stops (Hard Stop, Market Shock, < -3.5%)
-                                            # Routine rotation exits (Dead Money, Max Hold, Rebalance) must wait for regular market open for maximum liquidity
+                                            # [DUAL-THRESHOLD EXTENDED HOURS GUARD]
+                                            # 1. Catastrophic Emergency Stop (<= -7.5% or systemic CIRCUIT/PANIC):
+                                            #    Immediate exit in pre-market/after-hours to prevent catastrophic black swan loss.
+                                            # 2. Routine Stop Loss (-3.5% to -5.0%):
+                                            #    DEFERRED to regular open (22:30 KST) to avoid being wicked out by thin pre-market spreads.
                                             reason_upper = exit_sig.reason.upper()
-                                            is_emergency = any(k in reason_upper for k in ["HARD_STOP", "CIRCUIT", "EMERGENCY", "SHOCK"]) or (curr_price < pos.entry_price * 0.965)
-                                            if is_emergency:
-                                                logger.warning("🚨 [EXTENDED-HOURS EMERGENCY STOP] {} triggered @ ${:.2f} ({})", sym, curr_price, exit_sig.reason)
-                                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_STOP: {exit_sig.reason}")
+                                            is_catastrophic = any(k in reason_upper for k in ["CIRCUIT", "PANIC", "BLACK_SWAN", "CATASTROPHIC"]) or (curr_price <= pos.entry_price * 0.925)
+                                            if is_catastrophic:
+                                                logger.warning("🚨 [EXTENDED-HOURS CATASTROPHIC STOP] {} severe drop (<= -7.5% or panic) @ ${:.2f} ({}). Immediate exit.", sym, curr_price, exit_sig.reason)
+                                                self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_CATASTROPHIC_STOP: {exit_sig.reason}")
                                                 self.strategy.remove_position(sym)
                                             else:
-                                                logger.info("⏳ [EXTENDED_HOURS_DEFERRED] {} exit signal ({}) deferred to regular market open (22:30 KST) for maximum liquidity.",
+                                                logger.info("⏳ [EXTENDED_HOURS_DEFERRED] {} exit signal ({}) deferred to regular market open (22:30 KST) for institutional liquidity.",
                                                            sym, exit_sig.reason)
                         except Exception as eh_err:
                             logger.debug("Extended hours stop check error: {}", eh_err)
@@ -2627,8 +2705,15 @@ class BotOrchestrator:
                     time.sleep(sleep_sec)
                     
         except KeyboardInterrupt:
-            logger.info("Interrupted. Running final Phase 6...")
-            self.phase_6_post_market()
+            logger.info("Interrupted by shutdown/restart signal.")
+            now_est = scheduler.now_est()
+            from datetime import time as dt_time
+            is_eod_window = scheduler.is_trading_day() and (scheduler.MARKET_CLOSE <= now_est.time() <= dt_time(17, 30))
+            if is_eod_window and not scheduler.is_market_open():
+                logger.info("Shutdown within EOD post-market window (16:00-17:30 EST). Running final Phase 6...")
+                self.phase_6_post_market()
+            else:
+                logger.info("Shutdown outside EOD window (intraday / maintenance). Skipping Phase 6 post-market reports.")
             logger.info("Shutdown complete.")
         except Exception as e:
             logger.exception("FATAL ERROR in main loop")

@@ -6,7 +6,7 @@ Track and avoid earnings announcements.
 
 from dataclasses import dataclass
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import yfinance as yf
 from loguru import logger
 
@@ -26,12 +26,11 @@ class EarningsCalendar:
     
     Rules:
     - Avoid new positions 3 days before earnings
-    - Close or reduce 1 day before
-    - Can play earnings with small position if desired
+    - Close or reduce 2 days before
     """
     
     AVOID_DAYS = 3
-    CLOSE_DAYS = 1
+    CLOSE_DAYS = 2
     
     def __init__(self):
         self._cache = {}
@@ -46,26 +45,20 @@ class EarningsCalendar:
             if calendar is None:
                 return EarningsInfo(symbol, False, None, 999, "CLEAR")
             
-            # yfinance returns dict in newer versions, DataFrame in older
             earnings_date = None
             
             if isinstance(calendar, dict):
-                # New yfinance API: {'Earnings Date': [datetime, datetime], ...}
                 dates = calendar.get('Earnings Date', [])
                 if dates:
                     earnings_date = dates[0] if isinstance(dates, list) else dates
             elif hasattr(calendar, 'empty'):
-                # Old yfinance API: DataFrame
                 if calendar.empty:
                     return EarningsInfo(symbol, False, None, 999, "CLEAR")
                 if 'Earnings Date' in calendar.index:
                     dates = calendar.loc['Earnings Date']
                     earnings_date = dates.iloc[0] if hasattr(dates, 'iloc') else dates
             
-            # Convert to datetime / date
-            from datetime import date
             today = date.today()
-            
             earnings_d = None
             if hasattr(earnings_date, 'date'):
                 earnings_d = earnings_date.date()
@@ -87,9 +80,10 @@ class EarningsCalendar:
                 return EarningsInfo(symbol, False, str(earnings_d), days_until, "CLEAR")
             
             # Determine recommendation for UPCOMING earnings
-            if 0 <= days_until <= self.CLOSE_DAYS:
+            # [STRICT SHIELD] Earnings within 3 days: ALWAYS AVOID to prevent entering right before binary shock
+            if 0 <= days_until <= self.AVOID_DAYS:
                 recommendation = "AVOID"
-            elif 0 <= days_until <= self.AVOID_DAYS:
+            elif days_until <= 5:
                 recommendation = "CAUTION"
             else:
                 recommendation = "CLEAR"
@@ -123,9 +117,7 @@ def get_earnings_calendar() -> EarningsCalendar:
 if __name__ == "__main__":
     print("Testing EarningsCalendar...")
     ec = EarningsCalendar()
-    
     symbols = ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL"]
-    
     for sym in symbols:
         info = ec.check(sym)
         print(f"{sym}: {info.recommendation}")
