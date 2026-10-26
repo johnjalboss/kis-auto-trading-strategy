@@ -64,20 +64,8 @@ class TelegramInteractiveBot:
         logger.info("🤖 TelegramInteractiveBot daemon started (One-Click Interactive Remote Active)")
 
     def _start_background_cache_warmer(self):
-        """Pre-warm and periodically refresh Top Picks cache so Telegram clicks respond in 0.05 seconds"""
-        def _warmer():
-            time.sleep(3)
-            while self._running:
-                try:
-                    self._generate_and_cache_top_picks()
-                except Exception as e:
-                    logger.debug("Background top picks warmer err: {}", e)
-                for _ in range(300):
-                    if not self._running:
-                        break
-                    time.sleep(1)
-        t = threading.Thread(target=_warmer, daemon=True)
-        t.start()
+        """Top picks are cached on-demand to prevent background thread CPU/RAM hogging and SQLite locks"""
+        pass
 
     def _send_reply(self, text: str, reply_markup: dict = None, target_chat_id: str = None, add_menu_button: bool = True):
         try:
@@ -342,7 +330,8 @@ class TelegramInteractiveBot:
                                 elif cb_data.startswith("cmd_chart_sym_"):
                                     sym = cb_data.replace("cmd_chart_sym_", "").upper()
                                     _run_async(self._handle_single_stock_chart, sym)
-                                elif cb_data == "cmd_main_menu":
+                                elif cb_data in ("cmd_main_menu", "cmd_help"):
+                                    self._answer_callback(cb_id)
                                     _run_async(self._send_one_click_menu)
                                 elif cb_data == "cmd_status":
                                     _run_async(self._handle_status)
@@ -372,9 +361,11 @@ class TelegramInteractiveBot:
                                     _run_async(self._handle_quarantine)
                                 elif cb_data in ("cmd_chart_qqq", "cmd_chart_all", "cmd_chart90", "cmd_chart30", "cmd_chart180", "cmd_chart365"):
                                     self._answer_callback(cb_id, "📊 QQQ 비교 수익차트를 생성합니다.")
+                                    self._send_reply("📊 <b>[차트 생성 중]</b> 실시간 QQQ 벤치마크 및 수익 곡선을 렌더링하고 있습니다... ⏳", add_menu_button=False)
                                     _run_async(self._handle_chart, 0, "QQQ")
                                 elif cb_data == "cmd_chart_spy":
                                     self._answer_callback(cb_id, "📈 SPY 비교 수익차트를 생성합니다.")
+                                    self._send_reply("📈 <b>[차트 생성 중]</b> 실시간 SPY 벤치마크 및 수익 곡선을 렌더링하고 있습니다... ⏳", add_menu_button=False)
                                     _run_async(self._handle_chart, 0, "SPY")
                                 elif cb_data == "cmd_pause":
                                     set_trading_paused(True)
@@ -478,9 +469,11 @@ class TelegramInteractiveBot:
                                 elif any(cmd.startswith(c) for c in ["/격리", "격리", "/quarantine", "쿨다운", "격리종목"]):
                                     self._handle_quarantine()
                                 elif any(cmd.startswith(c) for c in ["/차트spy", "차트spy", "/spy차트", "spy차트", "/차트_spy", "chart_spy", "/chartspy"]):
-                                    self._handle_chart(0, "SPY")
+                                    self._send_reply("📈 <b>[차트 생성 중]</b> 실시간 SPY 벤치마크 및 수익 곡선을 렌더링하고 있습니다... ⏳", add_menu_button=False)
+                                    _run_async(self._handle_chart, 0, "SPY")
                                 elif any(cmd.startswith(c) for c in ["/차트qqq", "차트qqq", "/qqq차트", "qqq차트", "/차트", "차트", "/chart", "/차트전체", "전체차트", "/차트30", "/차트90"]):
-                                    self._handle_chart(0, "QQQ")
+                                    self._send_reply("📊 <b>[차트 생성 중]</b> 실시간 QQQ 벤치마크 및 수익 곡선을 렌더링하고 있습니다... ⏳", add_menu_button=False)
+                                    _run_async(self._handle_chart, 0, "QQQ")
                                 elif any(cmd.startswith(c) for c in ["/pause", "/정지", "/일시정지", "일시정지", "정지"]):
                                     _is_bot_paused = True
                                     self._send_reply("⏸️ <b>[원격 제어] 매매 일시 정지</b>\n새로운 매수 신호 탐색을 일시 중단합니다. (/resume 또는 /재개 로 다시 가동)")
@@ -490,7 +483,7 @@ class TelegramInteractiveBot:
                                 elif any(cmd.startswith(c) for c in ["/close_all", "/전량청산", "/청산", "전량청산", "청산"]):
                                     self._handle_close_all()
                                 elif any(cmd.startswith(c) for c in ["/help", "/도움말", "/start", "도움말", "help", "메뉴", "/menu"]):
-                                    self._send_one_click_menu()
+                                    _run_async(self._send_one_click_menu)
 
             except Exception as e:
                 logger.debug("Telegram poll error: {}", e)

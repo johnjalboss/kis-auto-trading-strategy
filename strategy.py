@@ -1471,39 +1471,84 @@ class StrategyEngine:
         # :    +  6.5h +   
         # :  15:00    10:00  = 1h() + 0.5h( ) = 1.5h
         # =================================================================
+        # =================================================================
+        # 📐 [TRUE US MARKET TRADING DAYS & REGULAR HOURS HOLD TIME ENGINE]
+        # - 주말(토, 일) 및 미국 증시 공휴일(US Market Holidays)은 0시간으로 완전 제외!
+        # - 오직 실제 미국 정규장(09:30~16:00 ET, 하루 최대 6.5h) 영업일만 누적 계산.
+        # - 금요일 밤 매수 후 주말을 거쳐 월요일이 되어도 '1거래일(6.5h)'로 정확히 인식.
+        # =================================================================
         try:
-            from datetime import timedelta
+            from datetime import timedelta, date as _d_cls, time as _t_cls
+            import pytz as _pytz_mod
+            
+            _kst_tz = _pytz_mod.timezone('Asia/Seoul')
+            _et_tz = _pytz_mod.timezone('US/Eastern')
             
             _now_sys = datetime.now()
             _entry_sys = pos.entry_time
             
-            # If entry_time is string, parse it
             if isinstance(_entry_sys, str):
                 try:
                     _entry_sys = datetime.fromisoformat(_entry_sys)
                 except Exception:
                     pass
 
-            # Calculate raw elapsed time safely without timezone distortion
+            # 1. Server(KST) to US Eastern Time (ET) exact conversion
             if hasattr(_entry_sys, 'tzinfo') and _entry_sys.tzinfo is not None:
-                _entry_clean = _entry_sys.replace(tzinfo=None)
+                _entry_kst = _entry_sys.astimezone(_kst_tz)
             else:
-                _entry_clean = _entry_sys
+                _entry_kst = _kst_tz.localize(_entry_sys)
                 
             if hasattr(_now_sys, 'tzinfo') and _now_sys.tzinfo is not None:
-                _now_clean = _now_sys.replace(tzinfo=None)
+                _now_kst = _now_sys.astimezone(_kst_tz)
             else:
-                _now_clean = _now_sys
-
-            _elapsed_seconds = max(0.0, (_now_clean - _entry_clean).total_seconds())
+                _now_kst = _kst_tz.localize(_now_sys)
+                
+            _elapsed_seconds = max(0.0, (_now_kst - _entry_kst).total_seconds())
             _hold_minutes = _elapsed_seconds / 60.0
+
+            _entry_et = _entry_kst.astimezone(_et_tz)
+            _now_et = _now_kst.astimezone(_et_tz)
             
-            # Approximate regular trading hours (6.5 hours per day)
-            _elapsed_days = _elapsed_seconds / 86400.0
-            _hold_hours = max(0.1, _elapsed_days * 6.5)
-            is_same_day = (_elapsed_seconds < 86400.0 and _now_clean.date() == _entry_clean.date())
+            # US Market Holidays (NYSE / NASDAQ)
+            _US_MARKET_HOLIDAYS = {
+                '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
+                '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+                '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
+                '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+            }
+            
+            _mkt_open = _t_cls(9, 30)
+            _mkt_close = _t_cls(16, 0)
+            
+            _total_trading_sec = 0.0
+            _curr_d = _entry_et.date()
+            _end_d = _now_et.date()
+            
+            while _curr_d <= _end_d:
+                # Exclude weekends (Saturday=5, Sunday=6) and official US market holidays
+                if _curr_d.weekday() < 5 and _curr_d.isoformat() not in _US_MARKET_HOLIDAYS:
+                    if _curr_d == _entry_et.date():
+                        _day_start = max(_entry_et.time(), _mkt_open)
+                    else:
+                        _day_start = _mkt_open
+                        
+                    if _curr_d == _end_d:
+                        _day_end = min(_now_et.time(), _mkt_close)
+                    else:
+                        _day_end = _mkt_close
+                        
+                    if _day_start < _day_end:
+                        _t1 = datetime.combine(_curr_d, _day_start)
+                        _t2 = datetime.combine(_curr_d, _day_end)
+                        _total_trading_sec += (_t2 - _t1).total_seconds()
+                _curr_d += timedelta(days=1)
+                
+            _hold_hours = max(0.1, _total_trading_sec / 3600.0)
+            _days_held = _hold_hours / 6.5
+            is_same_day = (_entry_et.date() == _now_et.date())
         except Exception as e:
-            logger.error("Failed to calculate real hold hours: {}", e)
+            logger.error("Failed to calculate real trading hold hours: {}", e)
             _hold_hours = 999.0
             _hold_minutes = 9990.0
             is_same_day = False

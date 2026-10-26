@@ -53,14 +53,14 @@ class AdaptiveHoldingEngine:
         # 2. Dead Money Early Exit Rule (3 trading days = 19.5h)
         if hold_hours >= 19.5 and -0.01 <= pnl_pct <= 0.01:
             res['should_exit'] = True
-            res['reason'] = f"DEAD_MONEY_EXIT: {days_held:.1f} days held with stagnant PnL ({pnl_pct:+.1%}). Freeing cash for active leaders."
+            res['reason'] = f"DEAD_MONEY_EXIT: {days_held:.1f} trading days held with stagnant PnL ({pnl_pct:+.1%}). Freeing cash for active leaders."
             logger.info("💤 [DEAD_MONEY_EXIT] {}: {}", symbol, res['reason'])
             return res
 
         # 3. Dynamic Threshold Expiry Check
         if hold_hours >= res['max_allowed_hours']:
             res['should_exit'] = True
-            res['reason'] = f"DYNAMIC_TIME_EXPIRED: {days_held:.1f} days held (Max limit: {res['max_allowed_hours']/6.5:.0f}d), PnL ({pnl_pct:+.1%})"
+            res['reason'] = f"DYNAMIC_TIME_EXPIRED: {days_held:.1f} trading days held (Max limit: {res['max_allowed_hours']/6.5:.0f}d), PnL ({pnl_pct:+.1%})"
             logger.info("⏱️ [DYNAMIC_HOLD_EXPIRED] {}: {}", symbol, res['reason'])
 
         return res
