@@ -1,7 +1,7 @@
 """
 Earnings Calendar
 ===================
-Track and avoid earnings announcements.
+Track and avoid earnings announcements using US Eastern market date.
 """
 
 from dataclasses import dataclass
@@ -9,6 +9,15 @@ from typing import List, Optional
 from datetime import datetime, timedelta, date
 import yfinance as yf
 from loguru import logger
+import pytz
+
+
+def _get_us_market_date() -> date:
+    """Returns current date in US Eastern Time (market date)."""
+    try:
+        return datetime.now(pytz.timezone('US/Eastern')).date()
+    except Exception:
+        return date.today()
 
 
 @dataclass
@@ -58,7 +67,7 @@ class EarningsCalendar:
                     dates = calendar.loc['Earnings Date']
                     earnings_date = dates.iloc[0] if hasattr(dates, 'iloc') else dates
             
-            today = date.today()
+            today = _get_us_market_date()
             earnings_d = None
             if hasattr(earnings_date, 'date'):
                 earnings_d = earnings_date.date()
@@ -117,7 +126,7 @@ def get_earnings_calendar() -> EarningsCalendar:
 if __name__ == "__main__":
     print("Testing EarningsCalendar...")
     ec = EarningsCalendar()
-    symbols = ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL"]
+    symbols = ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "IQV"]
     for sym in symbols:
         info = ec.check(sym)
         print(f"{sym}: {info.recommendation}")

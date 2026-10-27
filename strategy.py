@@ -1570,7 +1570,9 @@ class StrategyEngine:
         try:
             from pre_earnings_shield import PreEarningsShield
             pe_check = PreEarningsShield().analyze(symbol)
-            if pe_check['days_to_earnings'] <= 2 and pnl_pct > -0.02:
+            # [CRITICAL BUG FIX] Must be UPCOMING earnings (0 <= days <= 2) AND flagged as danger!
+            # Negative days (-1d, -2d) mean earnings already passed, which must NEVER be trimmed!
+            if pe_check.get('is_pre_earnings_danger', False) and (0 <= pe_check.get('days_to_earnings', 999) <= 2) and pnl_pct > -0.02:
                 return ExitSignal("SELL_PARTIAL",
                     f"PRE_EARNINGS_TRIM: Shielding capital 2d before earnings ({pe_check['days_to_earnings']}d)",
                     price, pnl_pct)
