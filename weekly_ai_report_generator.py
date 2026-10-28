@@ -66,26 +66,48 @@ class WeeklyAIReportGenerator:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            # Query closed trades in the last 7 days from BOTH trade_details and trades
-            # FIX(2026-10-28): Added upper bound AND date(...) <= date(?) to BOTH subqueries
-            # to prevent future trades from inflating the report. Previously only a lower bound
-            # existed, causing KST/EST timezone drift to pull in trades beyond the report window.
+            # Query closed trades in the last 7 days.
+            # FIX(2026-10-28) - Three root causes corrected:
+            #
+            # ARCHITECTURE: trade_details is the canonical source (KST timestamps).
+            #   trades table stores the same trades in EST (UTC-5) with created_at ~9h earlier.
+            #   Using UNION ALL caused every trade to appear TWICE with different date strings,
+            #   defeating date-based dedup and window filtering.
+            #
+            # Solution: Query trade_details ONLY (canonical KST record).
+            #   trades table used only as fallback for records missing from trade_details
+            #   (identified by matching symbol+round(pnl,2) NOT IN trade_details).
+            #   Window filter: strictly GREATER than 7 days ago AND <= today.
+            #   This avoids boundary-day overlap between consecutive weekly reports.
             cursor.execute("""
                 SELECT symbol, side, price, quantity, pnl, pnl_pct, 
                        COALESCE(reason, '') as reason, 
                        created_at
                 FROM (
-                    SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason as reason, created_at
+                    -- Primary source: trade_details (KST timestamps, canonical)
+                    SELECT symbol, side, price, quantity, pnl, pnl_pct,
+                           setup_reason as reason, created_at
                     FROM trade_details
                     WHERE side = 'SELL'
-                      AND date(created_at, ?) >= date(?, '-7 days')
+                      AND date(created_at, ?) > date(?, '-7 days')
                       AND date(created_at, ?) <= date(?)
+                    
                     UNION ALL
-                    SELECT symbol, side, price, quantity, pnl, pnl_pct, reason, COALESCE(created_at, exit_time) as created_at
-                    FROM trades
-                    WHERE side = 'SELL'
-                      AND date(COALESCE(created_at, exit_time), ?) >= date(?, '-7 days')
-                      AND date(COALESCE(created_at, exit_time), ?) <= date(?)
+                    
+                    -- Fallback: trades table, only rows NOT already in trade_details
+                    -- (match by symbol + rounded pnl to handle floating point)
+                    SELECT t.symbol, t.side, t.price, t.quantity, t.pnl, t.pnl_pct,
+                           t.reason, COALESCE(t.created_at, t.exit_time) as created_at
+                    FROM trades t
+                    WHERE t.side = 'SELL'
+                      AND date(COALESCE(t.created_at, t.exit_time), ?) > date(?, '-7 days')
+                      AND date(COALESCE(t.created_at, t.exit_time), ?) <= date(?)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM trade_details td
+                          WHERE td.symbol = t.symbol
+                            AND td.side = 'SELL'
+                            AND ROUND(td.pnl, 2) = ROUND(t.pnl, 2)
+                      )
                 )
                 ORDER BY created_at DESC
             """, (offset_modifier, today_us, offset_modifier, today_us,
