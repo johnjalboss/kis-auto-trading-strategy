@@ -1089,6 +1089,11 @@ class BotOrchestrator:
                         q_blocked, q_reason = get_ticker_quarantine_sentinel().is_quarantined(symbol)
                         if q_blocked:
                             logger.info("🛡️ [TICKER_QUARANTINE_GUARD] Entry blocked for {}: {}", symbol, q_reason)
+                            try:
+                                from rejection_tracker import get_rejection_tracker
+                                get_rejection_tracker().record(symbol, getattr(signal, 'composite_score', 0), getattr(signal, 'action', ''), 'TICKER_QUARANTINE_GUARD', q_reason)
+                            except Exception:
+                                pass
                             continue
                     except Exception as _tq_err:
                         logger.debug("TickerQuarantine check skipped: {}", _tq_err)
@@ -1099,6 +1104,11 @@ class BotOrchestrator:
                         cluster_res = CorrelationClusterCap().check_cluster_cap(symbol, current_positions, total_equity)
                         if not cluster_res['is_allowed']:
                             logger.info("CLUSTER_CAP_GUARD: Entry blocked for {}: {}", symbol, cluster_res['reason'])
+                            try:
+                                from rejection_tracker import get_rejection_tracker
+                                get_rejection_tracker().record(symbol, getattr(signal, 'composite_score', 0), getattr(signal, 'action', ''), 'CLUSTER_CAP_GUARD', cluster_res['reason'])
+                            except Exception:
+                                pass
                             continue
                     except Exception as _cc_err:
                         logger.debug("CorrelationClusterCap check skipped for {}: {}", symbol, _cc_err)
@@ -1108,6 +1118,11 @@ class BotOrchestrator:
                     entry_allowed = self.strategy.check_entry(symbol, macro_score=signal.composite_score, is_screened=is_screened)
                     if entry_allowed.action == "HOLD":
                         logger.info("STRATEGY_GUARD: Entry blocked for {}: {}", symbol, entry_allowed.reason)
+                        try:
+                            from rejection_tracker import get_rejection_tracker
+                            get_rejection_tracker().record(symbol, getattr(signal, 'composite_score', 0), getattr(signal, 'action', ''), 'STRATEGY_GUARD', entry_allowed.reason)
+                        except Exception:
+                            pass
                         continue
                     
                     # ============================================================
@@ -1149,8 +1164,13 @@ class BotOrchestrator:
                         if _sym_sector and _sym_sector != "Unknown":
                             _same_sector_positions = [s for s in current_positions if _get_dyn_sector(s) == _sym_sector]
                             if len(_same_sector_positions) >= 2:
-                                logger.info("SECTOR_GUARD: {} ({}) blocked - already holding 2 positions in sector {}: {}",
-                                            symbol, _sym_sector, _sym_sector, _same_sector_positions)
+                                _sec_msg = f"SECTOR_GUARD: {_sym_sector} blocked - already holding 2 positions: {_same_sector_positions}"
+                                logger.info(_sec_msg)
+                                try:
+                                    from rejection_tracker import get_rejection_tracker
+                                    get_rejection_tracker().record(symbol, getattr(signal, 'composite_score', 0), getattr(signal, 'action', ''), 'SECTOR_GUARD', _sec_msg)
+                                except Exception:
+                                    pass
                                 continue
                     except Exception as _sc:
                         logger.debug("Sector concentration guard failed: {}", _sc)

@@ -234,10 +234,13 @@ class TelegramInteractiveBot:
                 ],
                 [
                     {"text": "🛡️ 리스크 현황", "callback_data": "cmd_risk"},
-                    {"text": "📊 QQQ 비교 수익차트", "callback_data": "cmd_chart_qqq"}
+                    {"text": "🚫 진입 보류/스크리닝 현황", "callback_data": "cmd_rejections"}
                 ],
                 [
-                    {"text": "📈 SPY 비교 수익차트", "callback_data": "cmd_chart_spy"},
+                    {"text": "📊 QQQ 비교 수익차트", "callback_data": "cmd_chart_qqq"},
+                    {"text": "📈 SPY 비교 수익차트", "callback_data": "cmd_chart_spy"}
+                ],
+                [
                     {"text": "📊 보유종목 캔들 차트", "callback_data": "cmd_stock_charts_menu"}
                 ],
                 [
@@ -357,6 +360,9 @@ class TelegramInteractiveBot:
                                     _run_async(self._handle_regime)
                                 elif cb_data == "cmd_risk":
                                     _run_async(self._handle_risk)
+                                elif cb_data == "cmd_rejections":
+                                    self._answer_callback(cb_id, "🛡️ 스크리닝 진입 보류 현황을 조회합니다.")
+                                    _run_async(self._handle_rejections)
                                 elif cb_data == "cmd_quarantine":
                                     _run_async(self._handle_quarantine)
                                 elif cb_data in ("cmd_chart_qqq", "cmd_chart_all", "cmd_chart90", "cmd_chart30", "cmd_chart180", "cmd_chart365"):
@@ -406,7 +412,9 @@ class TelegramInteractiveBot:
 
                                 cmd = text.lower().strip().replace(" ", "")
 
-                                if any(cmd.startswith(c) for c in ["/status", "/상태", "/잔고", "상태", "잔고"]):
+                                if any(cmd.startswith(c) for c in ["/rejection", "/보류", "/탈락", "/차단", "/whyno", "/후보", "/whynotrade"]):
+                                    _run_async(self._handle_rejections)
+                                elif any(cmd.startswith(c) for c in ["/status", "/상태", "/잔고", "상태", "잔고"]):
                                     self._handle_status()
                                 elif any(cmd.startswith(c) for c in ["/포지션", "포지션", "/positions"]):
                                     self._handle_positions()
@@ -1479,6 +1487,16 @@ class TelegramInteractiveBot:
             self._send_reply(f"⚠️ 레짐 분석 조회 실패: {e}")
 
 
+
+    def _handle_rejections(self):
+        """오늘의 스크리닝 및 진입 보류/차단 현황 조회"""
+        try:
+            from rejection_tracker import get_rejection_tracker
+            msg = get_rejection_tracker().format_rejection_summary(limit=10)
+            self._send_reply(msg)
+        except Exception as e:
+            logger.error("Failed to handle rejections: {}", e)
+            self._send_reply("🛡️ 진입 보류 현황 조회 중 오류가 발생했습니다.")
 
     def _handle_risk(self):
         """실시간 종합 리스크 현황 및 6단계 자본 보호 매트릭스 조회"""

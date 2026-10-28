@@ -68,7 +68,7 @@ class PreEarningsShield:
 
                         res['days_to_earnings'] = days_diff
 
-                        if 0 <= days_diff <= 3:
+                        if 0 <= days_diff <= 5:
                             res['is_pre_earnings_danger'] = True
                             res['score_adj'] = -50
                             res['reason'] = f"PRE_EARNINGS_DANGER: Earnings in {days_diff}d ({e_date})"

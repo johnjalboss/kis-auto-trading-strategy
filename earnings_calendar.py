@@ -38,7 +38,7 @@ class EarningsCalendar:
     - Close or reduce 2 days before
     """
     
-    AVOID_DAYS = 3
+    AVOID_DAYS = 5
     CLOSE_DAYS = 2
     
     def __init__(self):
@@ -89,10 +89,10 @@ class EarningsCalendar:
                 return EarningsInfo(symbol, False, str(earnings_d), days_until, "CLEAR")
             
             # Determine recommendation for UPCOMING earnings
-            # [STRICT SHIELD] Earnings within 3 days: ALWAYS AVOID to prevent entering right before binary shock
+            # [STRICT SHIELD] Earnings within 5 days: ALWAYS AVOID to prevent entering right before binary shock
             if 0 <= days_until <= self.AVOID_DAYS:
                 recommendation = "AVOID"
-            elif days_until <= 5:
+            elif days_until <= 7:
                 recommendation = "CAUTION"
             else:
                 recommendation = "CLEAR"

@@ -450,7 +450,7 @@ class StrategyEngine:
             from earnings_calendar import get_earnings_calendar
             ec = get_earnings_calendar()
             e_info = ec.check(symbol)
-            if e_info.recommendation in ("AVOID", "CAUTION") or (0 <= e_info.days_until <= 3):
+            if e_info.recommendation in ("AVOID", "CAUTION") or (0 <= e_info.days_until <= 5):
                 return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: Avoid entry within {e_info.days_until} days of earnings", 0)
         except Exception as err:
             logger.warning("⚠️ [strategy.py] Fallback triggered: {}", err)
@@ -458,7 +458,7 @@ class StrategyEngine:
         try:
             from pre_earnings_shield import PreEarningsShield
             pe = PreEarningsShield().analyze(symbol)
-            if pe.get('is_pre_earnings_danger', False) or (0 <= pe.get('days_to_earnings', 999) <= 3):
+            if pe.get('is_pre_earnings_danger', False) or (0 <= pe.get('days_to_earnings', 999) <= 5):
                 return EntrySignal("HOLD", 0, f"EARNINGS_GUARD: PreEarningsShield blocked entry (Earnings in {pe.get('days_to_earnings')}d)", 0)
         except Exception as _pe_guard_err:
             logger.debug("PreEarningsShield check in check_entry failed for {}: {}", symbol, _pe_guard_err)
@@ -1731,7 +1731,7 @@ class StrategyEngine:
         
         if price <= effective_stop:
             # [OPENING NOISE SHIELD] 09:30 ~ 09:40 ET 시장 개장 직후 10분간 호가 공백으로 인한 일시적 언더슈팅 방어
-            # 단, -8.0% 이상의 심각한 폭락이나 긴급 재난은 즉시 손절
+            # 단, -5.0% 이상의 심각한 폭락이나 갭다운은 긴급 손절 (슬리피지 방어)
             is_opening_bell = False
             try:
                 et = pytz.timezone('US/Eastern')
@@ -1741,7 +1741,7 @@ class StrategyEngine:
             except Exception:
                 pass
 
-            if is_opening_bell and pnl_pct > -0.08:
+            if is_opening_bell and pnl_pct > -0.05:
                 logger.warning(
                     "🛡️ [OPENING_NOISE_SHIELD] {} breached stop ({:+.1%}), holding through opening bell noise (09:30-09:40 ET) to avoid MM shakeout",
                     pos.symbol, pnl_pct
@@ -1829,7 +1829,11 @@ class StrategyEngine:
         except Exception as _mds_e:
             logger.debug("Mathematical Dynamic Stop evaluation error: {}", _mds_e)
 
-        if pnl_pct_high >= 0.08:
+        if pnl_pct_high >= 0.20:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.150)  # Lock +15.0% profit minimum (Big Runner)
+        elif pnl_pct_high >= 0.12:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.080)  # Lock +8.0% profit minimum
+        elif pnl_pct_high >= 0.08:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.050)  # Lock +5.0% profit minimum
         elif pnl_pct_high >= 0.05:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.030)  # Lock +3.0% profit minimum
