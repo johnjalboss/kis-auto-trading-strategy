@@ -258,6 +258,9 @@ class TelegramInteractiveBot:
         global _is_bot_paused
         url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
 
+        def _run_async(target_func, *args):
+            threading.Thread(target=target_func, args=args, daemon=True).start()
+
         while self._running:
             try:
                 params = {"offset": self.last_update_id + 1, "timeout": 10}
@@ -282,10 +285,6 @@ class TelegramInteractiveBot:
                                     continue
 
                                 logger.info("📲 [TELEGRAM_CALLBACK] Executing: '{}' from sender: {} (chat: {})", cb_data, sender_id, chat_id)
-
-                                def _run_async(target_func, *args):
-                                    threading.Thread(target=target_func, args=args, daemon=True).start()
-
                                 self._answer_callback(cb_id)
 
                                 if cb_data == "cmd_full_diagnosis":
