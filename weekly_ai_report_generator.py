@@ -67,6 +67,9 @@ class WeeklyAIReportGenerator:
             cursor = conn.cursor()
 
             # Query closed trades in the last 7 days from BOTH trade_details and trades
+            # FIX(2026-10-28): Added upper bound AND date(...) <= date(?) to BOTH subqueries
+            # to prevent future trades from inflating the report. Previously only a lower bound
+            # existed, causing KST/EST timezone drift to pull in trades beyond the report window.
             cursor.execute("""
                 SELECT symbol, side, price, quantity, pnl, pnl_pct, 
                        COALESCE(reason, '') as reason, 
@@ -74,14 +77,19 @@ class WeeklyAIReportGenerator:
                 FROM (
                     SELECT symbol, side, price, quantity, pnl, pnl_pct, setup_reason as reason, created_at
                     FROM trade_details
-                    WHERE side = 'SELL' AND date(created_at, ?) >= date(?, '-7 days')
+                    WHERE side = 'SELL'
+                      AND date(created_at, ?) >= date(?, '-7 days')
+                      AND date(created_at, ?) <= date(?)
                     UNION ALL
                     SELECT symbol, side, price, quantity, pnl, pnl_pct, reason, COALESCE(created_at, exit_time) as created_at
                     FROM trades
-                    WHERE side = 'SELL' AND date(COALESCE(created_at, exit_time), ?) >= date(?, '-7 days')
+                    WHERE side = 'SELL'
+                      AND date(COALESCE(created_at, exit_time), ?) >= date(?, '-7 days')
+                      AND date(COALESCE(created_at, exit_time), ?) <= date(?)
                 )
                 ORDER BY created_at DESC
-            """, (offset_modifier, today_us, offset_modifier, today_us))
+            """, (offset_modifier, today_us, offset_modifier, today_us,
+                  offset_modifier, today_us, offset_modifier, today_us))
             rows = cursor.fetchall()
 
             gains = 0.0
@@ -95,8 +103,11 @@ class WeeklyAIReportGenerator:
                 pnl_pct = float(r["pnl_pct"] or 0.0)
                 d_str = str(r["created_at"])[:10]
                 
-                # Deduplication key
-                t_key = (sym, round(pnl, 2), d_str)
+                # Deduplication key: use (symbol, pnl) WITHOUT date.
+                # trade_details stores timestamps in KST, trades table stores in EST,
+                # so the same trade can have different date strings across the two tables,
+                # causing date-based dedup to fail and count the same trade twice.
+                t_key = (sym, round(pnl, 2))
                 if t_key in seen_trades:
                     continue
                 seen_trades.add(t_key)
