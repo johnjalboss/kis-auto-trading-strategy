@@ -1,11 +1,17 @@
 """
-[v6.1 PRE-EARNINGS RISK SHIELD & CUT MODULE]
-Queries Yahoo Finance / Finnhub earnings calendar using US Eastern market date.
+[v7.0 PRE-EARNINGS RISK SHIELD & CUT MODULE]
+Queries Yahoo Finance earnings calendar using US Eastern market date.
 
 Rules:
-1. Entry Prohibition: If upcoming earnings is within 0~3 days, return -50 pts (prohibits new entries).
-2. Pre-Earnings Position Trimming: If holding a position and upcoming earnings is within 0~2 days, trigger risk cut exit.
-3. Past Earnings: If earnings date has already passed (days_diff < 0), it is NOT in danger.
+1. HARD BLOCK (NEW): If earnings within 5 calendar days → 'entry_blocked' = True.
+   This is an absolute veto regardless of score. Score penalty alone (-50) was
+   insufficient because a +100 signal could still pass as +50.
+2. Entry Score Penalty: If earnings within 5 days, score_adj = -999 (effectively blocks new entries).
+3. Pre-Earnings Position Trimming: If holding a position and upcoming earnings is within 0~2 days,
+   trigger risk cut exit (handled by OvernightRiskAssessor).
+4. Past Earnings: If earnings date has already passed (days_diff < 0), it is NOT in danger.
+5. POST-EARNINGS COOLDOWN (NEW): After OVERNIGHT_RISK_DEFENSE exit triggered by earnings,
+   block re-entry into the same symbol for 2 calendar days to prevent buy→sell→buy loop.
 """
 
 import time
@@ -17,6 +23,40 @@ import pytz
 
 _EARNINGS_SHIELD_CACHE = {}
 _CACHE_TTL = 7200  # 2 hours
+
+# Post-earnings-exit cooldown: symbol -> UTC timestamp of OVERNIGHT_RISK_DEFENSE exit
+# Block re-entry for 2 calendar days after being forced out due to earnings
+_POST_EARNINGS_EXIT_COOLDOWN: dict = {}
+_POST_EARNINGS_COOLDOWN_DAYS = 2
+
+
+def record_earnings_exit(symbol: str):
+    """
+    Call this when OVERNIGHT_RISK_DEFENSE triggers on a symbol.
+    Prevents re-entry for _POST_EARNINGS_COOLDOWN_DAYS calendar days.
+    """
+    import time as _time
+    _POST_EARNINGS_EXIT_COOLDOWN[symbol] = _time.time()
+    logger.info("🛡️ [PRE_EARNINGS_COOLDOWN] {} marked for {}-day re-entry block after earnings exit.",
+                symbol, _POST_EARNINGS_COOLDOWN_DAYS)
+
+
+def is_post_earnings_cooldown(symbol: str) -> tuple:
+    """
+    Returns (blocked: bool, reason: str).
+    True if symbol was recently force-sold due to earnings and cooldown period not yet elapsed.
+    """
+    import time as _time
+    ts = _POST_EARNINGS_EXIT_COOLDOWN.get(symbol)
+    if ts is None:
+        return False, ''
+    elapsed_days = (_time.time() - ts) / 86400.0
+    if elapsed_days < _POST_EARNINGS_COOLDOWN_DAYS:
+        remaining = _POST_EARNINGS_COOLDOWN_DAYS - elapsed_days
+        return True, f"POST_EARNINGS_COOLDOWN: {symbol} force-sold due to earnings {elapsed_days:.1f}d ago. Re-entry blocked for {remaining:.1f}d more."
+    # Cooldown expired - clean up
+    del _POST_EARNINGS_EXIT_COOLDOWN[symbol]
+    return False, ''
 
 
 def _get_us_market_date() -> datetime.date:
@@ -40,6 +80,7 @@ class PreEarningsShield:
 
         res = {
             'is_pre_earnings_danger': False,
+            'entry_blocked': False,        # NEW: hard veto flag (True = no entry allowed regardless of score)
             'days_to_earnings': 999,
             'score_adj': 0,
             'reason': ''
@@ -69,9 +110,18 @@ class PreEarningsShield:
                         res['days_to_earnings'] = days_diff
 
                         if 0 <= days_diff <= 5:
+                            # HARD BLOCK: earnings within 5 calendar days
+                            # -999 score ensures signal never passes even at +100 composite score.
+                            # entry_blocked=True is checked directly in orchestrator as absolute veto.
                             res['is_pre_earnings_danger'] = True
-                            res['score_adj'] = -50
-                            res['reason'] = f"PRE_EARNINGS_DANGER: Earnings in {days_diff}d ({e_date})"
+                            res['entry_blocked'] = True
+                            res['score_adj'] = -999
+                            res['reason'] = (
+                                f"PRE_EARNINGS_HARD_BLOCK: Earnings in {days_diff}d ({e_date}). "
+                                f"New entries PROHIBITED within 5d of earnings to avoid binary event risk."
+                            )
+                            logger.info("🚫 [PRE_EARNINGS_BLOCK] {}: Earnings in {}d ({}) — entry hard-blocked.",
+                                        symbol, days_diff, e_date)
                         elif days_diff < 0:
                             res['is_pre_earnings_danger'] = False
                             res['score_adj'] = 0

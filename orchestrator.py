@@ -877,6 +877,13 @@ class BotOrchestrator:
                                 logger.error("🚨 [OVERNIGHT_RISK_EXIT] Pre-close liquidation for {}: {}", sym, warn_str)
                                 self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"OVERNIGHT_RISK_DEFENSE: {warn_str}")
                                 self.strategy.remove_position(sym)
+                                # [v7.0] Record earnings-triggered exit to block re-entry for 2 days
+                                if "Earnings" in warn_str or "earnings" in warn_str:
+                                    try:
+                                        from pre_earnings_shield import record_earnings_exit
+                                        record_earnings_exit(sym)
+                                    except Exception as _re_err:
+                                        logger.debug("record_earnings_exit failed for {}: {}", sym, _re_err)
                                 continue
                     except Exception as _ora_err:
                         logger.debug("OvernightRiskAssessor check skipped for {}: {}", sym, _ora_err)
@@ -1097,6 +1104,35 @@ class BotOrchestrator:
                             continue
                     except Exception as _tq_err:
                         logger.debug("TickerQuarantine check skipped: {}", _tq_err)
+
+                    # [PRE-EARNINGS HARD BLOCK v7.0] Absolute veto for earnings within 5 calendar days.
+                    # Previously only applied -50 score penalty which was insufficient (e.g. +100 -> +50 still passed).
+                    # Also checks post-earnings-exit cooldown to prevent buy->earnings-exit->rebuy next day loop.
+                    try:
+                        from pre_earnings_shield import PreEarningsShield, is_post_earnings_cooldown
+                        # 1. Hard block: earnings within 5 days
+                        _pe_res = PreEarningsShield().analyze(symbol)
+                        if _pe_res.get("entry_blocked", False):
+                            _pe_reason = _pe_res.get("reason", "PRE_EARNINGS_HARD_BLOCK")
+                            logger.info("\U0001f6ab [PRE_EARNINGS_HARD_BLOCK] Entry vetoed for {}: {}", symbol, _pe_reason)
+                            try:
+                                from rejection_tracker import get_rejection_tracker
+                                get_rejection_tracker().record(symbol, getattr(signal, "composite_score", 0), getattr(signal, "action", ""), "PRE_EARNINGS_HARD_BLOCK", _pe_reason)
+                            except Exception:
+                                pass
+                            continue
+                        # 2. Post-earnings cooldown: recently force-sold due to earnings
+                        _cooldown_blocked, _cooldown_reason = is_post_earnings_cooldown(symbol)
+                        if _cooldown_blocked:
+                            logger.info("\U0001f6e1\ufe0f [POST_EARNINGS_COOLDOWN] Re-entry blocked for {}: {}", symbol, _cooldown_reason)
+                            try:
+                                from rejection_tracker import get_rejection_tracker
+                                get_rejection_tracker().record(symbol, getattr(signal, "composite_score", 0), getattr(signal, "action", ""), "POST_EARNINGS_COOLDOWN", _cooldown_reason)
+                            except Exception:
+                                pass
+                            continue
+                    except Exception as _pe_entry_err:
+                        logger.debug("Pre-earnings hard block check skipped for {}: {}", symbol, _pe_entry_err)
 
                     # [v11.0 QUANT] Check Pearson Correlation Cluster Risk Cap (max 40%)
                     try:
