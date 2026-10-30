@@ -48,7 +48,7 @@ class OvernightRiskAssessor:
             try:
                 from earnings_calendar import get_earnings_calendar
                 e_info = get_earnings_calendar().check(symbol)
-                if getattr(e_info, 'days_until', 99) <= 1:
+                if 0 <= getattr(e_info, 'days_until', 99) <= 1:
                     safety_score -= 50
                     warnings.append("Earnings release scheduled before next market open (50/50 binary risk)")
                     should_close = True
