@@ -101,7 +101,7 @@ SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "5"))  # 5: Ult
 
 # [PROFIT MAXIMIZER] 분할 익절 및 무위험 본절 스탑 파라미터 (v4.0)
 PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.05"))  # +5.0% 50% 분할익절
-BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.035"))   # +3.5% 달성 시 손절가를 본절가로 상향
+BREAKEVEN_STOP_TRIGGER  = float(os.getenv("BREAKEVEN_STOP_TRIGGER", "0.020"))   # +2.0% 달성 시 손절가를 본절가(+0.3% 수수료 보전)로 상향하여 원금 100% 보존
 
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.15"))       # 15% 최종 TP
 STOP_LOSS_PCT = 0.045                                                   # -4.5% safety hard SL
@@ -226,7 +226,7 @@ TRADING_START_TIME = os.getenv("TRADING_START_TIME", "18:00")
 CLOSE_ALL_TIME = os.getenv("CLOSE_ALL_TIME", "09:00")
 
 # Reports
-DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "05:00")
+DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "06:00")  # Standard Time (Winter/Non-DST): Close is 06:00 KST
 
 # ==============================================
 # Oracle Cloud / System
@@ -264,6 +264,21 @@ SCREENER_MAX_CANDIDATES = int(os.getenv("SCREENER_MAX_CANDIDATES", "75"))
 
 # 스크리너 캐시 주기 (분 단위) — 15분 주기로 단축하여 기회포착 극대화
 SCREENER_CACHE_MINUTES = int(os.getenv("SCREENER_CACHE_MINUTES", "15"))
+
+# ============================================================
+# Quant Volatility Sweet-Spot Configuration (데드머니 & 과열 잡주 방지)
+# ============================================================
+# 시총 대형주(Apple, MSFT 등) 최소 일일 변동성 (NATR 14, %)
+VOL_SWEETSPOT_MEGA_MIN_NATR = float(os.getenv("VOL_SWEETSPOT_MEGA_MIN_NATR", "1.55"))
+# 일반/중소형주 최소 일일 변동성 (NATR 14, %) — SLAB(1.35%), KO(1.44%) 등 원천 배제
+VOL_SWEETSPOT_NON_MEGA_MIN_NATR = float(os.getenv("VOL_SWEETSPOT_NON_MEGA_MIN_NATR", "1.75"))
+# 최소 20일 역사적 변동성 (HV20, %)
+VOL_SWEETSPOT_MEGA_MIN_HV20 = float(os.getenv("VOL_SWEETSPOT_MEGA_MIN_HV20", "16.5"))
+VOL_SWEETSPOT_NON_MEGA_MIN_HV20 = float(os.getenv("VOL_SWEETSPOT_NON_MEGA_MIN_HV20", "17.5"))
+# 최대 일일 변동성 상한선 (NATR 14, %) — 초고변동성 펌핑/테마 잡주 배제
+VOL_SWEETSPOT_MAX_NATR = float(os.getenv("VOL_SWEETSPOT_MAX_NATR", "6.5"))
+# 인버스 3x 레버리지 ETF 허용 상한선 (NATR 14, %)
+VOL_SWEETSPOT_INVERSE_MAX_NATR = float(os.getenv("VOL_SWEETSPOT_INVERSE_MAX_NATR", "12.0"))
 
 
 # ==============================================

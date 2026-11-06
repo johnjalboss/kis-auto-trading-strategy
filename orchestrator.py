@@ -2750,7 +2750,7 @@ class BotOrchestrator:
                                                 self.phase_5_execute_trade(sym, "SELL", pos.quantity, curr_price, f"EXTENDED_HOURS_CATASTROPHIC_STOP: {exit_sig.reason}")
                                                 self.strategy.remove_position(sym)
                                             else:
-                                                logger.info("⏳ [EXTENDED_HOURS_DEFERRED] {} exit signal ({}) deferred to regular market open (22:30 KST) for institutional liquidity.",
+                                                logger.info("⏳ [EXTENDED_HOURS_DEFERRED] {} exit signal ({}) deferred to regular market open for institutional liquidity.",
                                                            sym, exit_sig.reason)
                         except Exception as eh_err:
                             logger.debug("Extended hours stop check error: {}", eh_err)

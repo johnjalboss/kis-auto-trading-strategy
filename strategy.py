@@ -1327,15 +1327,19 @@ class StrategyEngine:
         except Exception as _ai_exit_err:
             logger.debug("GeminiNewsSentinel exit check skipped for {}: {}", symbol, _ai_exit_err)
 
-        # [v9.0 PROFIT-LOCKING MATRIX] Dynamic Profit Floor Locking (Locks in +2%, +5.5%, +9% profit floors)
+        # [v9.1 IMMEDIATE HIGH/LOW SYNC & PROFIT-LOCKING MATRIX]
+        cur_price = realtime_price or (float(df['Close'].iloc[-1]) if df is not None and not df.empty else pos.current_price)
+        if cur_price > 0:
+            pos.high_since_entry = max(getattr(pos, 'high_since_entry', cur_price), cur_price)
+            pos.low_since_entry = min(getattr(pos, 'low_since_entry', cur_price), cur_price)
+
         try:
             from profit_locking_stop import ProfitLockingStopEngine
-            cur_price = realtime_price or (float(df['Close'].iloc[-1]) if df is not None and not df.empty else pos.current_price)
             pl_res = ProfitLockingStopEngine().evaluate_profit_lock(
                 symbol=symbol,
                 entry_price=pos.entry_price,
                 current_price=cur_price,
-                high_since_entry=getattr(pos, 'high_since_entry', cur_price)
+                high_since_entry=pos.high_since_entry
             )
             if pl_res['should_exit']:
                 return ExitSignal("SELL", pl_res['reason'], cur_price)
@@ -1781,9 +1785,10 @@ class StrategyEngine:
 
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
 
-        # [SWING BREATHING ROOM] Do NOT choke position with trailing stop until it achieves at least +3.0% profit (or half sold)
-        # Normal pullbacks below +3.0% are safely protected by pos.stop_price (-3.8% standard stop loss).
-        if not pos.half_sold and pnl_pct_high < 0.030:
+        # [SWING BREATHING ROOM & INSTITUTIONAL ZERO-RISK DEFENSE]
+        # Allow standard breathing room (-3.8% SL) only while unrealized gain has never reached +1.8%.
+        # Once peak touches +1.8% profit, Tier 0 Breakeven (+0.3% cushion) & Multi-Tiered Locks are actively armed!
+        if not pos.half_sold and pnl_pct_high < 0.018:
             return None
             
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
@@ -1829,20 +1834,31 @@ class StrategyEngine:
         except Exception as _mds_e:
             logger.debug("Mathematical Dynamic Stop evaluation error: {}", _mds_e)
 
+        # ── MULTI-TIERED CAPITAL PRESERVATION FLOORS (Never let green turn red) ──
         if pnl_pct_high >= 0.20:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.150)  # Lock +15.0% profit minimum (Big Runner)
         elif pnl_pct_high >= 0.12:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.080)  # Lock +8.0% profit minimum
         elif pnl_pct_high >= 0.08:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.050)  # Lock +5.0% profit minimum
-        elif pnl_pct_high >= 0.05:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.030)  # Lock +3.0% profit minimum
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.055)  # Lock +5.5% profit minimum
+        elif pnl_pct_high >= 0.06:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.040)  # Lock +4.0% profit minimum
+        elif pnl_pct_high >= 0.045:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.028)  # Lock +2.8% profit minimum
+        elif pnl_pct_high >= 0.032:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.018)  # Lock +1.8% profit minimum
         elif pnl_pct_high >= 0.025:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.015)  # Lock +1.5% profit minimum
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.010)  # Lock +1.0% profit minimum
+        elif pnl_pct_high >= 0.018:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.003)  # Lock +0.3% Breakeven (Zero-Risk Cushion)
         
         # Absolute Hook: If we were 6% up, trailing stop CANNOT go below Entry + 1%.
         if breakeven_hook:
             trailing_stop = max(trailing_stop, pos.entry_price * 1.01)
+
+        # Ratchet pos.stop_price upwards as trailing_stop advances
+        if trailing_stop > getattr(pos, 'stop_price', 0.0):
+            pos.stop_price = trailing_stop
         
         # Monotonic Non-Decreasing Ratchet: Trailing stop CAN NEVER retreat downwards
         prev_trailing = getattr(pos, 'trailing_stop', 0.0) or 0.0

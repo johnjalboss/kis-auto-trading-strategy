@@ -1,11 +1,14 @@
 """
 Profit Locking Stop Module (profit_locking_stop.py)
 ===================================================
-Enforces tighter multi-tiered profit-locking stop floors to ensure unrealized gains are protected:
-- PnL >= +3.0%: Stop floor locked at minimum +1.5% gain
-- PnL >= +5.0%: Stop floor locked at minimum +3.0% gain
-- PnL >= +8.0%: Stop floor locked at minimum +5.0% gain
-- PnL >= +12.0%: Stop floor locked at minimum +8.0% gain
+Enforces institutional multi-tiered profit-locking stop floors to ensure green trades never turn red:
+- PnL >= +1.8%: Tier 0 Breakeven locked at +0.3% cushion (100% Risk-Free!)
+- PnL >= +2.5%: Tier 1 locked at minimum +1.0% gain
+- PnL >= +3.2%: Tier 2 locked at minimum +1.8% gain
+- PnL >= +4.5%: Tier 2.5 locked at minimum +2.8% gain
+- PnL >= +6.0%: Tier 3 locked at minimum +4.0% gain
+- PnL >= +8.0%: Tier 3.5 locked at minimum +5.0% gain
+- PnL >= +12.0%: Tier 4 locked at minimum +8.0% gain
 """
 
 from typing import Dict, Any
@@ -63,16 +66,31 @@ class ProfitLockingStop:
             if stop_price < locked_floor:
                 stop_price = locked_floor
                 protection_type = "Tier 3 Lock-In (+5.0% Guaranteed)"
-        elif peak_pnl >= 5.0 or pnl_pct >= 4.8:
-            locked_floor = entry_price * 1.030 # Minimum +3.0% profit guaranteed
+        elif peak_pnl >= 6.0 or pnl_pct >= 5.8:
+            locked_floor = entry_price * 1.040 # Minimum +4.0% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 2 Lock-In (+3.0% Guaranteed)"
-        elif peak_pnl >= 3.0 or pnl_pct >= 3.0:
-            locked_floor = entry_price * 1.015 # Minimum +1.5% profit guaranteed
+                protection_type = "Tier 3 Lock-In (+4.0% Guaranteed)"
+        elif peak_pnl >= 4.5 or pnl_pct >= 4.3:
+            locked_floor = entry_price * 1.028 # Minimum +2.8% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 1 Lock-In (+1.5% Guaranteed)"
+                protection_type = "Tier 2.5 Lock-In (+2.8% Guaranteed)"
+        elif peak_pnl >= 3.2 or pnl_pct >= 3.0:
+            locked_floor = entry_price * 1.018 # Minimum +1.8% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 2 Lock-In (+1.8% Guaranteed)"
+        elif peak_pnl >= 2.5 or pnl_pct >= 2.3:
+            locked_floor = entry_price * 1.010 # Minimum +1.0% profit guaranteed
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 1 Lock-In (+1.0% Guaranteed)"
+        elif peak_pnl >= 1.8 or pnl_pct >= 1.7:
+            locked_floor = entry_price * 1.003 # Minimum +0.3% Breakeven guaranteed (Zero-Risk Cushion)
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 0 Breakeven-Lock (+0.3% Guaranteed Risk-Free)"
 
         logger.debug("🛡️ [PROFIT_LOCK] Entry: ${:.2f} | Curr: ${:.2f} ({:+.2f}%) | Stop: ${:.2f} ({})",
                      entry_price, current_price, pnl_pct, stop_price, protection_type)
@@ -95,7 +113,7 @@ class ProfitLockingStop:
         prot_type = res.get("type", "")
 
         # If locked floor is active and current price dropped below it, trigger exit!
-        if "Lock-In" in prot_type and current_price <= stop_price:
+        if ("Lock" in prot_type or "Breakeven" in prot_type) and current_price <= stop_price:
             return {
                 "should_exit": True,
                 "reason": f"PROFIT_LOCK_EXIT: {prot_type} triggered at ${current_price:.2f} (Lock Floor: ${stop_price:.2f}, PnL: {pnl_pct:+.1f}%)"
