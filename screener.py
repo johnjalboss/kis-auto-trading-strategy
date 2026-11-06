@@ -70,6 +70,7 @@ class ScreenResult:
 
 # Russell 1000 유니버스 전체(1,000+ 종목)를 실시간 후보군 스캐닝 대상으로 로드
 BASE_UNIVERSE = universe.get_all_symbols()
+_GLOBAL_SCREENER_OFFSET = 0
 
 def get_defensive_universe() -> List[str]:
     """Dynamically queries top market-cap defensive stocks from stock_metadata SQLite database."""
@@ -476,7 +477,9 @@ class DynamicScreener:
             "AVGO", "SMH", "AMD", "ARM", "MU", "CRWD", "APP", "VRT",
             "LLY", "ORCL", "NFLX", "NOW", "PANW", "MSTR", "COIN", "ISRG", "AXON", "KNSA", "ARWR"
         ]
-        prioritized = [s for s in (theme_top + core_growth) if s in all_symbols]
+        # Sample 8 core leaders per cycle so they don't crowd out the broader 2800+ market
+        core_sample = random.sample(core_growth, min(8, len(core_growth)))
+        prioritized = [s for s in (theme_top + core_sample) if s in all_symbols]
         remaining = [s for s in all_symbols if s not in prioritized]
         random.shuffle(remaining)
         symbols_to_scan = (prioritized + remaining)[:100]
@@ -629,14 +632,12 @@ class DynamicScreener:
             logger.warning("⚠️ [screener.py] Fallback triggered: {}", e)
 
         # Rolling Round-Robin scanning of the entire universe across multiple cycles to avoid KIS/Finnhub API 429
-        if not hasattr(self, '_screener_offset'):
-            self._screener_offset = 0
-            
+        global _GLOBAL_SCREENER_OFFSET
         all_symbols = list(BASE_UNIVERSE)
         total_count = len(all_symbols)
         max_cands = min(80, getattr(config, 'SCREENER_MAX_CANDIDATES', 75))
         
-        start_idx = self._screener_offset % total_count if total_count > 0 else 0
+        start_idx = _GLOBAL_SCREENER_OFFSET % total_count if total_count > 0 else 0
         end_idx = start_idx + max_cands
         
         if end_idx > total_count:
@@ -644,7 +645,8 @@ class DynamicScreener:
         else:
             symbols_to_scan = all_symbols[start_idx:end_idx]
             
-        self._screener_offset = (start_idx + max_cands) % total_count if total_count > 0 else 0
+        _GLOBAL_SCREENER_OFFSET = (start_idx + max_cands) % total_count if total_count > 0 else 0
+        self._screener_offset = _GLOBAL_SCREENER_OFFSET
         logger.info("📐 Screener Rolling Scan: offset {} to {}, scanning {} symbols out of {} total universe", 
                     start_idx, end_idx % total_count if end_idx > total_count else end_idx, len(symbols_to_scan), total_count)
 
@@ -876,7 +878,9 @@ class DynamicScreener:
             "NOW", "PANW", "MSTR", "COIN"
         ]
         all_symbols = list(BASE_UNIVERSE)
-        leads_in_universe = [s for s in prioritized_leads if s in all_symbols]
+        # Sample 6 core leads to give 75+ slots to diverse universe candidates
+        leads_sample = random.sample(prioritized_leads, min(6, len(prioritized_leads)))
+        leads_in_universe = [s for s in leads_sample if s in all_symbols]
         rem = [s for s in all_symbols if s not in leads_in_universe]
         random.shuffle(rem)
         max_sqz = min(85, getattr(config, 'SCREENER_MAX_CANDIDATES', 80))

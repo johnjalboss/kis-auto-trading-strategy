@@ -50,12 +50,11 @@ def _load_full_3000_universe() -> List[str]:
             try:
                 conn = sqlite3.connect(dbp)
                 cur = conn.cursor()
-                # Filter only liquid common stocks with market cap >= $2 Billion
+                # Filter clean liquid common stocks from metadata DB (up to 500 tickers)
                 cur.execute("""
                     SELECT ticker FROM stock_metadata 
                     WHERE ticker IS NOT NULL AND ticker != ''
-                      AND (market_cap >= 2000000000 OR market_cap IS NULL)
-                    ORDER BY market_cap DESC LIMIT 400
+                    LIMIT 500
                 """)
                 rows = cur.fetchall()
                 conn.close()

@@ -344,7 +344,9 @@ class BotOrchestrator:
         logger.info("=" * 60)
         
         try:
-            screener = DynamicScreener()
+            if not hasattr(self, '_screener_instance') or self._screener_instance is None:
+                self._screener_instance = DynamicScreener()
+            screener = self._screener_instance
             
             from macro import MarketRegime
             regime = MarketRegime.RISK_OFF if self.state.global_risk_level == "RISK_OFF" else MarketRegime.RISK_ON
