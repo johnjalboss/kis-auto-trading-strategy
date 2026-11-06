@@ -161,66 +161,86 @@ class SectorRotator:
         rankings = self.analyze()
         return [r.etf for r in rankings[:n]]
     
-    def get_sector_for_stock(self, symbol: str) -> Optional[str]:
-        """Get sector ETF for a stock — hardcoded map (KIS 환경 yfinance.info 미지원 대응)"""
-        # 1차: 하드코딩 맵 (KIS 환경에서 yfinance.info 실패하므로 우선 사용)
-        SYMBOL_SECTOR_MAP = {
-            # Technology (XLK)
+    _DB_SECTOR_CACHE = None
+
+    @classmethod
+    def _init_db_sector_map(cls) -> Dict[str, str]:
+        """Loads and normalizes sector classifications for 3,000+ US stocks from local SQLite metadata."""
+        import sqlite3
+        import os
+        
+        SECTOR_KEYWORDS = {
+            'technology': 'XLK', 'tech': 'XLK', 'software': 'XLK', 'semiconductor': 'XLK',
+            'healthcare': 'XLV', 'health care': 'XLV', 'biotechnology': 'XLV', 'pharmaceutical': 'XLV',
+            'financial': 'XLF', 'finance': 'XLF', 'bank': 'XLF', 'insurance': 'XLF',
+            'communication': 'XLC', 'telecom': 'XLC', 'media': 'XLC',
+            'consumer discretionary': 'XLY', 'consumer cyclical': 'XLY', 'retail': 'XLY',
+            'consumer staples': 'XLP', 'consumer defensive': 'XLP', 'beverage': 'XLP', 'food': 'XLP',
+            'energy': 'XLE', 'oil': 'XLE', 'gas': 'XLE',
+            'industrials': 'XLI', 'aerospace': 'XLI', 'transportation': 'XLI',
+            'utilities': 'XLU', 'power': 'XLU', 'electric': 'XLU',
+            'real estate': 'XLRE', 'reit': 'XLRE',
+            'materials': 'XLB', 'basic materials': 'XLB', 'chemicals': 'XLB', 'mining': 'XLB'
+        }
+
+        db_paths = [
+            "/home/ubuntu/us-theme-tracker/us_stocks_data.db",
+            "/home/ubuntu/kis-auto-trading/us_stocks_data.db",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "us-theme-tracker", "us_stocks_data.db"),
+            r"C:\Users\wngud\.gemini\antigravity\scratch\us-theme-tracker\us_stocks_data.db"
+        ]
+
+        mapping = {}
+        for dbp in db_paths:
+            if os.path.exists(dbp):
+                try:
+                    conn = sqlite3.connect(dbp)
+                    cur = conn.cursor()
+                    cur.execute("SELECT ticker, sector, industry FROM stock_metadata WHERE ticker IS NOT NULL;")
+                    rows = cur.fetchall()
+                    conn.close()
+                    for sym, sec, ind in rows:
+                        sym_clean = sym.strip().upper()
+                        raw = f"{sec or ''} {ind or ''}".strip().lower()
+                        for k, v in SECTOR_KEYWORDS.items():
+                            if k in raw:
+                                mapping[sym_clean] = v
+                                break
+                    if len(mapping) >= 500:
+                        break
+                except Exception:
+                    pass
+
+        # High-priority manual overrides & key leaders
+        OVERRIDES = {
             'AAPL':'XLK','MSFT':'XLK','NVDA':'XLK','AMD':'XLK','AVGO':'XLK',
             'CRM':'XLK','ORCL':'XLK','ADBE':'XLK','QCOM':'XLK','ARM':'XLK',
             'MU':'XLK','LRCX':'XLK','KLAC':'XLK','ON':'XLK','ASML':'XLK',
-            'DELL':'XLK','HPE':'XLK','SNOW':'XLK','DDOG':'XLK','PANW':'XLK',
-            'CRWD':'XLK','ZS':'XLK','NET':'XLK','MDB':'XLK','PLTR':'XLK',
-            'IONQ':'XLK','RGTI':'XLK','AI':'XLK','VRT':'XLK',
-            # Communication (XLC)
-            'META':'XLC','NFLX':'XLC','GOOGL':'XLC','DIS':'XLC',
-            # Consumer Discretionary (XLY)
+            'SNOW':'XLK','DDOG':'XLK','PANW':'XLK','CRWD':'XLK','ZS':'XLK',
+            'NET':'XLK','MDB':'XLK','PLTR':'XLK','CDNS':'XLK','IDT':'XLC',
+            'META':'XLC','NFLX':'XLC','GOOGL':'XLC','GOOG':'XLC','DIS':'XLC',
             'AMZN':'XLY','TSLA':'XLY','NKE':'XLY','SBUX':'XLY','MCD':'XLY',
             'ABNB':'XLY','UBER':'XLY','LULU':'XLY','SHOP':'XLY',
-            # Financials (XLF)
             'JPM':'XLF','GS':'XLF','V':'XLF','MA':'XLF','PYPL':'XLF',
-            'AFRM':'XLF','UPST':'XLF','SOFI':'XLF','HOOD':'XLF','COIN':'XLF',
-            'NU':'XLF','MSTR':'XLF',
-            # Healthcare (XLV)
-            'MRNA':'XLV','GILD':'XLV','AMGN':'XLV','VRTX':'XLV',
-            'ISRG':'XLV','DXCM':'XLV','PODD':'XLV',
-            # Energy (XLE)
-            'XOM':'XLE','CVX':'XLE','FANG':'XLE','BKR':'XLE','VST':'XLE',
-            # Industrials (XLI)
-            'GE':'XLI','CAT':'XLI','BA':'XLI','RKLB':'XLI',
-            # Utilities (XLU)
-            'FSLR':'XLU','ENPH':'XLU',
-            # Consumer Staples (XLP)
-            'PG':'XLP','KO':'XLP','PEP':'XLP','WMT':'XLP','COST':'XLP',
-            # Real Estate (XLRE)
-            'AMT':'XLRE','PLD':'XLRE','EQIX':'XLRE','VTR':'XLRE',
-            # Materials (XLB)
-            'CELH':'XLB',
+            'HOOD':'XLF','COIN':'XLF','SOFI':'XLF','AFRM':'XLF','UPST':'XLF',
+            'LLY':'XLV','UNH':'XLV','JNJ':'XLV','ABBV':'XLV','BIIB':'XLV',
+            'MRK':'XLV','PFE':'XLV','GILD':'XLV','AMGN':'XLV','VRTX':'XLV',
+            'REGN':'XLV','ISRG':'XLV','COR':'XLV','THC':'XLV','MRNA':'XLV',
+            'XOM':'XLE','CVX':'XLE','COP':'XLE','SLB':'XLE','EOG':'XLE','OXY':'XLE',
+            'CAT':'XLI','DE':'XLI','BA':'XLI','GE':'XLI','HON':'XLI','RTX':'XLI',
+            'NEE':'XLU','DUK':'XLU','SO':'XLU','VST':'XLU','CEG':'XLU',
+            'PG':'XLP','KO':'XLP','PEP':'XLP','WMT':'XLP','COST':'XLP','CELH':'XLP',
+            'PLD':'XLRE','AMT':'XLRE','EQIX':'XLRE','O':'XLRE',
+            'LIN':'XLB','SHW':'XLB','APD':'XLB','FCX':'XLB'
         }
-        if symbol in SYMBOL_SECTOR_MAP:
-            return SYMBOL_SECTOR_MAP[symbol]
-        
-        import os
-        if os.getenv("DISABLE_OPTIONS_FLOW", "false").lower() == "true":
-            return None
+        mapping.update(OVERRIDES)
+        return mapping
 
-        # 2차: yfinance fallback (data_proxy에 의해 프록시되지 않은 오리지널 Ticker를 호출하여 섹터 메타데이터 로드)
-        try:
-            import yfinance as yf
-            ticker_class = getattr(yf, '_original_yf_Ticker', yf.Ticker)
-            ticker = ticker_class(symbol)
-            info = ticker.info
-            sector = info.get('sector', '') if isinstance(info, dict) else ''
-            sector_map = {
-                'Technology': 'XLK', 'Healthcare': 'XLV', 'Financial Services': 'XLF',
-                'Financial': 'XLF', 'Consumer Cyclical': 'XLY', 'Consumer Defensive': 'XLP',
-                'Energy': 'XLE', 'Industrials': 'XLI', 'Basic Materials': 'XLB',
-                'Utilities': 'XLU', 'Real Estate': 'XLRE', 'Communication Services': 'XLC',
-                'Communication': 'XLC'
-            }
-            return sector_map.get(sector)
-        except:
-            return None
+    def get_sector_for_stock(self, symbol: str) -> Optional[str]:
+        """Get sector ETF for a stock — instant in-memory lookup across 3,000+ US stocks"""
+        if SectorRotator._DB_SECTOR_CACHE is None:
+            SectorRotator._DB_SECTOR_CACHE = SectorRotator._init_db_sector_map()
+        return SectorRotator._DB_SECTOR_CACHE.get(symbol.strip().upper(), None)
     
     def _fetch_data(self, symbol: str) -> Optional[pd.DataFrame]:
         try:
