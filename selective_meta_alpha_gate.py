@@ -28,9 +28,9 @@ class SelectiveMetaAlphaGate:
     bid-ask spread, slippage, regulatory friction, and conformal uncertainty.
     """
 
-    HURDLE_RATE = 0.0040  # +40 bps minimum net hurdle rate
+    HURDLE_RATE = 0.0020  # +20 bps calibrated net hurdle rate (prevents over-abstention on 85+ score leaders)
 
-    def __init__(self, hurdle_rate: float = 0.0040):
+    def __init__(self, hurdle_rate: float = 0.0020):
         self.hurdle_rate = hurdle_rate
 
     def _estimate_residual_alpha(self, df_stock: pd.DataFrame, days: int = 30) -> float:

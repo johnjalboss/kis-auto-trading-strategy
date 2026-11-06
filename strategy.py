@@ -637,7 +637,8 @@ class StrategyEngine:
                 daily_range = high_today - open_today
                 if daily_range > 0:
                     fade_ratio = (high_today - current_price) / daily_range
-                    if fade_ratio > 0.40:
+                    # Adjusted from 0.40 -> 0.60: Healthy 50% pullback is prime entry; only block true fades (>60%)
+                    if fade_ratio > 0.60:
                         return EntrySignal("HOLD", 0, f"MORNING_FADE_GUARD: Retraced {fade_ratio:.0%} of morning gain", current_price)
                 
                 # Shakeout Guard
@@ -785,9 +786,10 @@ class StrategyEngine:
             # Rule 5: 🛡️ [상투잡기 원천 차단] ANTI-CHASING EXTENSION CEILING
             dist_sma20 = (current_price - sma20) / sma20 if sma20 > 0 else 0.0
             dist_sma50 = (current_price - sma50) / sma50 if sma50 > 0 else 0.0
-            if dist_sma20 > 0.035:
-                logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: Price +{:.1%} above 20MA (max +3.5% to prevent buying the top)", symbol, dist_sma20 * 100)
-                return EntrySignal("HOLD", 0, f"OVEREXTENDED_CHASING_GUARD: Price +{dist_sma20:.1%} above 20MA (max +3.5%)", current_price)
+            # Adjusted from +3.5% -> +5.0%: 3.6%~4.8% is standard momentum breakout territory (O'Neil/Minervini model); block true blow-offs (>5.0%)
+            if dist_sma20 > 0.050:
+                logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: Price +{:.1%} above 20MA (max +5.0% to prevent buying the top)", symbol, dist_sma20 * 100)
+                return EntrySignal("HOLD", 0, f"OVEREXTENDED_CHASING_GUARD: Price +{dist_sma20:.1%} above 20MA (max +5.0%)", current_price)
 
             if dist_sma50 > 0.110:
                 logger.info("🚫 [OVEREXTENDED_CHASING_GUARD] {} rejected: Price +{:.1%} above 50MA (max +11.0%)", symbol, dist_sma50 * 100)
