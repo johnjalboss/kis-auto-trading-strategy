@@ -1270,6 +1270,7 @@ class DynamicScreener:
         except Exception:
             pass
         try:
+            import numpy as np
             # ✅ 캐시 우선 사용 — gather 단계에서 이미 다운로드한 데이터 재활용
             import kis_data
             if symbol in self._ohlcv_cache:
@@ -1687,7 +1688,6 @@ class DynamicScreener:
             # ============================================================
             # 📐 5대 필라 정밀 결합 및 점수 연속 정규화 (Continuous Asymptotic Scaling)
             # ============================================================
-            import numpy as np
             base_score = short_score + momentum_score + inst_score + options_score + tech_score
             bonus_sum = (mode_bonus + multi_bonus + news_bonus + insider_bonus +
                          high52w_bonus + pead_bonus + sector_bonus + theme_radar_bonus + rs_bonus)
