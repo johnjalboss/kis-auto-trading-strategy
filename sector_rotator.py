@@ -15,7 +15,7 @@ import time
 
 _sector_rankings_cache = None
 _sector_cache_time = 0
-SECTOR_CACHE_EXPIRY = 3600  # 1 hour cache
+SECTOR_CACHE_EXPIRY = 900   # 15 minutes cache (rapid intraday rotation detection)
 
 @dataclass
 class SectorRanking:
@@ -136,21 +136,20 @@ class SectorRotator:
         # - 25% 5-Day Real-Time Relative Strength Acceleration (Captures rapid sector shifts immediately!)
         rankings.sort(key=lambda x: (x.momentum_1m * 0.45) + (x.momentum_3m * 0.30) + (x.rs_5d_vel * 0.25), reverse=True)
         
-        # Assign ranks and recommendations
+        # Assign ranks and recommendations: Prioritize rapid sector inflection & acceleration first
         for i, r in enumerate(rankings):
             r.rank = i + 1
-            if i < 3:
+            # 1) 순환매 초입 가속도 감지 (과거 1~3개월 순위와 무관하게 실시간 수급 유입 최우선 인식)
+            if r.rs_5d_vel > 1.2 and r.rs_accel > 0.8:
+                r.recommendation = "EARLY_ACCELERATION"
+                logger.info("🔥 [EARLY_ROTATION_DETECTED] Sector {} ({}) is accelerating! V_5d: {:.2f}%, Accel: {:.2f}",
+                            r.sector, r.etf, r.rs_5d_vel, r.rs_accel)
+            elif i < 3:
                 r.recommendation = "OVERWEIGHT"
             elif i >= len(rankings) - 3:
                 r.recommendation = "UNDERWEIGHT"
             else:
-                # 중간 순위 중 상대강도 가속도가 발생하고 단기 상승 중인 종목 -> 순환매 초입 지정
-                if r.rs_5d_vel > 0.3 and r.rs_accel > 1.0:
-                    r.recommendation = "EARLY_ACCELERATION"
-                    logger.info("🔥 [EARLY_ROTATION_DETECTED] Sector {} ({}) is accelerating! V_5d: {:.2f}%, Accel: {:.2f}",
-                                r.sector, r.etf, r.rs_5d_vel, r.rs_accel)
-                else:
-                    r.recommendation = "NEUTRAL"
+                r.recommendation = "NEUTRAL"
         
         _sector_rankings_cache = rankings.copy()
         _sector_cache_time = now
