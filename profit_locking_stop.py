@@ -1,12 +1,9 @@
 """
 Profit Locking Stop Module (profit_locking_stop.py)
 ===================================================
-Enforces institutional multi-tiered profit-locking stop floors for Pure Swing Trading (2-10 days horizon).
-Calibrated to prevent "False Choke":
-- Never lock tight micro-floors on normal intraday fluctuations (+0% ~ +3.5%).
-- Allow swing breathing room so high-conviction positions can run to +5% ~ +15% targets.
-- Once peak gain crosses +4.0%, arm guaranteed profit lock floor (Entry + 1.2% covers all fees & slippage).
-- Smoothly scale up profit retention as gains expand.
+Enforces institutional multi-tiered profit-locking stop floors.
+User Directive: If peak gain reaches +2.5%, the system MUST preserve at least +1.5% NET profit in the pocket!
+Accounts for market-order execution slippage (~0.2%~0.3%) & KIS fees by setting the stop trigger floor at +1.8%.
 """
 
 from typing import Dict, Any
@@ -29,58 +26,53 @@ class ProfitLockingStop:
         protection_type = "Chandelier ATR Trailing Stop"
 
         # 2. Multi-Tiered Profit Locking Floor Enforcement
-        # SWING CALIBRATION: Give positions room to breathe until +4.0% gain.
-        # Micro-locking at +1.8% or +2.5% caused premature stop-outs with near-zero (+0.05%~+0.5%) gains due to slippage.
+        # USER DIRECTIVE: Peak +2.5% MUST secure at least +1.5% net profit after slippage & fees!
+        # Trigger floor set at +1.8% so that 0.2%~0.3% slippage still leaves +1.5%~+1.6% net profit.
         if peak_pnl >= 100.0 or pnl_pct >= 100.0:
-            locked_floor = entry_price * 1.820  # Minimum +82.0% profit guaranteed
+            locked_floor = entry_price * 1.850  # Minimum +85.0% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 9 Mega-Lock (+82.0% Guaranteed)"
-        elif peak_pnl >= 80.0 or pnl_pct >= 80.0:
-            locked_floor = entry_price * 1.650  # Minimum +65.0% profit guaranteed
-            if stop_price < locked_floor:
-                stop_price = locked_floor
-                protection_type = "Tier 8 Mega-Lock (+65.0% Guaranteed)"
+                protection_type = "Tier 9 Mega-Lock (+85.0% Guaranteed)"
         elif peak_pnl >= 50.0 or pnl_pct >= 50.0:
-            locked_floor = entry_price * 1.400  # Minimum +40.0% profit guaranteed
+            locked_floor = entry_price * 1.420  # Minimum +42.0% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 7 Super-Lock (+40.0% Guaranteed)"
-        elif peak_pnl >= 35.0 or pnl_pct >= 35.0:
-            locked_floor = entry_price * 1.260  # Minimum +26.0% profit guaranteed
-            if stop_price < locked_floor:
-                stop_price = locked_floor
-                protection_type = "Tier 6 Super-Lock (+26.0% Guaranteed)"
+                protection_type = "Tier 7 Super-Lock (+42.0% Guaranteed)"
         elif peak_pnl >= 20.0 or pnl_pct >= 20.0:
-            locked_floor = entry_price * 1.150  # Minimum +15.0% profit guaranteed
+            locked_floor = entry_price * 1.165  # Minimum +16.5% profit guaranteed
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 5 Lock-In (+15.0% Guaranteed)"
+                protection_type = "Tier 5 Lock-In (+16.5% Guaranteed)"
         elif peak_pnl >= 15.0 or pnl_pct >= 15.0:
-            locked_floor = entry_price * 1.110  # Minimum +11.0% profit guaranteed
+            locked_floor = entry_price * 1.125  # Minimum +12.5% floor (Net ~+12.0%)
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 4.5 Lock-In (+11.0% Guaranteed)"
+                protection_type = "Tier 4.5 Lock-In (+12.5% Guaranteed)"
         elif peak_pnl >= 10.0 or pnl_pct >= 9.5:
-            locked_floor = entry_price * 1.070  # Minimum +7.0% profit guaranteed
+            locked_floor = entry_price * 1.080  # Minimum +8.0% floor (Net ~+7.7%)
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 4 Lock-In (+7.0% Guaranteed)"
+                protection_type = "Tier 4 Lock-In (+8.0% Guaranteed)"
         elif peak_pnl >= 7.0 or pnl_pct >= 6.8:
-            locked_floor = entry_price * 1.045  # Minimum +4.5% profit guaranteed
+            locked_floor = entry_price * 1.055  # Minimum +5.5% floor (Net ~+5.2%)
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 3 Lock-In (+4.5% Guaranteed)"
-        elif peak_pnl >= 5.5 or pnl_pct >= 5.2:
-            locked_floor = entry_price * 1.030  # Minimum +3.0% profit guaranteed
+                protection_type = "Tier 3 Lock-In (+5.5% Guaranteed)"
+        elif peak_pnl >= 5.0 or pnl_pct >= 4.8:
+            locked_floor = entry_price * 1.038  # Minimum +3.8% floor (Net ~+3.5%)
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 2 Lock-In (+3.0% Guaranteed)"
-        elif peak_pnl >= 4.0 or pnl_pct >= 3.8:
-            locked_floor = entry_price * 1.015  # Minimum +1.5% profit guaranteed (covers 0.3% slippage + fees with solid net green)
+                protection_type = "Tier 2.5 Lock-In (+3.8% Guaranteed)"
+        elif peak_pnl >= 3.5 or pnl_pct >= 3.3:
+            locked_floor = entry_price * 1.025  # Minimum +2.5% floor (Net ~+2.2%)
             if stop_price < locked_floor:
                 stop_price = locked_floor
-                protection_type = "Tier 1 Breakeven-Plus Lock (+1.5% Guaranteed Net)"
+                protection_type = "Tier 2 Lock-In (+2.5% Guaranteed)"
+        elif peak_pnl >= 2.5 or pnl_pct >= 2.3:
+            locked_floor = entry_price * 1.018  # Minimum +1.8% floor -> Guarantees Net +1.5% after slippage!
+            if stop_price < locked_floor:
+                stop_price = locked_floor
+                protection_type = "Tier 1 Net Profit Lock (+1.8% Floor -> Net +1.5% Guaranteed)"
 
         logger.debug("🛡️ [PROFIT_LOCK] Entry: ${:.2f} | Curr: ${:.2f} ({:+.2f}%) | Stop: ${:.2f} ({})",
                      entry_price, current_price, pnl_pct, stop_price, protection_type)

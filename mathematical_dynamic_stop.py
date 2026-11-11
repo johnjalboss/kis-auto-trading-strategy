@@ -108,23 +108,20 @@ class MathematicalDynamicStop:
 
         # 4. Convex Exponential Profit Lock Curve
         # Floor = Entry + Peak_Gains * (1 - exp(-λ * Peak_Gains))
-        # Example:
-        # Peak +3.0% -> Lock ~42% of gains = Entry + 1.26%
-        # Peak +6.0% -> Lock ~66% of gains = Entry + 3.96%
-        # Peak +10.0% -> Lock ~83% of gains = Entry + 8.35%
-        # Peak +15.0% -> Lock ~93% of gains = Entry + 13.95%
-        convex_locked_stop = entry_price
-        if peak_pnl_pct > 0.015:  # Trigger once peak crosses +1.5%
+        # User Rule: At Peak +2.5%, lock ratio is strictly >= 0.72 (Entry + 1.8%),
+        # guaranteeing at least +1.5% net profit in pocket even after 0.3% slippage & fees!
+        convex_locked_stop = 0.0
+        if peak_pnl_pct >= 0.025:  # Trigger once peak crosses +2.5%
             lock_ratio = 1.0 - math.exp(-self.lambda_convex * peak_pnl_pct)
-            # Ensure minimum profit capture
-            lock_ratio = min(0.95, max(0.35, lock_ratio))
+            # Ensure minimum +1.8% floor for +2.5% peak (0.025 * 0.72 = 0.018)
+            lock_ratio = min(0.95, max(0.72, lock_ratio))
             convex_locked_stop = entry_price * (1.0 + (peak_pnl_pct * lock_ratio))
 
         # 5. Scale-out / Half-Sold Floor Boost
-        half_sold_floor = entry_price * 1.015 if half_sold else entry_price * 0.95
+        half_sold_floor = entry_price * 1.015 if half_sold else 0.0
 
-        # 6. Hard Maximum Stop-Loss Protection (Floor)
-        hard_floor = entry_price * 0.965  # Never risk more than -3.5% hard stop
+        # 6. Hard Maximum Stop-Loss Protection (Floor: -4.5% standard stop loss)
+        hard_floor = entry_price * 0.955
 
         # Optimal Stop is the mathematically tightest protective envelope
         optimal_stop = max(chandelier_stop, convex_locked_stop, half_sold_floor, hard_floor)

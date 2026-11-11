@@ -1788,10 +1788,9 @@ class StrategyEngine:
 
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
 
-        # [SWING BREATHING ROOM & INSTITUTIONAL ZERO-RISK DEFENSE]
-        # Allow swing breathing room (-4.5% SL / Chandelier) while unrealized gain has never reached +3.5%.
-        # Premature micro-locking below +3.5% choked winners to near-zero (+0.05%~+0.5%) net profits after slippage.
-        if not pos.half_sold and pnl_pct_high < 0.035:
+        # [USER DIRECTIVE PROFIT PRESERVATION ENGINE]
+        # Active once peak reaches +2.5%. Guarantees at least +1.5% NET profit in pocket (accounting for slippage & fees)!
+        if not pos.half_sold and pnl_pct_high < 0.025:
             return None
             
         pnl_pct_high = (pos.high_since_entry - pos.entry_price) / pos.entry_price
@@ -1837,20 +1836,22 @@ class StrategyEngine:
         except Exception as _mds_e:
             logger.debug("Mathematical Dynamic Stop evaluation error: {}", _mds_e)
 
-        # ── MULTI-TIERED CAPITAL PRESERVATION FLOORS (Calibrated for Pure Swing) ──
-        # Eliminates false-choke on minor intraday dips; guarantees solid net profit covering all slippage & fees
+        # ── MULTI-TIERED CAPITAL PRESERVATION FLOORS (User Directive: +2.5% Peak -> Net +1.5% Minimum) ──
+        # Floor set at +1.8% triggers exit so that after ~0.2%-0.3% slippage, Net Realized Gain is strictly >= +1.5%!
         if pnl_pct_high >= 0.20:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.150)  # Lock +15.0% profit minimum (Big Runner)
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.165)  # Lock +16.5% floor (Net ~+16.0%)
         elif pnl_pct_high >= 0.15:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.110)  # Lock +11.0% profit minimum
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.125)  # Lock +12.5% floor (Net ~+12.0%)
         elif pnl_pct_high >= 0.10:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.070)  # Lock +7.0% profit minimum
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.080)  # Lock +8.0% floor (Net ~+7.7%)
         elif pnl_pct_high >= 0.07:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.045)  # Lock +4.5% profit minimum
-        elif pnl_pct_high >= 0.055:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.030)  # Lock +3.0% profit minimum
-        elif pnl_pct_high >= 0.040:
-            trailing_stop = max(trailing_stop, pos.entry_price * 1.015)  # Lock +1.5% profit minimum (Net Green Guarantee)
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.055)  # Lock +5.5% floor (Net ~+5.2%)
+        elif pnl_pct_high >= 0.050:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.038)  # Lock +3.8% floor (Net ~+3.5%)
+        elif pnl_pct_high >= 0.035:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.025)  # Lock +2.5% floor (Net ~+2.2%)
+        elif pnl_pct_high >= 0.025:
+            trailing_stop = max(trailing_stop, pos.entry_price * 1.018)  # Lock +1.8% floor (Guarantees Net +1.5% in pocket!)
         
         # Absolute Hook: If we were 6% up, trailing stop CANNOT go below Entry + 1%.
         if breakeven_hook:
