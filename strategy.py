@@ -704,7 +704,10 @@ class StrategyEngine:
                 setup_reason += f" | {ws_res.reason}"
                 logger.info("WALL_STREET_CONSENSUS: {} has strong institutional backing (+7pts, score {:+.0f})", symbol, ws_res.consensus_score)
             elif ws_res.is_blocked:
-                return EntrySignal("HOLD", confidence, f"WALL_STREET_SELL_CONSENSUS: {ws_res.reason}", current_price)
+                # [TRADING_CONSTITUTION Art. 2.2] 12-month analyst targets are backward-looking valuation models.
+                # Per Constitution, analyst overhang must NOT hard-block high-conviction short-term momentum leaders.
+                confidence = max(0, confidence - 5)
+                logger.info("WALL_STREET_CONSENSUS: {} has analyst sell overhang (-5pts damping, no hard block per Constitution): {}", symbol, ws_res.reason)
         except Exception as _ws_err:
             logger.debug("Wall Street consensus check skipped for {}: {}", symbol, _ws_err)
 
@@ -2166,8 +2169,32 @@ class StrategyEngine:
                 synced += 1
                 logger.info("Synced position: {} x {} @ ${:.2f} (stop ${:.2f})",
                            symbol, pos.quantity, pos.avg_price, stop_price)
+
+                # [RECONCILIATION TELEGRAM BACKUP ALERT]
+                # If position appeared on broker (e.g. delayed fill / external order) but wasn't notified yet, send confirmation!
+                try:
+                    if not hasattr(self, '_notified_positions'):
+                        self._notified_positions = set()
+                    if getattr(self, '_startup_sync_done', False) and symbol not in self._notified_positions:
+                        self._notified_positions.add(symbol)
+                        from notifier import get_notifier
+                        from telegram_receipt import TelegramReceiptGenerator
+                        msg = TelegramReceiptGenerator.format_buy_receipt(
+                            symbol=symbol,
+                            quantity=pos.quantity,
+                            price=pos.avg_price,
+                            setup="BROKER_RECONCILED_EXECUTION (체결 동기화 확인)",
+                            score=95,
+                            sl_price=stop_price,
+                            atr=atr,
+                            macro_regime="RISK_ON"
+                        )
+                        get_notifier().send(msg)
+                        logger.info("📢 [BACKUP_NOTIFIER] Sent reconciliation BUY alert for {}", symbol)
+                except Exception as _bk_notif_err:
+                    logger.debug("Reconciliation backup alert error: {}", _bk_notif_err)
         
-        #     (  )
+        self._startup_sync_done = True
         api_symbols = {p.symbol for p in api_positions}
         stale = [s for s in self._positions if s not in api_symbols]
         for s in stale:

@@ -579,9 +579,11 @@ class BotOrchestrator:
             from us_election_policy_sentinel import get_election_policy_signal
             elec_sig = get_election_policy_signal()
             if elec_sig:
-                if elec_sig.epu_regime == "EXTREME":
-                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.60)
-                    logger.warning("🚨 [ELECTION_POLICY_SPIKE] EPU Index extreme! Exposure capped at 60%")
+                # [v11.1 CAPITAL ALLOCATION FIX] Only cap exposure if EPU is in severe crisis (>350) AND macro is RISK_OFF.
+                # During normal market or post-election relief rally, guarantee 100% exposure cap for 3 full slots.
+                if elec_sig.epu_index > 350 and self.state.global_risk_level == "RISK_OFF":
+                    self.state.max_exposure_pct = min(self.state.max_exposure_pct, 0.70)
+                    logger.warning("🚨 [ELECTION_POLICY_PANIC] EPU Index >350 in RISK_OFF! Exposure capped at 70%")
                 logger.info("  -> us_election_policy_sentinel.py: EPU={:.1f} ({}), Phase={}, D-{} days",
                             elec_sig.epu_index, elec_sig.epu_regime, elec_sig.election_cycle_phase, elec_sig.days_to_election)
         except Exception as _elec_err:
