@@ -68,10 +68,38 @@ class BotOrchestrator:
         self._daily_upgrade_count = 0
         self._last_trade_date = None
         self._recently_sold = {}  # symbol -> datetime of sale
+        self._load_recently_sold_from_db()
         
         _orchestrator_instance = self
         logger.info("BotOrchestrator Booting... Initializing 130-Module Lifecycle")
         
+    def _load_recently_sold_from_db(self):
+        """Restore recently sold symbols from trades.db on startup to maintain 24h lockout across restarts"""
+        try:
+            import sqlite3
+            import os
+            db_path = getattr(config, 'DB_PATH', 'trades.db')
+            if not os.path.exists(db_path):
+                db_path = 'trades.db'
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                c = conn.cursor()
+                cutoff = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+                c.execute("SELECT symbol, COALESCE(exit_time, created_at) FROM trades WHERE side='SELL' AND COALESCE(exit_time, created_at) >= ?", (cutoff,))
+                rows = c.fetchall()
+                conn.close()
+                for sym, exit_time_str in rows:
+                    try:
+                        clean_str = str(exit_time_str).split('.')[0]
+                        dt = datetime.strptime(clean_str, '%Y-%m-%d %H:%M:%S')
+                        self._recently_sold[sym] = dt
+                    except Exception:
+                        self._recently_sold[sym] = datetime.now()
+                if self._recently_sold:
+                    logger.info("🛡️ [RE_ENTRY_GUARD] Restored {} recently sold symbols from DB (24h Anti-Chasing Active): {}", len(self._recently_sold), list(self._recently_sold.keys()))
+        except Exception as e:
+            logger.debug("Failed to restore recently sold from DB: {}", e)
+
     def update_and_save_status(self):
         try:
             import os
@@ -704,7 +732,7 @@ class BotOrchestrator:
             current_positions = self.strategy.get_all_positions()
             held_symbols = set(current_positions.keys())
             
-            cooldown_period = timedelta(hours=4)
+            cooldown_period = timedelta(hours=24)  # 24h pure swing cooldown: prevents churn & chasing
             recently_sold_exclude = {
                 sym for sym, sold_time in getattr(self, '_recently_sold', {}).items()
                 if datetime.now() - sold_time < cooldown_period
@@ -1104,6 +1132,20 @@ class BotOrchestrator:
                             continue
                     except Exception as _tq_err:
                         logger.debug("TickerQuarantine check skipped: {}", _tq_err)
+
+                    # [RE_ENTRY_LOCKOUT_GUARD] Block rebuying symbols sold within the last 24 hours (Anti-Chasing Protection)
+                    sold_time = self._recently_sold.get(symbol)
+                    if sold_time:
+                        elapsed = datetime.now() - sold_time
+                        if elapsed < timedelta(hours=24):
+                            hours_left = 24.0 - (elapsed.total_seconds() / 3600.0)
+                            logger.info("🚫 [RE_ENTRY_LOCKOUT_GUARD] {} was sold {:.1f}h ago. Re-entry strictly blocked for next {:.1f}h (Anti-Chasing Protocol).", symbol, elapsed.total_seconds()/3600.0, hours_left)
+                            try:
+                                from rejection_tracker import get_rejection_tracker
+                                get_rejection_tracker().record(symbol, getattr(signal, 'composite_score', 0), getattr(signal, 'action', ''), 'RE_ENTRY_LOCKOUT_GUARD', f"Sold {elapsed.total_seconds()/3600.0:.1f}h ago (24h cooldown)")
+                            except Exception:
+                                pass
+                            continue
 
                     # [PRE-EARNINGS HARD BLOCK v7.0] Absolute veto for earnings within 5 calendar days.
                     # Previously only applied -50 score penalty which was insufficient (e.g. +100 -> +50 still passed).
